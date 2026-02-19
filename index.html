@@ -459,19 +459,33 @@
     var Wallet = (function() {
       var publicKey = null;
       function getProvider() {
-        if ('phantom' in window && window.phantom && window.phantom.solana && window.phantom.solana.isPhantom) return window.phantom.solana;
+        try {
+          if (window.phantom && window.phantom.solana && window.phantom.solana.isPhantom) return window.phantom.solana;
+          if (window.solana && window.solana.isPhantom) return window.solana;
+        } catch(e) {}
         return null;
       }
       function connect() {
-        var provider = getProvider();
-        if (!provider) {
-          var mock = 'Dev' + Math.random().toString(36).slice(2,10);
-          publicKey = mock;
-          return Promise.resolve({ publicKey: mock, mock: true });
-        }
-        return provider.connect().then(function(resp) {
-          publicKey = resp.publicKey.toString();
-          return { publicKey: publicKey, mock: false };
+        return new Promise(function(resolve, reject) {
+          try {
+            var provider = getProvider();
+            if (!provider) {
+              var mock = 'Dev' + Math.random().toString(36).slice(2,10);
+              publicKey = mock;
+              resolve({ publicKey: mock, mock: true });
+              return;
+            }
+            provider.connect().then(function(resp) {
+              publicKey = resp.publicKey.toString();
+              resolve({ publicKey: publicKey, mock: false });
+            }).catch(function(err) {
+              reject(new Error('Wallet connection rejected'));
+            });
+          } catch(e) {
+            var mock = 'Dev' + Math.random().toString(36).slice(2,10);
+            publicKey = mock;
+            resolve({ publicKey: mock, mock: true });
+          }
         });
       }
       function getPublicKey() { return publicKey; }
@@ -700,23 +714,44 @@
 
           Wallet.connect().then(function(result) {
             var publicKey = result.publicKey;
-            socket = io();
-            socket.on('connect', function() { socket.emit('register', { wallet: publicKey, username: username }); });
+            try {
+              socket = io({ reconnectionAttempts: 5, timeout: 10000 });
+            } catch(e) {
+              showToast('Cannot connect to server', 'error');
+              btn.innerHTML = '&#9678; Connect Phantom Wallet';
+              btn.disabled = false;
+              return;
+            }
+
+            socket.on('connect', function() {
+              socket.emit('register', { wallet: publicKey, username: username });
+            });
+
+            socket.on('connect_error', function() {
+              showToast('Server connection failed — retrying...', 'error');
+            });
+
             socket.on('registered', function() {
               document.getElementById('wallet-display').textContent = Wallet.shortenAddress(publicKey);
               document.getElementById('username-display').textContent = username;
               showScreen('lobby');
             });
+
             socket.on('waiting', function(data) {
               document.getElementById('waiting-info').textContent = data.gameType.toUpperCase() + ' — ' + data.betAmount + ' SOL bet';
               showScreen('waiting');
             });
+
             socket.on('lobby_update', updateLobby);
             socket.on('game_start', onGameStart);
             socket.on('game_state', onGameState);
             socket.on('game_over', onGameOver);
             socket.on('search_cancelled', function() { showScreen('lobby'); });
             socket.on('error_msg', function(d) { showToast(d.msg, 'error'); });
+
+            socket.on('disconnect', function() {
+              showToast('Disconnected from server', 'error');
+            });
           }).catch(function(err) {
             showToast(err.message || 'Connection failed', 'error');
             btn.innerHTML = '&#9678; Connect Phantom Wallet';
