@@ -294,6 +294,7 @@
       <div class="connect-form">
         <input type="text" id="username-input" placeholder="Choose a username" maxlength="20" />
         <button id="btn-connect-wallet" class="btn btn-primary btn-lg">&#9678; Connect Phantom Wallet</button>
+        <button id="btn-play-guest" class="btn btn-lg" style="background:var(--surface);color:var(--text);border:2px solid var(--surface2);">Play as Guest (no wallet)</button>
         <p class="small-text">Powered by Solana &mdash; fast, low fees</p>
       </div>
     </div>
@@ -466,11 +467,11 @@
         return null;
       }
       function connect() {
-        return new Promise(function(resolve, reject) {
+        return new Promise(function(resolve) {
           try {
             var provider = getProvider();
             if (!provider) {
-              var mock = 'Dev' + Math.random().toString(36).slice(2,10);
+              var mock = 'Guest_' + Math.random().toString(36).slice(2,8);
               publicKey = mock;
               resolve({ publicKey: mock, mock: true });
               return;
@@ -478,15 +479,23 @@
             provider.connect().then(function(resp) {
               publicKey = resp.publicKey.toString();
               resolve({ publicKey: publicKey, mock: false });
-            }).catch(function(err) {
-              reject(new Error('Wallet connection rejected'));
+            }).catch(function() {
+              // User rejected or closed popup — fall back to guest mode
+              var mock = 'Guest_' + Math.random().toString(36).slice(2,8);
+              publicKey = mock;
+              resolve({ publicKey: mock, mock: true });
             });
           } catch(e) {
-            var mock = 'Dev' + Math.random().toString(36).slice(2,10);
+            var mock = 'Guest_' + Math.random().toString(36).slice(2,8);
             publicKey = mock;
             resolve({ publicKey: mock, mock: true });
           }
         });
+      }
+      function connectGuest() {
+        var mock = 'Guest_' + Math.random().toString(36).slice(2,8);
+        publicKey = mock;
+        return Promise.resolve({ publicKey: mock, mock: true });
       }
       function getPublicKey() { return publicKey; }
       function shortenAddress(addr) {
@@ -494,7 +503,7 @@
         if (addr.length <= 10) return addr;
         return addr.slice(0,4) + '...' + addr.slice(-4);
       }
-      return { connect: connect, getPublicKey: getPublicKey, shortenAddress: shortenAddress };
+      return { connect: connect, connectGuest: connectGuest, getPublicKey: getPublicKey, shortenAddress: shortenAddress };
     })();
 
     // ════════════════════════════════════════
@@ -703,23 +712,24 @@
 
       function setupConnectScreen() {
         var btn = document.getElementById('btn-connect-wallet');
+        var guestBtn = document.getElementById('btn-play-guest');
         var usernameInput = document.getElementById('username-input');
 
-        btn.addEventListener('click', function() {
+        function enterLobby(walletPromise) {
           var username = usernameInput.value.trim();
           if (!username) { usernameInput.style.borderColor = '#ef4444'; usernameInput.focus(); return; }
 
           btn.textContent = 'Connecting...';
           btn.disabled = true;
+          guestBtn.disabled = true;
 
-          Wallet.connect().then(function(result) {
+          walletPromise.then(function(result) {
             var publicKey = result.publicKey;
             try {
               socket = io({ reconnectionAttempts: 5, timeout: 10000 });
             } catch(e) {
               showToast('Cannot connect to server', 'error');
-              btn.innerHTML = '&#9678; Connect Phantom Wallet';
-              btn.disabled = false;
+              resetConnectButtons();
               return;
             }
 
@@ -732,7 +742,7 @@
             });
 
             socket.on('registered', function() {
-              document.getElementById('wallet-display').textContent = Wallet.shortenAddress(publicKey);
+              document.getElementById('wallet-display').textContent = result.mock ? 'Guest' : Wallet.shortenAddress(publicKey);
               document.getElementById('username-display').textContent = username;
               showScreen('lobby');
             });
@@ -754,10 +764,18 @@
             });
           }).catch(function(err) {
             showToast(err.message || 'Connection failed', 'error');
-            btn.innerHTML = '&#9678; Connect Phantom Wallet';
-            btn.disabled = false;
+            resetConnectButtons();
           });
-        });
+        }
+
+        function resetConnectButtons() {
+          btn.innerHTML = '&#9678; Connect Phantom Wallet';
+          btn.disabled = false;
+          guestBtn.disabled = false;
+        }
+
+        btn.addEventListener('click', function() { enterLobby(Wallet.connect()); });
+        guestBtn.addEventListener('click', function() { enterLobby(Wallet.connectGuest()); });
       }
 
       function setupLobbyScreen() {
