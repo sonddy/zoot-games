@@ -267,6 +267,54 @@
     .overlay-box p { color: var(--text2); margin-bottom: 0.5rem; }
     .payout-text { font-size: 1.3rem; font-weight: 700; color: var(--gold); margin: 1rem 0; }
 
+    /* ── Wallet Panel ── */
+    .wallet-panel {
+      background: var(--bg2); border: 1px solid var(--surface2); border-radius: var(--radius);
+      padding: 1.5rem; margin-bottom: 2rem;
+    }
+    .wallet-panel h3 { font-size: 1.1rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+    .balance-display {
+      font-size: 2rem; font-weight: 800; color: var(--gold); margin-bottom: 0.2rem;
+    }
+    .balance-sub { font-size: 0.8rem; color: var(--text2); margin-bottom: 1rem; }
+    .wallet-address-box {
+      background: var(--surface); border: 1px solid var(--surface2); border-radius: var(--radius-sm);
+      padding: 0.6rem 0.8rem; font-family: monospace; font-size: 0.75rem; color: var(--accent2);
+      word-break: break-all; margin-bottom: 0.8rem; cursor: pointer; position: relative;
+    }
+    .wallet-address-box:hover { border-color: var(--accent); }
+    .wallet-address-label { font-size: 0.75rem; color: var(--text2); margin-bottom: 0.3rem; display: block; }
+    .wallet-actions { display: flex; gap: 0.8rem; flex-wrap: wrap; }
+    .wallet-actions input[type="number"] {
+      background: var(--surface); border: 2px solid var(--surface2); border-radius: var(--radius-sm);
+      padding: 0.5rem 0.7rem; color: var(--text); font-family: inherit; font-size: 0.9rem;
+      outline: none; width: 120px; transition: border-color 0.2s;
+    }
+    .wallet-actions input[type="number"]:focus { border-color: var(--accent); }
+    .wallet-actions input[type="text"] {
+      background: var(--surface); border: 2px solid var(--surface2); border-radius: var(--radius-sm);
+      padding: 0.5rem 0.7rem; color: var(--text); font-family: inherit; font-size: 0.85rem;
+      outline: none; flex: 1; min-width: 140px; transition: border-color 0.2s;
+    }
+    .wallet-actions input[type="text"]:focus { border-color: var(--accent); }
+    .btn-deposit { background: var(--green); color: #fff; border: none; border-radius: var(--radius-sm); padding: 0.5rem 1rem; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .btn-deposit:hover { opacity: 0.85; }
+    .btn-withdraw { background: var(--red); color: #fff; border: none; border-radius: var(--radius-sm); padding: 0.5rem 1rem; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .btn-withdraw:hover { opacity: 0.85; }
+    .wallet-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.6rem; flex-wrap: wrap; }
+    .wallet-row label { font-size: 0.85rem; color: var(--text2); min-width: 70px; }
+
+    /* ── Custom bet input ── */
+    .bet-input-group { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; }
+    .bet-input-group label { font-size: 0.85rem; color: var(--text2); }
+    .bet-input-group input[type="number"] {
+      background: var(--surface); border: 2px solid var(--surface2); border-radius: var(--radius-sm);
+      padding: 0.5rem 0.7rem; color: var(--gold); font-family: inherit; font-size: 1rem;
+      font-weight: 700; outline: none; width: 110px; transition: border-color 0.2s;
+    }
+    .bet-input-group input[type="number"]:focus { border-color: var(--accent); }
+    .bet-input-group .sol-label { font-size: 0.9rem; color: var(--text2); font-weight: 600; }
+
     /* ── Responsive ── */
     @media (max-width: 700px) {
       .game-cards { grid-template-columns: 1fr; }
@@ -294,7 +342,8 @@
       <div class="connect-form">
         <input type="text" id="username-input" placeholder="Choose a username" maxlength="20" />
         <button id="btn-connect-wallet" class="btn btn-primary btn-lg">&#9678; Connect Phantom Wallet</button>
-        <button id="btn-play-guest" class="btn btn-lg" style="background:var(--surface);color:var(--text);border:2px solid var(--surface2);">Play as Guest (no wallet)</button>
+        <p class="small-text" style="margin-bottom:0.5rem;">Don't have Phantom? No problem:</p>
+        <button id="btn-platform-wallet" class="btn btn-lg" style="background:var(--surface);color:var(--text);border:2px solid var(--accent);">Generate Platform Wallet</button>
         <p class="small-text">Powered by Solana &mdash; fast, low fees</p>
       </div>
     </div>
@@ -308,11 +357,36 @@
       </div>
       <div class="topbar-center"><span id="online-count" class="badge">0 online</span></div>
       <div class="topbar-right">
+        <span id="topbar-balance" class="badge" style="color:var(--gold);font-weight:700;">0 SOL</span>
         <span id="wallet-display" class="wallet-badge"></span>
         <span id="username-display" class="username-badge"></span>
       </div>
     </header>
     <main class="lobby-main">
+      <!-- Wallet Panel -->
+      <div class="wallet-panel">
+        <h3>&#128176; Your Wallet</h3>
+        <div class="balance-display"><span id="balance-amount">0.000</span> SOL</div>
+        <div class="balance-sub">Platform balance &mdash; deposit SOL to start playing</div>
+        <span class="wallet-address-label">Your deposit address (click to copy):</span>
+        <div class="wallet-address-box" id="platform-wallet-addr" title="Click to copy">Loading...</div>
+        <div class="wallet-row">
+          <label>Deposit:</label>
+          <div class="wallet-actions">
+            <input type="number" id="deposit-amount" placeholder="0.00" min="0.001" step="0.001" />
+            <button class="btn-deposit" id="btn-deposit">+ Deposit SOL</button>
+          </div>
+        </div>
+        <div class="wallet-row">
+          <label>Withdraw:</label>
+          <div class="wallet-actions">
+            <input type="number" id="withdraw-amount" placeholder="0.00" min="0.001" step="0.001" />
+            <input type="text" id="withdraw-address" placeholder="Destination wallet address" />
+            <button class="btn-withdraw" id="btn-withdraw">- Withdraw</button>
+          </div>
+        </div>
+      </div>
+
       <h2>Choose Your Game</h2>
       <div class="game-cards">
 
@@ -321,15 +395,10 @@
           <div class="game-card-icon">&#127073;</div>
           <h3>Domino</h3>
           <p>Classic 1v1 &mdash; 7 tiles each, draw from the pile, block your opponent</p>
-          <div class="bet-select">
-            <label>Bet (SOL):</label>
-            <div class="bet-options">
-              <button class="bet-btn" data-bet="0.1">0.1</button>
-              <button class="bet-btn active" data-bet="0.5">0.5</button>
-              <button class="bet-btn" data-bet="1">1</button>
-              <button class="bet-btn" data-bet="5">5</button>
-              <button class="bet-btn" data-bet="10">10</button>
-            </div>
+          <div class="bet-input-group">
+            <label>Bet:</label>
+            <input type="number" class="bet-amount-input" placeholder="0.5" min="0.001" step="0.001" value="0.5" />
+            <span class="sol-label">SOL</span>
           </div>
           <button class="btn btn-primary btn-play">Find Match</button>
         </div>
@@ -347,15 +416,10 @@
               <button class="grid-btn" data-grid="7">7&times;7</button>
             </div>
           </div>
-          <div class="bet-select">
-            <label>Bet (SOL):</label>
-            <div class="bet-options">
-              <button class="bet-btn" data-bet="0.1">0.1</button>
-              <button class="bet-btn active" data-bet="0.5">0.5</button>
-              <button class="bet-btn" data-bet="1">1</button>
-              <button class="bet-btn" data-bet="5">5</button>
-              <button class="bet-btn" data-bet="10">10</button>
-            </div>
+          <div class="bet-input-group">
+            <label>Bet:</label>
+            <input type="number" class="bet-amount-input" placeholder="0.5" min="0.001" step="0.001" value="0.5" />
+            <span class="sol-label">SOL</span>
           </div>
           <button class="btn btn-primary btn-play">Find Match</button>
         </div>
@@ -459,6 +523,9 @@
     // ════════════════════════════════════════
     var Wallet = (function() {
       var publicKey = null;
+      var platformWallet = null;
+      var isPhantom = false;
+
       function getProvider() {
         try {
           if (window.phantom && window.phantom.solana && window.phantom.solana.isPhantom) return window.phantom.solana;
@@ -466,44 +533,51 @@
         } catch(e) {}
         return null;
       }
-      function connect() {
-        return new Promise(function(resolve) {
-          try {
-            var provider = getProvider();
-            if (!provider) {
-              var mock = 'Guest_' + Math.random().toString(36).slice(2,8);
-              publicKey = mock;
-              resolve({ publicKey: mock, mock: true });
-              return;
-            }
-            provider.connect().then(function(resp) {
-              publicKey = resp.publicKey.toString();
-              resolve({ publicKey: publicKey, mock: false });
-            }).catch(function() {
-              // User rejected or closed popup — fall back to guest mode
-              var mock = 'Guest_' + Math.random().toString(36).slice(2,8);
-              publicKey = mock;
-              resolve({ publicKey: mock, mock: true });
-            });
-          } catch(e) {
-            var mock = 'Guest_' + Math.random().toString(36).slice(2,8);
-            publicKey = mock;
-            resolve({ publicKey: mock, mock: true });
+
+      function connectPhantom() {
+        return new Promise(function(resolve, reject) {
+          var provider = getProvider();
+          if (!provider) {
+            reject(new Error('Phantom wallet not found. Install it from phantom.app'));
+            return;
           }
+          provider.connect().then(function(resp) {
+            publicKey = resp.publicKey.toString();
+            isPhantom = true;
+            resolve({ publicKey: publicKey, isPhantom: true });
+          }).catch(function() {
+            reject(new Error('Wallet connection was rejected'));
+          });
         });
       }
-      function connectGuest() {
-        var mock = 'Guest_' + Math.random().toString(36).slice(2,8);
-        publicKey = mock;
-        return Promise.resolve({ publicKey: mock, mock: true });
+
+      function generatePlatformKey() {
+        var key = 'ZGUser_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,10);
+        publicKey = key;
+        isPhantom = false;
+        return Promise.resolve({ publicKey: key, isPhantom: false });
       }
+
+      function setPlatformWallet(addr) { platformWallet = addr; }
+      function getPlatformWallet() { return platformWallet; }
       function getPublicKey() { return publicKey; }
+      function getIsPhantom() { return isPhantom; }
+
       function shortenAddress(addr) {
         if (!addr) return '';
-        if (addr.length <= 10) return addr;
-        return addr.slice(0,4) + '...' + addr.slice(-4);
+        if (addr.length <= 12) return addr;
+        return addr.slice(0,6) + '...' + addr.slice(-4);
       }
-      return { connect: connect, connectGuest: connectGuest, getPublicKey: getPublicKey, shortenAddress: shortenAddress };
+
+      return {
+        connectPhantom: connectPhantom,
+        generatePlatformKey: generatePlatformKey,
+        setPlatformWallet: setPlatformWallet,
+        getPlatformWallet: getPlatformWallet,
+        getPublicKey: getPublicKey,
+        getIsPhantom: getIsPhantom,
+        shortenAddress: shortenAddress,
+      };
     })();
 
     // ════════════════════════════════════════
@@ -686,6 +760,7 @@
       var currentGame = null;
       var myPlayerIndex = null;
       var gameState = null;
+      var currentBalance = 0;
 
       var screens = {};
 
@@ -695,6 +770,12 @@
           document.getElementById('screen-' + all[i]).classList.remove('active');
         }
         document.getElementById('screen-' + name).classList.add('active');
+      }
+
+      function updateBalanceUI(bal) {
+        currentBalance = bal;
+        document.getElementById('balance-amount').textContent = bal.toFixed(3);
+        document.getElementById('topbar-balance').textContent = bal.toFixed(3) + ' SOL';
       }
 
       function init() {
@@ -710,86 +791,131 @@
         setupGameOverlay();
       }
 
+      function connectToServer(walletKey, username) {
+        try {
+          socket = io({ reconnectionAttempts: 5, timeout: 10000 });
+        } catch(e) {
+          showToast('Cannot connect to server', 'error');
+          resetConnectButtons();
+          return;
+        }
+
+        socket.on('connect', function() {
+          socket.emit('register', { wallet: walletKey, username: username });
+        });
+
+        socket.on('connect_error', function() {
+          showToast('Server connection failed — retrying...', 'error');
+        });
+
+        socket.on('registered', function(data) {
+          Wallet.setPlatformWallet(data.platformWallet);
+          updateBalanceUI(data.balance || 0);
+          document.getElementById('platform-wallet-addr').textContent = data.platformWallet;
+          document.getElementById('wallet-display').textContent = Wallet.shortenAddress(walletKey);
+          document.getElementById('username-display').textContent = username;
+          showScreen('lobby');
+        });
+
+        socket.on('balance_update', function(data) {
+          updateBalanceUI(data.balance);
+          if (data.tx) {
+            if (data.tx.type === 'deposit') showToast('Deposited ' + data.tx.amount + ' SOL', 'info');
+            else if (data.tx.type === 'withdraw') showToast('Withdrew ' + data.tx.amount + ' SOL', 'info');
+          }
+        });
+
+        socket.on('waiting', function(data) {
+          document.getElementById('waiting-info').textContent = data.gameType.toUpperCase() + ' — ' + data.betAmount + ' SOL bet';
+          showScreen('waiting');
+        });
+
+        socket.on('lobby_update', updateLobby);
+        socket.on('game_start', onGameStart);
+        socket.on('game_state', onGameState);
+        socket.on('game_over', onGameOver);
+        socket.on('search_cancelled', function() { showScreen('lobby'); });
+        socket.on('error_msg', function(d) { showToast(d.msg, 'error'); });
+
+        socket.on('disconnect', function() {
+          showToast('Disconnected from server', 'error');
+        });
+      }
+
       function setupConnectScreen() {
-        var btn = document.getElementById('btn-connect-wallet');
-        var guestBtn = document.getElementById('btn-play-guest');
+        var phantomBtn = document.getElementById('btn-connect-wallet');
+        var platformBtn = document.getElementById('btn-platform-wallet');
         var usernameInput = document.getElementById('username-input');
 
-        function enterLobby(walletPromise) {
+        function resetConnectButtons() {
+          phantomBtn.innerHTML = '&#9678; Connect Phantom Wallet';
+          phantomBtn.disabled = false;
+          platformBtn.textContent = 'Generate Platform Wallet';
+          platformBtn.disabled = false;
+        }
+
+        phantomBtn.addEventListener('click', function() {
           var username = usernameInput.value.trim();
           if (!username) { usernameInput.style.borderColor = '#ef4444'; usernameInput.focus(); return; }
 
-          btn.textContent = 'Connecting...';
-          btn.disabled = true;
-          guestBtn.disabled = true;
+          phantomBtn.textContent = 'Connecting...';
+          phantomBtn.disabled = true;
+          platformBtn.disabled = true;
 
-          walletPromise.then(function(result) {
-            var publicKey = result.publicKey;
-            try {
-              socket = io({ reconnectionAttempts: 5, timeout: 10000 });
-            } catch(e) {
-              showToast('Cannot connect to server', 'error');
-              resetConnectButtons();
-              return;
-            }
-
-            socket.on('connect', function() {
-              socket.emit('register', { wallet: publicKey, username: username });
-            });
-
-            socket.on('connect_error', function() {
-              showToast('Server connection failed — retrying...', 'error');
-            });
-
-            socket.on('registered', function() {
-              document.getElementById('wallet-display').textContent = result.mock ? 'Guest' : Wallet.shortenAddress(publicKey);
-              document.getElementById('username-display').textContent = username;
-              showScreen('lobby');
-            });
-
-            socket.on('waiting', function(data) {
-              document.getElementById('waiting-info').textContent = data.gameType.toUpperCase() + ' — ' + data.betAmount + ' SOL bet';
-              showScreen('waiting');
-            });
-
-            socket.on('lobby_update', updateLobby);
-            socket.on('game_start', onGameStart);
-            socket.on('game_state', onGameState);
-            socket.on('game_over', onGameOver);
-            socket.on('search_cancelled', function() { showScreen('lobby'); });
-            socket.on('error_msg', function(d) { showToast(d.msg, 'error'); });
-
-            socket.on('disconnect', function() {
-              showToast('Disconnected from server', 'error');
-            });
+          Wallet.connectPhantom().then(function(result) {
+            connectToServer(result.publicKey, username);
           }).catch(function(err) {
-            showToast(err.message || 'Connection failed', 'error');
+            showToast(err.message || 'Phantom connection failed', 'error');
             resetConnectButtons();
           });
-        }
+        });
 
-        function resetConnectButtons() {
-          btn.innerHTML = '&#9678; Connect Phantom Wallet';
-          btn.disabled = false;
-          guestBtn.disabled = false;
-        }
+        platformBtn.addEventListener('click', function() {
+          var username = usernameInput.value.trim();
+          if (!username) { usernameInput.style.borderColor = '#ef4444'; usernameInput.focus(); return; }
 
-        btn.addEventListener('click', function() { enterLobby(Wallet.connect()); });
-        guestBtn.addEventListener('click', function() { enterLobby(Wallet.connectGuest()); });
+          platformBtn.textContent = 'Generating...';
+          phantomBtn.disabled = true;
+          platformBtn.disabled = true;
+
+          Wallet.generatePlatformKey().then(function(result) {
+            connectToServer(result.publicKey, username);
+          });
+        });
       }
 
       function setupLobbyScreen() {
+        // Deposit
+        document.getElementById('btn-deposit').addEventListener('click', function() {
+          var amt = parseFloat(document.getElementById('deposit-amount').value);
+          if (!amt || amt <= 0) { showToast('Enter a valid amount', 'error'); return; }
+          if (socket) socket.emit('deposit', { amount: amt });
+          document.getElementById('deposit-amount').value = '';
+        });
+
+        // Withdraw
+        document.getElementById('btn-withdraw').addEventListener('click', function() {
+          var amt = parseFloat(document.getElementById('withdraw-amount').value);
+          var addr = document.getElementById('withdraw-address').value.trim();
+          if (!amt || amt <= 0) { showToast('Enter a valid amount', 'error'); return; }
+          if (amt > currentBalance) { showToast('Insufficient balance', 'error'); return; }
+          if (socket) socket.emit('withdraw', { amount: amt, toAddress: addr });
+          document.getElementById('withdraw-amount').value = '';
+          document.getElementById('withdraw-address').value = '';
+        });
+
+        // Copy wallet address
+        document.getElementById('platform-wallet-addr').addEventListener('click', function() {
+          var addr = this.textContent;
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(addr).then(function() { showToast('Copied!', 'info'); });
+          }
+        });
+
+        // Game cards
         var cards = document.querySelectorAll('.game-card');
         for (var ci = 0; ci < cards.length; ci++) {
           (function(card) {
-            var betBtns = card.querySelectorAll('.bet-btn');
-            for (var bi = 0; bi < betBtns.length; bi++) {
-              betBtns[bi].addEventListener('click', function() {
-                for (var x = 0; x < betBtns.length; x++) betBtns[x].classList.remove('active');
-                this.classList.add('active');
-              });
-            }
-
             var gridBtns = card.querySelectorAll('.grid-btn');
             for (var gi = 0; gi < gridBtns.length; gi++) {
               gridBtns[gi].addEventListener('click', function() {
@@ -800,8 +926,10 @@
 
             card.querySelector('.btn-play').addEventListener('click', function() {
               var gameType = card.dataset.game;
-              var activeBet = card.querySelector('.bet-btn.active');
-              var betAmount = parseFloat(activeBet.dataset.bet);
+              var betInput = card.querySelector('.bet-amount-input');
+              var betAmount = parseFloat(betInput.value);
+              if (!betAmount || betAmount <= 0) { showToast('Enter a bet amount', 'error'); betInput.focus(); return; }
+              if (betAmount > currentBalance) { showToast('Insufficient balance! Deposit SOL first.', 'error'); return; }
               var payload = { gameType: gameType, betAmount: betAmount };
 
               var activeGrid = card.querySelector('.grid-btn.active');
