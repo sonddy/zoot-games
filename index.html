@@ -341,10 +341,8 @@
       <p class="tagline">Wager crypto. Beat your opponent. Cash out.</p>
       <div class="connect-form">
         <input type="text" id="username-input" placeholder="Choose a username" maxlength="20" />
-        <button id="btn-connect-wallet" class="btn btn-primary btn-lg">&#9678; Connect Phantom Wallet</button>
-        <p class="small-text" style="margin-bottom:0.5rem;">Don't have Phantom? No problem:</p>
-        <button id="btn-platform-wallet" class="btn btn-lg" style="background:var(--surface);color:var(--text);border:2px solid var(--accent);">Generate Platform Wallet</button>
-        <p class="small-text">Powered by Solana &mdash; fast, low fees</p>
+        <button id="btn-generate-wallet" class="btn btn-primary btn-lg">&#128272; Generate Solana Wallet</button>
+        <p class="small-text">Each player gets a unique Solana wallet address</p>
       </div>
     </div>
   </div>
@@ -477,6 +475,7 @@
   </div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
   <script>
     // ════════════════════════════════════════
     // PIP RENDERER — creates real dot patterns like physical dominos
@@ -519,49 +518,21 @@
     }
 
     // ════════════════════════════════════════
-    // WALLET
+    // WALLET — generates real Solana keypairs
     // ════════════════════════════════════════
     var Wallet = (function() {
       var publicKey = null;
       var platformWallet = null;
-      var isPhantom = false;
 
-      function getProvider() {
-        try {
-          if (window.phantom && window.phantom.solana && window.phantom.solana.isPhantom) return window.phantom.solana;
-          if (window.solana && window.solana.isPhantom) return window.solana;
-        } catch(e) {}
-        return null;
-      }
-
-      function connectPhantom() {
-        return new Promise(function(resolve, reject) {
-          var provider = getProvider();
-          if (!provider) {
-            reject(new Error('Phantom wallet not found. Install it from phantom.app'));
-            return;
-          }
-          provider.connect().then(function(resp) {
-            publicKey = resp.publicKey.toString();
-            isPhantom = true;
-            resolve({ publicKey: publicKey, isPhantom: true });
-          }).catch(function() {
-            reject(new Error('Wallet connection was rejected'));
-          });
-        });
-      }
-
-      function generatePlatformKey() {
-        var key = 'ZGUser_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,10);
-        publicKey = key;
-        isPhantom = false;
-        return Promise.resolve({ publicKey: key, isPhantom: false });
+      function generateWallet() {
+        var kp = solanaWeb3.Keypair.generate();
+        publicKey = kp.publicKey.toBase58();
+        return Promise.resolve({ publicKey: publicKey });
       }
 
       function setPlatformWallet(addr) { platformWallet = addr; }
       function getPlatformWallet() { return platformWallet; }
       function getPublicKey() { return publicKey; }
-      function getIsPhantom() { return isPhantom; }
 
       function shortenAddress(addr) {
         if (!addr) return '';
@@ -570,12 +541,10 @@
       }
 
       return {
-        connectPhantom: connectPhantom,
-        generatePlatformKey: generatePlatformKey,
+        generateWallet: generateWallet,
         setPlatformWallet: setPlatformWallet,
         getPlatformWallet: getPlatformWallet,
         getPublicKey: getPublicKey,
-        getIsPhantom: getIsPhantom,
         shortenAddress: shortenAddress,
       };
     })();
@@ -796,7 +765,9 @@
           socket = io({ reconnectionAttempts: 5, timeout: 10000 });
         } catch(e) {
           showToast('Cannot connect to server', 'error');
-          resetConnectButtons();
+          var gb = document.getElementById('btn-generate-wallet');
+          gb.innerHTML = '&#128272; Generate Solana Wallet';
+          gb.disabled = false;
           return;
         }
 
@@ -843,43 +814,22 @@
       }
 
       function setupConnectScreen() {
-        var phantomBtn = document.getElementById('btn-connect-wallet');
-        var platformBtn = document.getElementById('btn-platform-wallet');
+        var genBtn = document.getElementById('btn-generate-wallet');
         var usernameInput = document.getElementById('username-input');
 
-        function resetConnectButtons() {
-          phantomBtn.innerHTML = '&#9678; Connect Phantom Wallet';
-          phantomBtn.disabled = false;
-          platformBtn.textContent = 'Generate Platform Wallet';
-          platformBtn.disabled = false;
-        }
-
-        phantomBtn.addEventListener('click', function() {
+        genBtn.addEventListener('click', function() {
           var username = usernameInput.value.trim();
           if (!username) { usernameInput.style.borderColor = '#ef4444'; usernameInput.focus(); return; }
 
-          phantomBtn.textContent = 'Connecting...';
-          phantomBtn.disabled = true;
-          platformBtn.disabled = true;
+          genBtn.textContent = 'Generating wallet...';
+          genBtn.disabled = true;
 
-          Wallet.connectPhantom().then(function(result) {
+          Wallet.generateWallet().then(function(result) {
             connectToServer(result.publicKey, username);
-          }).catch(function(err) {
-            showToast(err.message || 'Phantom connection failed', 'error');
-            resetConnectButtons();
-          });
-        });
-
-        platformBtn.addEventListener('click', function() {
-          var username = usernameInput.value.trim();
-          if (!username) { usernameInput.style.borderColor = '#ef4444'; usernameInput.focus(); return; }
-
-          platformBtn.textContent = 'Generating...';
-          phantomBtn.disabled = true;
-          platformBtn.disabled = true;
-
-          Wallet.generatePlatformKey().then(function(result) {
-            connectToServer(result.publicKey, username);
+          }).catch(function() {
+            showToast('Failed to generate wallet', 'error');
+            genBtn.innerHTML = '&#128272; Generate Solana Wallet';
+            genBtn.disabled = false;
           });
         });
       }

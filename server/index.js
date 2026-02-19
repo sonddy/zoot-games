@@ -5,7 +5,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
-const crypto = require('crypto');
+const { Keypair } = require('@solana/web3.js');
 const DominoGame = require('./games/domino');
 const TicTacToeGame = require('./games/tictactoe');
 
@@ -26,7 +26,8 @@ const wallets = new Map();     // platformWalletAddress -> { balance, owner (wal
 const HOUSE_FEE = 0.05;
 
 function generatePlatformWallet() {
-  return 'ZG_' + crypto.randomBytes(16).toString('hex');
+  const kp = Keypair.generate();
+  return kp.publicKey.toBase58();
 }
 
 function getOrCreateWallet(walletId) {
