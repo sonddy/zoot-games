@@ -42,7 +42,9 @@ async function getUserData(uid) {
   let userData = null;
   if (db) {
     try {
+      const t0 = Date.now();
       const doc = await db.collection('users').doc(uid).get();
+      console.log(`Firestore read took ${Date.now() - t0}ms`);
       if (doc.exists) {
         userData = doc.data();
       }
@@ -52,7 +54,9 @@ async function getUserData(uid) {
   }
 
   if (!userData) {
+    const t0 = Date.now();
     const kp = Keypair.generate();
+    console.log(`Keypair generation took ${Date.now() - t0}ms`);
     userData = {
       platformWallet: kp.publicKey.toBase58(),
       privateKey: Buffer.from(kp.secretKey).toString('base64'),
@@ -60,11 +64,9 @@ async function getUserData(uid) {
       createdAt: Date.now(),
     };
     if (db) {
-      try {
-        await db.collection('users').doc(uid).set(userData);
-      } catch (e) {
-        console.error('Firestore write error:', e.message);
-      }
+      db.collection('users').doc(uid).set(userData).catch(e =>
+        console.error('Firestore write error:', e.message)
+      );
     }
   }
 
@@ -100,11 +102,14 @@ io.on('connection', (socket) => {
   console.log(`Connected: ${socket.id}`);
 
   socket.on('register', async ({ idToken, displayName }) => {
+    const regStart = Date.now();
     let uid, email, name;
 
     if (fbAuth && idToken) {
       try {
+        const t0 = Date.now();
         const decoded = await fbAuth.verifyIdToken(idToken);
+        console.log(`verifyIdToken took ${Date.now() - t0}ms`);
         uid = decoded.uid;
         email = decoded.email;
         name = displayName || decoded.name || email.split('@')[0];
@@ -118,6 +123,7 @@ io.on('connection', (socket) => {
     }
 
     const userData = await getUserData(uid);
+    console.log(`Total register took ${Date.now() - regStart}ms`);
     players.set(socket.id, {
       uid, email, displayName: name,
       wallet: userData.platformWallet,
