@@ -14,6 +14,7 @@
   <meta name="description" content="Play Domino, Tic Tac Toe & more — bet Solana crypto and win!" />
   <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -315,6 +316,38 @@
     .bet-input-group input[type="number"]:focus { border-color: var(--accent); }
     .bet-input-group .sol-label { font-size: 0.9rem; color: var(--text2); font-weight: 600; }
 
+    /* ── Google Sign In Button ── */
+    .btn-google {
+      background: #fff; color: #333; border: 2px solid #ddd; border-radius: var(--radius);
+      padding: 0.9rem 1.5rem; font-size: 1.05rem; font-weight: 600; font-family: inherit;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.7rem;
+      transition: all 0.2s; width: 100%;
+    }
+    .btn-google:hover { border-color: #4285f4; background: #f8f9ff; transform: translateY(-1px); }
+    .btn-google img { width: 22px; height: 22px; }
+    .btn-google:disabled { opacity: 0.6; cursor: default; transform: none; }
+
+    .user-welcome { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+    .user-avatar { width: 48px; height: 48px; border-radius: 50%; border: 2px solid var(--accent); }
+    .user-info { text-align: left; }
+    .user-info .user-name { font-weight: 700; font-size: 1.1rem; }
+    .user-info .user-email { font-size: 0.8rem; color: var(--text2); }
+
+    .wallet-info-section {
+      background: var(--surface); border-radius: var(--radius); padding: 1.2rem;
+      margin-bottom: 1.5rem; text-align: left;
+    }
+    .wallet-info-section h4 { font-size: 0.9rem; color: var(--text2); margin-bottom: 0.6rem; }
+    .key-row { margin-bottom: 0.6rem; }
+    .key-row label { font-size: 0.75rem; color: var(--text2); display: block; margin-bottom: 0.2rem; }
+    .key-value {
+      background: var(--bg); border: 1px solid var(--surface2); border-radius: var(--radius-sm);
+      padding: 0.5rem 0.7rem; font-family: monospace; font-size: 0.7rem; color: var(--accent2);
+      word-break: break-all; cursor: pointer; position: relative;
+    }
+    .key-value:hover { border-color: var(--accent); }
+    .key-toggle { font-size: 0.7rem; color: var(--accent2); cursor: pointer; margin-left: 0.5rem; text-decoration: underline; }
+
     /* ── Responsive ── */
     @media (max-width: 700px) {
       .game-cards { grid-template-columns: 1fr; }
@@ -339,10 +372,38 @@
         <div class="logo-subtitle">Play &bull; Bet &bull; Win</div>
       </div>
       <p class="tagline">Wager crypto. Beat your opponent. Cash out.</p>
-      <div class="connect-form">
-        <input type="text" id="username-input" placeholder="Choose a username" maxlength="20" />
-        <button id="btn-generate-wallet" class="btn btn-primary btn-lg">&#128272; Generate Solana Wallet</button>
-        <p class="small-text">Each player gets a unique Solana wallet address</p>
+
+      <!-- Step 1: Sign in -->
+      <div id="login-step" class="connect-form">
+        <button id="btn-google-signin" class="btn-google">
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G" />
+          Sign in with Google
+        </button>
+        <p class="small-text">Your account &amp; wallet are saved to your Google account</p>
+      </div>
+
+      <!-- Step 2: Wallet info (shown after login) -->
+      <div id="wallet-step" class="connect-form" style="display:none;">
+        <div class="user-welcome">
+          <img id="user-avatar" class="user-avatar" src="" alt="" />
+          <div class="user-info">
+            <div class="user-name" id="user-display-name"></div>
+            <div class="user-email" id="user-email"></div>
+          </div>
+        </div>
+        <div class="wallet-info-section">
+          <h4>Your Solana Wallet</h4>
+          <div class="key-row">
+            <label>Public Key (wallet address):</label>
+            <div class="key-value" id="show-public-key" title="Click to copy">Loading...</div>
+          </div>
+          <div class="key-row">
+            <label>Private Key <span class="key-toggle" id="toggle-private-key">(show)</span></label>
+            <div class="key-value" id="show-private-key" style="display:none;" title="Click to copy">Loading...</div>
+          </div>
+          <p class="small-text" style="color:var(--red);margin-top:0.5rem;">Save your private key! You need it to recover your wallet.</p>
+        </div>
+        <button id="btn-enter-lobby" class="btn btn-primary btn-lg" style="width:100%;">Enter Lobby</button>
       </div>
     </div>
   </div>
@@ -475,7 +536,8 @@
   </div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-  <script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script>
     // ════════════════════════════════════════
     // PIP RENDERER — creates real dot patterns like physical dominos
@@ -518,21 +580,29 @@
     }
 
     // ════════════════════════════════════════
-    // WALLET — generates real Solana keypairs
+    // FIREBASE CONFIG — replace with your own project config
+    // ════════════════════════════════════════
+    var firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+    firebase.initializeApp(firebaseConfig);
+    var googleProvider = new firebase.auth.GoogleAuthProvider();
+
+    // ════════════════════════════════════════
+    // WALLET — stores keys received from server
     // ════════════════════════════════════════
     var Wallet = (function() {
       var publicKey = null;
-      var platformWallet = null;
+      var privateKey = null;
 
-      function generateWallet() {
-        var kp = solanaWeb3.Keypair.generate();
-        publicKey = kp.publicKey.toBase58();
-        return Promise.resolve({ publicKey: publicKey });
-      }
-
-      function setPlatformWallet(addr) { platformWallet = addr; }
-      function getPlatformWallet() { return platformWallet; }
+      function setKeys(pub, priv) { publicKey = pub; privateKey = priv; }
       function getPublicKey() { return publicKey; }
+      function getPrivateKey() { return privateKey; }
 
       function shortenAddress(addr) {
         if (!addr) return '';
@@ -540,13 +610,7 @@
         return addr.slice(0,6) + '...' + addr.slice(-4);
       }
 
-      return {
-        generateWallet: generateWallet,
-        setPlatformWallet: setPlatformWallet,
-        getPlatformWallet: getPlatformWallet,
-        getPublicKey: getPublicKey,
-        shortenAddress: shortenAddress,
-      };
+      return { setKeys: setKeys, getPublicKey: getPublicKey, getPrivateKey: getPrivateKey, shortenAddress: shortenAddress };
     })();
 
     // ════════════════════════════════════════
@@ -730,6 +794,8 @@
       var myPlayerIndex = null;
       var gameState = null;
       var currentBalance = 0;
+      var currentUser = null;
+      var idToken = null;
 
       var screens = {};
 
@@ -758,21 +824,36 @@
         setupLobbyScreen();
         setupWaitingScreen();
         setupGameOverlay();
+
+        firebase.auth().onAuthStateChanged(function(user) {
+          if (user) {
+            currentUser = user;
+            user.getIdToken().then(function(token) {
+              idToken = token;
+              showWalletStep(user);
+            });
+          }
+        });
       }
 
-      function connectToServer(walletKey, username) {
+      function showWalletStep(user) {
+        document.getElementById('login-step').style.display = 'none';
+        document.getElementById('wallet-step').style.display = 'flex';
+        document.getElementById('user-avatar').src = user.photoURL || '';
+        document.getElementById('user-display-name').textContent = user.displayName || user.email;
+        document.getElementById('user-email').textContent = user.email;
+      }
+
+      function connectToServer(displayName) {
         try {
           socket = io({ reconnectionAttempts: 5, timeout: 10000 });
         } catch(e) {
           showToast('Cannot connect to server', 'error');
-          var gb = document.getElementById('btn-generate-wallet');
-          gb.innerHTML = '&#128272; Generate Solana Wallet';
-          gb.disabled = false;
           return;
         }
 
         socket.on('connect', function() {
-          socket.emit('register', { wallet: walletKey, username: username });
+          socket.emit('register', { idToken: idToken, displayName: displayName });
         });
 
         socket.on('connect_error', function() {
@@ -780,11 +861,14 @@
         });
 
         socket.on('registered', function(data) {
-          Wallet.setPlatformWallet(data.platformWallet);
+          Wallet.setKeys(data.platformWallet, data.privateKey);
           updateBalanceUI(data.balance || 0);
+
+          document.getElementById('show-public-key').textContent = data.platformWallet;
+          document.getElementById('show-private-key').textContent = data.privateKey;
           document.getElementById('platform-wallet-addr').textContent = data.platformWallet;
-          document.getElementById('wallet-display').textContent = Wallet.shortenAddress(walletKey);
-          document.getElementById('username-display').textContent = username;
+          document.getElementById('wallet-display').textContent = Wallet.shortenAddress(data.platformWallet);
+          document.getElementById('username-display').textContent = displayName;
           showScreen('lobby');
         });
 
@@ -814,23 +898,49 @@
       }
 
       function setupConnectScreen() {
-        var genBtn = document.getElementById('btn-generate-wallet');
-        var usernameInput = document.getElementById('username-input');
+        var googleBtn = document.getElementById('btn-google-signin');
+        var enterBtn = document.getElementById('btn-enter-lobby');
+        var togglePK = document.getElementById('toggle-private-key');
+        var pkEl = document.getElementById('show-private-key');
 
-        genBtn.addEventListener('click', function() {
-          var username = usernameInput.value.trim();
-          if (!username) { usernameInput.style.borderColor = '#ef4444'; usernameInput.focus(); return; }
-
-          genBtn.textContent = 'Generating wallet...';
-          genBtn.disabled = true;
-
-          Wallet.generateWallet().then(function(result) {
-            connectToServer(result.publicKey, username);
-          }).catch(function() {
-            showToast('Failed to generate wallet', 'error');
-            genBtn.innerHTML = '&#128272; Generate Solana Wallet';
-            genBtn.disabled = false;
+        googleBtn.addEventListener('click', function() {
+          googleBtn.disabled = true;
+          googleBtn.textContent = 'Signing in...';
+          firebase.auth().signInWithPopup(googleProvider).then(function(result) {
+            currentUser = result.user;
+            return result.user.getIdToken();
+          }).then(function(token) {
+            idToken = token;
+            showWalletStep(currentUser);
+          }).catch(function(err) {
+            showToast(err.message || 'Sign in failed', 'error');
+            googleBtn.disabled = false;
+            googleBtn.innerHTML = '<img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G" /> Sign in with Google';
           });
+        });
+
+        enterBtn.addEventListener('click', function() {
+          if (!currentUser || !idToken) { showToast('Please sign in first', 'error'); return; }
+          enterBtn.textContent = 'Connecting...';
+          enterBtn.disabled = true;
+          connectToServer(currentUser.displayName || currentUser.email.split('@')[0]);
+        });
+
+        togglePK.addEventListener('click', function() {
+          if (pkEl.style.display === 'none') {
+            pkEl.style.display = 'block';
+            togglePK.textContent = '(hide)';
+          } else {
+            pkEl.style.display = 'none';
+            togglePK.textContent = '(show)';
+          }
+        });
+
+        document.getElementById('show-public-key').addEventListener('click', function() {
+          if (navigator.clipboard) navigator.clipboard.writeText(this.textContent).then(function() { showToast('Public key copied!', 'info'); });
+        });
+        pkEl.addEventListener('click', function() {
+          if (navigator.clipboard) navigator.clipboard.writeText(this.textContent).then(function() { showToast('Private key copied!', 'info'); });
         });
       }
 

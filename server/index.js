@@ -9,6 +9,17 @@ const { Keypair } = require('@solana/web3.js');
 const DominoGame = require('./games/domino');
 const TicTacToeGame = require('./games/tictactoe');
 
+let db = null;
+let fbAuth = null;
+try {
+  const fb = require('./firebase');
+  db = fb.db;
+  fbAuth = fb.auth;
+  console.log('Firebase initialized');
+} catch (e) {
+  console.warn('Firebase not configured — running without persistence');
+}
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
@@ -18,36 +29,63 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // ── In-memory state ──
-const rooms = new Map();       // roomId -> Room
-const players = new Map();     // socketId -> { wallet, username, roomId, platformWallet }
-const matchQueue = new Map();  // queueKey -> { socketId, bet, options }
-const wallets = new Map();     // platformWalletAddress -> { balance, owner (wallet/username), transactions[] }
+const rooms = new Map();
+const players = new Map();     // socketId -> { uid, email, displayName, wallet, roomId }
+const matchQueue = new Map();
+const userBalances = new Map(); // uid -> { balance, platformWallet }
 
 const HOUSE_FEE = 0.05;
 
-function generatePlatformWallet() {
-  const kp = Keypair.generate();
-  return kp.publicKey.toBase58();
+async function getUserData(uid) {
+  if (userBalances.has(uid)) return userBalances.get(uid);
+
+  let userData = null;
+  if (db) {
+    try {
+      const doc = await db.collection('users').doc(uid).get();
+      if (doc.exists) {
+        userData = doc.data();
+      }
+    } catch (e) {
+      console.error('Firestore read error:', e.message);
+    }
+  }
+
+  if (!userData) {
+    const kp = Keypair.generate();
+    userData = {
+      platformWallet: kp.publicKey.toBase58(),
+      privateKey: Buffer.from(kp.secretKey).toString('base64'),
+      balance: 0,
+      createdAt: Date.now(),
+    };
+    if (db) {
+      try {
+        await db.collection('users').doc(uid).set(userData);
+      } catch (e) {
+        console.error('Firestore write error:', e.message);
+      }
+    }
+  }
+
+  userBalances.set(uid, userData);
+  return userData;
 }
 
-function getOrCreateWallet(walletId) {
-  if (!wallets.has(walletId)) {
-    const platformAddr = generatePlatformWallet();
-    wallets.set(walletId, {
-      platformWallet: platformAddr,
-      balance: 0,
-      transactions: [],
-    });
+async function saveBalance(uid) {
+  const data = userBalances.get(uid);
+  if (!data || !db) return;
+  try {
+    await db.collection('users').doc(uid).update({ balance: data.balance });
+  } catch (e) {
+    console.error('Firestore balance save error:', e.message);
   }
-  return wallets.get(walletId);
 }
 
 function createRoom(gameType, betAmount, player1Socket) {
   const id = uuidv4().slice(0, 8);
   const room = {
-    id,
-    gameType,
-    betAmount,
+    id, gameType, betAmount,
     players: [player1Socket],
     state: 'waiting',
     game: null,
@@ -59,71 +97,95 @@ function createRoom(gameType, betAmount, player1Socket) {
 
 // ── Socket.IO ──
 io.on('connection', (socket) => {
-  console.log(`⚡ Connected: ${socket.id}`);
+  console.log(`Connected: ${socket.id}`);
 
-  socket.on('register', ({ wallet, username }) => {
-    const w = getOrCreateWallet(wallet);
-    players.set(socket.id, { wallet, username, roomId: null, platformWallet: w.platformWallet });
+  socket.on('register', async ({ idToken, displayName }) => {
+    let uid, email, name;
+
+    if (fbAuth && idToken) {
+      try {
+        const decoded = await fbAuth.verifyIdToken(idToken);
+        uid = decoded.uid;
+        email = decoded.email;
+        name = displayName || decoded.name || email.split('@')[0];
+      } catch (e) {
+        return socket.emit('error_msg', { msg: 'Authentication failed' });
+      }
+    } else {
+      uid = 'local_' + socket.id;
+      email = 'local@zootgames';
+      name = displayName || 'Player';
+    }
+
+    const userData = await getUserData(uid);
+    players.set(socket.id, {
+      uid, email, displayName: name,
+      wallet: userData.platformWallet,
+      roomId: null,
+    });
+
     socket.emit('registered', {
       success: true,
-      platformWallet: w.platformWallet,
-      balance: w.balance,
+      uid,
+      email,
+      displayName: name,
+      platformWallet: userData.platformWallet,
+      privateKey: userData.privateKey,
+      balance: userData.balance,
     });
     broadcastLobby();
   });
 
-  // ── Wallet: deposit (simulated — in production this would verify on-chain) ──
-  socket.on('deposit', ({ amount }) => {
+  socket.on('deposit', async ({ amount }) => {
     const player = players.get(socket.id);
     if (!player) return socket.emit('error_msg', { msg: 'Register first' });
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return socket.emit('error_msg', { msg: 'Invalid amount' });
 
-    const w = getOrCreateWallet(player.wallet);
-    w.balance += amt;
-    w.transactions.push({ type: 'deposit', amount: amt, date: Date.now() });
-    socket.emit('balance_update', { balance: w.balance, tx: { type: 'deposit', amount: amt } });
+    const data = userBalances.get(player.uid);
+    if (!data) return;
+    data.balance += amt;
+    await saveBalance(player.uid);
+    socket.emit('balance_update', { balance: data.balance, tx: { type: 'deposit', amount: amt } });
   });
 
-  // ── Wallet: withdraw ──
-  socket.on('withdraw', ({ amount, toAddress }) => {
+  socket.on('withdraw', async ({ amount, toAddress }) => {
     const player = players.get(socket.id);
     if (!player) return socket.emit('error_msg', { msg: 'Register first' });
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return socket.emit('error_msg', { msg: 'Invalid amount' });
 
-    const w = getOrCreateWallet(player.wallet);
-    if (w.balance < amt) return socket.emit('error_msg', { msg: 'Insufficient balance' });
+    const data = userBalances.get(player.uid);
+    if (!data) return;
+    if (data.balance < amt) return socket.emit('error_msg', { msg: 'Insufficient balance' });
 
-    w.balance -= amt;
-    w.transactions.push({ type: 'withdraw', amount: amt, to: toAddress || player.wallet, date: Date.now() });
-    socket.emit('balance_update', { balance: w.balance, tx: { type: 'withdraw', amount: amt } });
+    data.balance -= amt;
+    await saveBalance(player.uid);
+    socket.emit('balance_update', { balance: data.balance, tx: { type: 'withdraw', amount: amt } });
   });
 
-  // ── Get balance ──
   socket.on('get_balance', () => {
     const player = players.get(socket.id);
     if (!player) return;
-    const w = getOrCreateWallet(player.wallet);
-    socket.emit('balance_update', { balance: w.balance });
+    const data = userBalances.get(player.uid);
+    if (data) socket.emit('balance_update', { balance: data.balance });
   });
 
-  // ── Find / Create a match ──
-  socket.on('find_match', ({ gameType, betAmount, gridSize }) => {
+  socket.on('find_match', async ({ gameType, betAmount, gridSize }) => {
     const player = players.get(socket.id);
     if (!player) return socket.emit('error_msg', { msg: 'Register first' });
 
     const bet = parseFloat(betAmount);
     if (!bet || bet <= 0) return socket.emit('error_msg', { msg: 'Invalid bet amount' });
 
-    const w = getOrCreateWallet(player.wallet);
-    if (w.balance < bet) {
+    const data = userBalances.get(player.uid);
+    if (!data || data.balance < bet) {
       return socket.emit('error_msg', { msg: 'Insufficient balance. Deposit SOL first!' });
     }
 
-    // Deduct bet immediately (held in escrow)
-    w.balance -= bet;
-    socket.emit('balance_update', { balance: w.balance });
+    data.balance -= bet;
+    await saveBalance(player.uid);
+    socket.emit('balance_update', { balance: data.balance });
 
     const opts = {};
     if (gameType === 'tictactoe' && gridSize) opts.gridSize = gridSize;
@@ -153,15 +215,17 @@ io.on('connection', (socket) => {
     broadcastLobby();
   });
 
-  socket.on('cancel_search', () => {
+  socket.on('cancel_search', async () => {
     for (const [key, val] of matchQueue) {
       if (val.socketId === socket.id) {
-        // Refund the held bet
         const player = players.get(socket.id);
         if (player) {
-          const w = getOrCreateWallet(player.wallet);
-          w.balance += val.bet;
-          socket.emit('balance_update', { balance: w.balance });
+          const data = userBalances.get(player.uid);
+          if (data) {
+            data.balance += val.bet;
+            await saveBalance(player.uid);
+            socket.emit('balance_update', { balance: data.balance });
+          }
         }
         matchQueue.delete(key);
         break;
@@ -171,8 +235,7 @@ io.on('connection', (socket) => {
     broadcastLobby();
   });
 
-  // ── Game actions ──
-  socket.on('game_action', (action) => {
+  socket.on('game_action', async (action) => {
     const player = players.get(socket.id);
     if (!player || !player.roomId) return;
     const room = rooms.get(player.roomId);
@@ -198,59 +261,60 @@ io.on('connection', (socket) => {
         const winnerSocketId = room.players[winnerIdx];
         const winnerPlayer = players.get(winnerSocketId);
         if (winnerPlayer) {
-          const ww = getOrCreateWallet(winnerPlayer.wallet);
-          ww.balance += payout;
-          ww.transactions.push({ type: 'win', amount: payout, date: Date.now() });
-          const winSock = io.sockets.sockets.get(winnerSocketId);
-          if (winSock) winSock.emit('balance_update', { balance: ww.balance });
+          const wd = userBalances.get(winnerPlayer.uid);
+          if (wd) {
+            wd.balance += payout;
+            await saveBalance(winnerPlayer.uid);
+            const winSock = io.sockets.sockets.get(winnerSocketId);
+            if (winSock) winSock.emit('balance_update', { balance: wd.balance });
+          }
         }
-
         io.to(room.id).emit('game_over', {
-          winner: winnerPlayer ? winnerPlayer.username : null,
+          winner: winnerPlayer ? winnerPlayer.displayName : null,
           winnerWallet: winnerPlayer ? winnerPlayer.wallet : null,
-          payout,
-          isDraw: false,
+          payout, isDraw: false,
         });
       } else {
-        // Draw — refund both players
-        room.players.forEach((sid) => {
+        for (const sid of room.players) {
           const p = players.get(sid);
           if (p) {
-            const pw = getOrCreateWallet(p.wallet);
-            pw.balance += room.betAmount;
-            pw.transactions.push({ type: 'refund', amount: room.betAmount, date: Date.now() });
-            const s = io.sockets.sockets.get(sid);
-            if (s) s.emit('balance_update', { balance: pw.balance });
+            const pd = userBalances.get(p.uid);
+            if (pd) {
+              pd.balance += room.betAmount;
+              await saveBalance(p.uid);
+              const s = io.sockets.sockets.get(sid);
+              if (s) s.emit('balance_update', { balance: pd.balance });
+            }
           }
-        });
+        }
         io.to(room.id).emit('game_over', {
           winner: null, winnerWallet: null, payout: 0, isDraw: true,
         });
       }
-
       setTimeout(() => cleanupRoom(room.id), 5000);
     }
   });
 
   socket.on('get_lobby', () => broadcastLobby());
 
-  socket.on('disconnect', () => {
-    console.log(`🔌 Disconnected: ${socket.id}`);
+  socket.on('disconnect', async () => {
+    console.log(`Disconnected: ${socket.id}`);
     const player = players.get(socket.id);
 
-    // Refund from matchmaking queue
     for (const [key, val] of matchQueue) {
       if (val.socketId === socket.id) {
         if (player) {
-          const w = getOrCreateWallet(player.wallet);
-          w.balance += val.bet;
+          const data = userBalances.get(player.uid);
+          if (data) {
+            data.balance += val.bet;
+            await saveBalance(player.uid);
+          }
         }
         matchQueue.delete(key);
         break;
       }
     }
 
-    // Handle in-game disconnect (opponent wins, get the pot)
     if (player && player.roomId) {
       const room = rooms.get(player.roomId);
       if (room && room.state === 'playing') {
@@ -262,19 +326,19 @@ io.on('connection', (socket) => {
         const payout = pot - (pot * HOUSE_FEE);
 
         if (winnerPlayer) {
-          const ww = getOrCreateWallet(winnerPlayer.wallet);
-          ww.balance += payout;
-          ww.transactions.push({ type: 'win_disconnect', amount: payout, date: Date.now() });
-          const winSock = io.sockets.sockets.get(winnerSocketId);
-          if (winSock) winSock.emit('balance_update', { balance: ww.balance });
+          const wd = userBalances.get(winnerPlayer.uid);
+          if (wd) {
+            wd.balance += payout;
+            await saveBalance(winnerPlayer.uid);
+            const winSock = io.sockets.sockets.get(winnerSocketId);
+            if (winSock) winSock.emit('balance_update', { balance: wd.balance });
+          }
         }
 
         io.to(room.id).emit('game_over', {
-          winner: winnerPlayer ? winnerPlayer.username : null,
+          winner: winnerPlayer ? winnerPlayer.displayName : null,
           winnerWallet: winnerPlayer ? winnerPlayer.wallet : null,
-          payout,
-          isDraw: false,
-          reason: 'Opponent disconnected',
+          payout, isDraw: false, reason: 'Opponent disconnected',
         });
         room.state = 'finished';
         setTimeout(() => cleanupRoom(room.id), 3000);
@@ -305,22 +369,19 @@ function startGame(room) {
         betAmount: room.betAmount,
         playerIndex: idx,
         players: [
-          { username: p1?.username, wallet: p1?.wallet },
-          { username: p2?.username, wallet: p2?.wallet },
+          { username: p1?.displayName, wallet: p1?.wallet },
+          { username: p2?.displayName, wallet: p2?.wallet },
         ],
       });
     }
   });
-
   emitGameState(room);
 }
 
 function emitGameState(room) {
   room.players.forEach((sid, idx) => {
     const sock = io.sockets.sockets.get(sid);
-    if (sock) {
-      sock.emit('game_state', room.game.getStateForPlayer(idx));
-    }
+    if (sock) sock.emit('game_state', room.game.getStateForPlayer(idx));
   });
 }
 
@@ -341,25 +402,22 @@ function broadcastLobby() {
   for (const [key, val] of matchQueue) {
     const [gameType, bet] = key.split('_');
     const p = players.get(val.socketId);
-    waiting.push({ gameType, betAmount: parseFloat(bet), username: p?.username });
+    waiting.push({ gameType, betAmount: parseFloat(bet), username: p?.displayName });
   }
-
   const activeGames = [];
   for (const [, room] of rooms) {
     if (room.state === 'playing') {
       activeGames.push({
         gameType: room.gameType,
         betAmount: room.betAmount,
-        players: room.players.map((sid) => players.get(sid)?.username),
+        players: room.players.map((sid) => players.get(sid)?.displayName),
       });
     }
   }
-
-  const onlineCount = players.size;
-  io.emit('lobby_update', { waiting, activeGames, onlineCount });
+  io.emit('lobby_update', { waiting, activeGames, onlineCount: players.size });
 }
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🎮 ZG (Zoot Games) running on http://localhost:${PORT}`);
+  console.log(`ZG (Zoot Games) running on http://localhost:${PORT}`);
 });
