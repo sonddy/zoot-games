@@ -1,0 +1,24 @@
+{
+  "name": "zoot-games",
+  "version": "1.0.0",
+  "description": "ZG (Zoot Games) — Live crypto gaming platform with Domino, Tic Tac Toe & more",
+  "main": "server/index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "keywords": ["gaming", "crypto", "solana", "domino", "multiplayer", "tictactoe"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@solana/web3.js": "^1.98.4",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3",
+    "uuid": "^13.0.0"
+  }
+}

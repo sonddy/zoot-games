@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>ZG — Zoot Games | Play & Earn Crypto</title>
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#8b5cf6" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ZG" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
+  <meta name="description" content="Play Domino, Tic Tac Toe & more — bet Solana crypto and win!" />
+  <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0e17;
+      --bg2: #111827;
+      --surface: #1f2937;
+      --surface2: #374151;
+      --accent: #8b5cf6;
+      --accent2: #a78bfa;
+      --green: #10b981;
+      --red: #ef4444;
+      --gold: #f59e0b;
+      --text: #f3f4f6;
+      --text2: #9ca3af;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --felt: #1a5c3a;
+      --felt2: #14472d;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .screen { display: none; min-height: 100vh; }
+    .screen.active { display: flex; }
+
+    /* ── Connect Screen ── */
+    #screen-connect {
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at 50% 30%, #1a1040 0%, var(--bg) 70%);
+    }
+    .connect-container { text-align: center; max-width: 480px; padding: 2rem; }
+    .logo { margin-bottom: 0.5rem; }
+    .logo-mark {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 80px; height: 80px; border-radius: 20px;
+      background: linear-gradient(135deg, var(--accent), #6d28d9);
+      font-size: 2.2rem; font-weight: 800; color: #fff; letter-spacing: -2px;
+      margin-bottom: 1rem; box-shadow: 0 8px 32px rgba(139,92,246,0.35);
+    }
+    .logo h1 { font-size: 2.6rem; font-weight: 800; letter-spacing: -1px; }
+    .accent { color: var(--accent); }
+    .logo-subtitle { font-size: 0.95rem; color: var(--text2); font-weight: 500; letter-spacing: 3px; text-transform: uppercase; margin-top: 0.2rem; }
+    .tagline { font-size: 1.25rem; color: var(--text2); margin-bottom: 2.5rem; margin-top: 0.5rem; }
+    .connect-form { display: flex; flex-direction: column; gap: 1rem; }
+
+    input[type="text"] {
+      background: var(--surface); border: 2px solid var(--surface2); border-radius: var(--radius);
+      padding: 0.9rem 1.2rem; color: var(--text); font-size: 1rem; font-family: inherit; outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus { border-color: var(--accent); }
+    input[type="text"]::placeholder { color: var(--text2); }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+      border: none; border-radius: var(--radius); font-family: inherit; font-weight: 600;
+      cursor: pointer; transition: all 0.2s; padding: 0.7rem 1.4rem; font-size: 0.95rem;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
+    .btn-danger { background: var(--red); color: #fff; }
+    .btn-danger:hover { opacity: 0.85; }
+    .btn-lg { padding: 1rem 1.8rem; font-size: 1.1rem; }
+    .small-text { color: var(--text2); font-size: 0.8rem; margin-top: 0.5rem; }
+
+    /* ── Top Bar ── */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.8rem 1.5rem; background: var(--bg2);
+      border-bottom: 1px solid var(--surface2); position: sticky; top: 0; z-index: 100;
+    }
+    .topbar-left, .topbar-center, .topbar-right { display: flex; align-items: center; gap: 0.7rem; }
+    .logo-sm { font-weight: 800; font-size: 1.1rem; display: flex; align-items: center; gap: 0.4rem; }
+    .logo-sm-mark {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: 7px;
+      background: linear-gradient(135deg, var(--accent), #6d28d9);
+      font-size: 0.75rem; font-weight: 800; color: #fff; letter-spacing: -1px;
+    }
+    .badge { background: var(--surface); padding: 0.3rem 0.7rem; border-radius: 999px; font-size: 0.8rem; color: var(--text2); }
+    .wallet-badge { background: var(--surface); padding: 0.3rem 0.7rem; border-radius: 999px; font-size: 0.75rem; color: var(--accent2); font-family: monospace; }
+    .username-badge { background: var(--accent); color: #fff; padding: 0.3rem 0.7rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
+
+    /* ── Lobby ── */
+    #screen-lobby { flex-direction: column; }
+    .lobby-main { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; width: 100%; }
+    .lobby-main > h2 { font-size: 1.5rem; margin-bottom: 1.5rem; font-weight: 700; }
+    .game-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.5rem; margin-bottom: 2.5rem; }
+    .game-card {
+      background: var(--bg2); border: 1px solid var(--surface2); border-radius: var(--radius);
+      padding: 1.8rem; transition: border-color 0.2s, transform 0.2s;
+    }
+    .game-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .game-card-icon { font-size: 2.8rem; margin-bottom: 0.5rem; }
+    .game-card h3 { font-size: 1.3rem; margin-bottom: 0.3rem; }
+    .game-card p { color: var(--text2); font-size: 0.9rem; margin-bottom: 1.2rem; line-height: 1.4; }
+    .bet-select { margin-bottom: 1rem; }
+    .bet-select label { font-size: 0.85rem; color: var(--text2); display: block; margin-bottom: 0.5rem; }
+    .bet-options, .grid-options { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .bet-btn, .grid-btn {
+      background: var(--surface); border: 2px solid var(--surface2); color: var(--text);
+      border-radius: var(--radius-sm); padding: 0.4rem 0.9rem; font-family: inherit;
+      font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: all 0.15s;
+    }
+    .bet-btn:hover, .grid-btn:hover { border-color: var(--accent); }
+    .bet-btn.active, .grid-btn.active { border-color: var(--accent); background: rgba(139,92,246,0.15); color: var(--accent2); }
+    .grid-select { margin-bottom: 1rem; }
+    .grid-select label { font-size: 0.85rem; color: var(--text2); display: block; margin-bottom: 0.5rem; }
+    .btn-play { width: 100%; }
+
+    .live-section { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    .live-col h4 { font-size: 0.95rem; margin-bottom: 0.8rem; color: var(--text2); }
+    .activity-list { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; max-height: 200px; overflow-y: auto; }
+    .activity-list li { background: var(--surface); padding: 0.5rem 0.8rem; border-radius: var(--radius-sm); font-size: 0.85rem; display: flex; justify-content: space-between; }
+    .activity-list .empty-msg { color: var(--text2); font-style: italic; }
+
+    /* ── Waiting Screen ── */
+    #screen-waiting { align-items: center; justify-content: center; flex-direction: column; background: var(--bg); }
+    .waiting-container { text-align: center; }
+    .waiting-container h2 { margin: 1.5rem 0 0.5rem; }
+    .waiting-container p { color: var(--text2); margin-bottom: 1.5rem; }
+    .spinner { width: 50px; height: 50px; border: 4px solid var(--surface2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Game Screen ── */
+    #screen-game { flex-direction: column; }
+    .game-topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.7rem 1.5rem; background: var(--bg2); border-bottom: 1px solid var(--surface2);
+      flex-wrap: wrap; gap: 0.5rem;
+    }
+    .game-info { display: flex; gap: 0.5rem; }
+    .badge-game { background: var(--accent); color: #fff; }
+    .badge-bet { background: var(--gold); color: #000; font-weight: 700; }
+    .game-players { display: flex; align-items: center; gap: 0.5rem; }
+    .player-label { font-weight: 600; font-size: 0.9rem; }
+    .vs { color: var(--text2); font-size: 0.8rem; }
+    .turn-indicator { font-size: 0.9rem; font-weight: 600; padding: 0.3rem 0.8rem; border-radius: 999px; }
+    .turn-indicator.my-turn { background: var(--green); color: #fff; }
+    .turn-indicator.their-turn { background: var(--surface); color: var(--text2); }
+    .game-area { flex: 1; display: flex; align-items: center; justify-content: center; padding: 1rem; overflow: auto; }
+    .game-controls { background: var(--bg2); border-top: 1px solid var(--surface2); padding: 1rem 1.5rem; min-height: 80px; }
+
+    /* ══════════════════════════════════════════════
+       DOMINO — Cooldominoes-style (white tiles, pips, green felt)
+       ══════════════════════════════════════════════ */
+    .domino-table {
+      background: radial-gradient(ellipse at center, var(--felt) 0%, var(--felt2) 100%);
+      border-radius: 16px; padding: 2rem; min-height: 260px; width: 100%; max-width: 760px;
+      display: flex; flex-direction: column; align-items: center; gap: 1rem;
+      box-shadow: inset 0 2px 20px rgba(0,0,0,0.3);
+    }
+    .domino-info-bar {
+      display: flex; gap: 2rem; font-size: 0.85rem; color: rgba(255,255,255,0.7);
+    }
+    .domino-chain {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+      gap: 3px; min-height: 70px;
+    }
+    .domino-chain-empty { color: rgba(255,255,255,0.5); font-style: italic; font-size: 0.9rem; }
+
+    /* Tile base */
+    .dtile {
+      display: inline-flex; background: #f5f0e8; border-radius: 5px;
+      box-shadow: 1px 2px 4px rgba(0,0,0,0.35); position: relative; overflow: hidden;
+    }
+    .dtile-h { flex-direction: row; }
+    .dtile-v { flex-direction: column; }
+    .dtile-half {
+      width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+      position: relative;
+    }
+    .dtile-div-h { width: 1px; height: 26px; background: #bbb; align-self: center; }
+    .dtile-div-v { height: 1px; width: 26px; background: #bbb; align-self: center; }
+
+    /* Pips via CSS */
+    .pip-container {
+      width: 24px; height: 24px; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+    }
+    .pip {
+      width: 5px; height: 5px; background: #222; border-radius: 50%; align-self: center; justify-self: center;
+    }
+
+    /* Hand tiles */
+    .domino-hand-area {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center;
+    }
+    .dtile-hand {
+      cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+      border: 2px solid transparent;
+    }
+    .dtile-hand:hover { transform: translateY(-5px); box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
+    .dtile-hand.selected { border-color: var(--gold); transform: translateY(-8px); box-shadow: 0 0 16px rgba(245,158,11,0.6); }
+
+    .domino-actions { display: flex; gap: 0.5rem; align-items: center; justify-content: center; margin-top: 0.5rem; }
+    .side-btn {
+      background: var(--surface); border: 2px solid var(--accent); color: var(--accent2);
+      border-radius: var(--radius-sm); padding: 0.4rem 0.8rem; font-family: inherit;
+      font-weight: 600; font-size: 0.8rem; cursor: pointer; transition: all 0.15s;
+    }
+    .side-btn:hover { background: var(--accent); color: #fff; }
+    .draw-btn {
+      background: var(--gold); color: #000; border: none; border-radius: var(--radius-sm);
+      padding: 0.5rem 1rem; font-family: inherit; font-weight: 700; cursor: pointer; font-size: 0.85rem;
+    }
+    .draw-btn:hover { opacity: 0.85; }
+    .pass-btn {
+      background: var(--red); color: #fff; border: none; border-radius: var(--radius-sm);
+      padding: 0.5rem 1rem; font-family: inherit; font-weight: 700; cursor: pointer; font-size: 0.85rem;
+    }
+    .pass-btn:hover { opacity: 0.85; }
+
+    /* Opponent back tiles */
+    .opp-tiles { display: flex; gap: 3px; margin-bottom: 0.5rem; }
+    .opp-tile {
+      width: 18px; height: 32px; background: linear-gradient(135deg, #2d5aa0, #1a3a6e);
+      border-radius: 3px; border: 1px solid #4a7bd4; box-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+    }
+
+    /* ══════════════════════════════════════════════
+       TIC TAC TOE — variable grid
+       ══════════════════════════════════════════════ */
+    .ttt-grid { display: grid; gap: 5px; }
+    .ttt-cell {
+      background: var(--surface); border: 2px solid var(--surface2); border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; cursor: pointer; transition: background 0.15s, border-color 0.15s;
+      user-select: none;
+    }
+    .ttt-cell:hover { border-color: var(--accent); background: var(--bg2); }
+    .ttt-cell.x { color: var(--accent2); }
+    .ttt-cell.o { color: var(--gold); }
+    .ttt-cell.taken { cursor: default; }
+
+    /* ── Game Over Overlay ── */
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .overlay.hidden { display: none; }
+    .overlay-box {
+      background: var(--bg2); border: 1px solid var(--surface2); border-radius: var(--radius);
+      padding: 2.5rem; text-align: center; max-width: 400px; width: 90%;
+    }
+    .overlay-box h2 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+    .overlay-box p { color: var(--text2); margin-bottom: 0.5rem; }
+    .payout-text { font-size: 1.3rem; font-weight: 700; color: var(--gold); margin: 1rem 0; }
+
+    /* ── Responsive ── */
+    @media (max-width: 700px) {
+      .game-cards { grid-template-columns: 1fr; }
+      .live-section { grid-template-columns: 1fr; }
+      .topbar { flex-wrap: wrap; gap: 0.5rem; }
+      .logo h1 { font-size: 2rem; }
+      .logo-mark { width: 64px; height: 64px; font-size: 1.8rem; }
+      .dtile-half { width: 24px; height: 24px; }
+      .pip-container { width: 18px; height: 18px; }
+      .pip { width: 4px; height: 4px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- CONNECT SCREEN -->
+  <div id="screen-connect" class="screen active">
+    <div class="connect-container">
+      <div class="logo">
+        <div class="logo-mark">ZG</div>
+        <h1><span class="accent">Zoot</span> Games</h1>
+        <div class="logo-subtitle">Play &bull; Bet &bull; Win</div>
+      </div>
+      <p class="tagline">Wager crypto. Beat your opponent. Cash out.</p>
+      <div class="connect-form">
+        <input type="text" id="username-input" placeholder="Choose a username" maxlength="20" />
+        <button id="btn-connect-wallet" class="btn btn-primary btn-lg">&#9678; Connect Phantom Wallet</button>
+        <p class="small-text">Powered by Solana &mdash; fast, low fees</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOBBY SCREEN -->
+  <div id="screen-lobby" class="screen">
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="logo-sm"><span class="logo-sm-mark">ZG</span><span><span class="accent">Zoot</span> Games</span></span>
+      </div>
+      <div class="topbar-center"><span id="online-count" class="badge">0 online</span></div>
+      <div class="topbar-right">
+        <span id="wallet-display" class="wallet-badge"></span>
+        <span id="username-display" class="username-badge"></span>
+      </div>
+    </header>
+    <main class="lobby-main">
+      <h2>Choose Your Game</h2>
+      <div class="game-cards">
+
+        <!-- Domino -->
+        <div class="game-card" data-game="domino">
+          <div class="game-card-icon">&#127073;</div>
+          <h3>Domino</h3>
+          <p>Classic 1v1 &mdash; 7 tiles each, draw from the pile, block your opponent</p>
+          <div class="bet-select">
+            <label>Bet (SOL):</label>
+            <div class="bet-options">
+              <button class="bet-btn" data-bet="0.1">0.1</button>
+              <button class="bet-btn active" data-bet="0.5">0.5</button>
+              <button class="bet-btn" data-bet="1">1</button>
+              <button class="bet-btn" data-bet="5">5</button>
+              <button class="bet-btn" data-bet="10">10</button>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-play">Find Match</button>
+        </div>
+
+        <!-- Tic Tac Toe -->
+        <div class="game-card" data-game="tictactoe">
+          <div class="game-card-icon">&#10005;&#9675;</div>
+          <h3>Tic Tac Toe</h3>
+          <p>Outsmart your opponent &mdash; pick your grid size and go!</p>
+          <div class="grid-select">
+            <label>Grid Size:</label>
+            <div class="grid-options">
+              <button class="grid-btn active" data-grid="3">3&times;3</button>
+              <button class="grid-btn" data-grid="5">5&times;5</button>
+              <button class="grid-btn" data-grid="7">7&times;7</button>
+            </div>
+          </div>
+          <div class="bet-select">
+            <label>Bet (SOL):</label>
+            <div class="bet-options">
+              <button class="bet-btn" data-bet="0.1">0.1</button>
+              <button class="bet-btn active" data-bet="0.5">0.5</button>
+              <button class="bet-btn" data-bet="1">1</button>
+              <button class="bet-btn" data-bet="5">5</button>
+              <button class="bet-btn" data-bet="10">10</button>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-play">Find Match</button>
+        </div>
+      </div>
+
+      <section class="live-section">
+        <div class="live-col">
+          <h4>&#128269; Waiting for Opponents</h4>
+          <ul id="waiting-list" class="activity-list"></ul>
+        </div>
+        <div class="live-col">
+          <h4>&#9876;&#65039; Active Games</h4>
+          <ul id="active-list" class="activity-list"></ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- WAITING SCREEN -->
+  <div id="screen-waiting" class="screen">
+    <div class="waiting-container">
+      <div class="spinner"></div>
+      <h2>Searching for opponent...</h2>
+      <p id="waiting-info"></p>
+      <button id="btn-cancel-search" class="btn btn-danger">Cancel</button>
+    </div>
+  </div>
+
+  <!-- GAME SCREEN -->
+  <div id="screen-game" class="screen">
+    <header class="game-topbar">
+      <div class="game-info">
+        <span id="game-type-label" class="badge badge-game"></span>
+        <span id="game-bet-label" class="badge badge-bet"></span>
+      </div>
+      <div class="game-players">
+        <span id="player1-label" class="player-label"></span>
+        <span class="vs">VS</span>
+        <span id="player2-label" class="player-label"></span>
+      </div>
+      <div id="turn-indicator" class="turn-indicator"></div>
+    </header>
+    <div id="game-area" class="game-area"></div>
+    <div id="game-controls" class="game-controls"></div>
+  </div>
+
+  <!-- GAME OVER OVERLAY -->
+  <div id="overlay-gameover" class="overlay hidden">
+    <div class="overlay-box">
+      <h2 id="gameover-title"></h2>
+      <p id="gameover-detail"></p>
+      <p id="gameover-payout" class="payout-text"></p>
+      <button id="btn-back-lobby" class="btn btn-primary">Back to Lobby</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script>
+    // ════════════════════════════════════════
+    // PIP RENDERER — creates real dot patterns like physical dominos
+    // ════════════════════════════════════════
+    const PipLayouts = {
+      0: [],
+      1: [[1,1]],
+      2: [[0,2],[2,0]],
+      3: [[0,2],[1,1],[2,0]],
+      4: [[0,0],[0,2],[2,0],[2,2]],
+      5: [[0,0],[0,2],[1,1],[2,0],[2,2]],
+      6: [[0,0],[0,2],[1,0],[1,2],[2,0],[2,2]],
+    };
+
+    function renderPips(n) {
+      var html = '<div class="pip-container">';
+      var cells = [[false,false,false],[false,false,false],[false,false,false]];
+      var layout = PipLayouts[n] || [];
+      for (var i = 0; i < layout.length; i++) {
+        cells[layout[i][0]][layout[i][1]] = true;
+      }
+      for (var r = 0; r < 3; r++) {
+        for (var c = 0; c < 3; c++) {
+          html += cells[r][c] ? '<div class="pip"></div>' : '<div></div>';
+        }
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function renderDominoTile(a, b, orient, extraClass) {
+      orient = orient || 'h';
+      extraClass = extraClass || '';
+      var isH = orient === 'h';
+      var cls = 'dtile ' + (isH ? 'dtile-h' : 'dtile-v') + ' ' + extraClass;
+      var div = isH ? '<div class="dtile-div-h"></div>' : '<div class="dtile-div-v"></div>';
+      return '<div class="' + cls + '">' +
+        '<div class="dtile-half">' + renderPips(a) + '</div>' + div +
+        '<div class="dtile-half">' + renderPips(b) + '</div></div>';
+    }
+
+    // ════════════════════════════════════════
+    // WALLET
+    // ════════════════════════════════════════
+    var Wallet = (function() {
+      var publicKey = null;
+      function getProvider() {
+        if ('phantom' in window && window.phantom && window.phantom.solana && window.phantom.solana.isPhantom) return window.phantom.solana;
+        return null;
+      }
+      function connect() {
+        var provider = getProvider();
+        if (!provider) {
+          var mock = 'Dev' + Math.random().toString(36).slice(2,10);
+          publicKey = mock;
+          return Promise.resolve({ publicKey: mock, mock: true });
+        }
+        return provider.connect().then(function(resp) {
+          publicKey = resp.publicKey.toString();
+          return { publicKey: publicKey, mock: false };
+        });
+      }
+      function getPublicKey() { return publicKey; }
+      function shortenAddress(addr) {
+        if (!addr) return '';
+        if (addr.length <= 10) return addr;
+        return addr.slice(0,4) + '...' + addr.slice(-4);
+      }
+      return { connect: connect, getPublicKey: getPublicKey, shortenAddress: shortenAddress };
+    })();
+
+    // ════════════════════════════════════════
+    // DOMINO UI
+    // ════════════════════════════════════════
+    var DominoUI = (function() {
+      var selectedTileIndex = null;
+      var sendActionFn = null;
+      var lastState = null;
+
+      function render(state, sendAction) {
+        lastState = state;
+        sendActionFn = sendAction;
+        renderBoard(state);
+        renderControls(state);
+      }
+
+      function renderBoard(state) {
+        var area = document.getElementById('game-area');
+        var board = state.board;
+        var oppCount = state.opponentTileCount;
+        var boneCount = state.boneyardCount;
+
+        var html = '<div class="domino-table">';
+
+        // Opponent face-down tiles
+        html += '<div class="opp-tiles">';
+        for (var i = 0; i < oppCount; i++) html += '<div class="opp-tile"></div>';
+        html += '</div>';
+
+        html += '<div class="domino-info-bar">';
+        html += '<span>Opponent: ' + oppCount + ' tiles</span>';
+        html += '<span>Boneyard: ' + boneCount + ' tiles</span>';
+        html += '</div>';
+
+        html += '<div class="domino-chain">';
+        if (board.length === 0) {
+          html += '<span class="domino-chain-empty">Place the first tile!</span>';
+        } else {
+          for (var j = 0; j < board.length; j++) {
+            var t = board[j];
+            var isDouble = t[0] === t[1];
+            html += renderDominoTile(t[0], t[1], isDouble ? 'v' : 'h', '');
+          }
+        }
+        html += '</div>';
+        html += '</div>';
+        area.innerHTML = html;
+      }
+
+      function renderControls(state) {
+        var controls = document.getElementById('game-controls');
+        var hand = state.hand;
+        var isMyTurn = state.isMyTurn;
+        var canPlay = state.canPlay;
+        var canDraw = state.canDraw;
+        var board = state.board;
+        var boardLeft = state.boardLeft;
+        var boardRight = state.boardRight;
+
+        var html = '<div class="domino-hand-area">';
+        for (var i = 0; i < hand.length; i++) {
+          var tile = hand[i];
+          var sel = i === selectedTileIndex ? ' selected' : '';
+          html += '<div class="dtile-hand' + sel + '" onclick="DominoUI.selectTile(' + i + ')">';
+          html += renderDominoTile(tile[0], tile[1], 'v', '').replace('<div class="dtile dtile-v ', '<div class="dtile dtile-v ');
+          html += '</div>';
+        }
+        html += '</div>';
+
+        html += '<div class="domino-actions">';
+        if (isMyTurn) {
+          if (selectedTileIndex !== null && hand[selectedTileIndex]) {
+            var st = hand[selectedTileIndex];
+            if (board.length === 0) {
+              html += '<button class="side-btn" onclick="DominoUI.playTile(\'right\')">Play Tile</button>';
+            } else {
+              var mL = st[0] === boardLeft || st[1] === boardLeft;
+              var mR = st[0] === boardRight || st[1] === boardRight;
+              if (mL && mR && boardLeft !== boardRight) {
+                html += '<button class="side-btn" onclick="DominoUI.playTile(\'left\')">&#9664; Left</button>';
+                html += '<button class="side-btn" onclick="DominoUI.playTile(\'right\')">Right &#9654;</button>';
+              } else if (mL) {
+                html += '<button class="side-btn" onclick="DominoUI.playTile(\'left\')">&#9664; Play Left</button>';
+              } else if (mR) {
+                html += '<button class="side-btn" onclick="DominoUI.playTile(\'right\')">Play Right &#9654;</button>';
+              } else {
+                html += '<span style="color:#ef4444;font-size:0.8rem;">Tile doesn\'t match</span>';
+              }
+            }
+          }
+          if (canDraw) html += '<button class="draw-btn" onclick="DominoUI.drawTile()">Draw from Boneyard</button>';
+          if (!canPlay && !canDraw) html += '<button class="pass-btn" onclick="DominoUI.passTurn()">Pass</button>';
+        } else {
+          html += '<span style="color:#9ca3af;">Waiting for opponent...</span>';
+        }
+        html += '</div>';
+
+        controls.innerHTML = html;
+      }
+
+      function selectTile(idx) {
+        selectedTileIndex = selectedTileIndex === idx ? null : idx;
+        if (lastState && sendActionFn) renderControls(lastState);
+      }
+      function playTile(side) {
+        if (selectedTileIndex === null || !sendActionFn) return;
+        sendActionFn({ type: 'play', tileIndex: selectedTileIndex, side: side });
+        selectedTileIndex = null;
+      }
+      function drawTile() { if (sendActionFn) sendActionFn({ type: 'draw' }); }
+      function passTurn() { if (sendActionFn) sendActionFn({ type: 'pass' }); }
+
+      return { render: render, selectTile: selectTile, playTile: playTile, drawTile: drawTile, passTurn: passTurn };
+    })();
+
+    // ════════════════════════════════════════
+    // TIC TAC TOE UI — variable grid
+    // ════════════════════════════════════════
+    var TicTacToeUI = (function() {
+      var sendActionFn = null;
+
+      function render(state, sendAction) {
+        sendActionFn = sendAction;
+        renderBoard(state);
+        renderControls(state);
+      }
+
+      function renderBoard(state) {
+        var area = document.getElementById('game-area');
+        var board = state.board;
+        var size = state.size || 3;
+        var isMyTurn = state.isMyTurn;
+        var symbol = state.symbol;
+        var winLen = state.winLength || (size <= 3 ? 3 : 4);
+
+        var cellSize = size <= 3 ? 100 : (size <= 5 ? 70 : 54);
+        var fontSize = size <= 3 ? '2.5rem' : (size <= 5 ? '1.6rem' : '1.2rem');
+
+        var html = '<div>';
+        html += '<p style="text-align:center;margin-bottom:0.8rem;color:#9ca3af;">You are <strong style="color:' +
+          (symbol === 'X' ? '#a78bfa' : '#f59e0b') + ';font-size:1.3rem;">' + symbol + '</strong>';
+        html += ' &mdash; get <strong>' + winLen + '</strong> in a row to win</p>';
+        html += '<div class="ttt-grid" style="grid-template-columns:repeat(' + size + ',' + cellSize + 'px);grid-template-rows:repeat(' + size + ',' + cellSize + 'px);">';
+
+        for (var i = 0; i < board.length; i++) {
+          var val = board[i];
+          var cls = 'ttt-cell';
+          var content = '';
+          if (val === 0) { cls += ' x taken'; content = 'X'; }
+          else if (val === 1) { cls += ' o taken'; content = 'O'; }
+          var clickable = val === null && isMyTurn;
+          var onclick = clickable ? ' onclick="TicTacToeUI.placeAt(' + i + ')"' : '';
+          html += '<div class="' + cls + '" style="font-size:' + fontSize + ';"' + onclick + '>' + content + '</div>';
+        }
+
+        html += '</div></div>';
+        area.innerHTML = html;
+      }
+
+      function renderControls(state) {
+        var controls = document.getElementById('game-controls');
+        if (state.isMyTurn) {
+          controls.innerHTML = '<p style="text-align:center;color:#10b981;font-weight:600;">Click a cell to place your mark!</p>';
+        } else {
+          controls.innerHTML = '<p style="text-align:center;color:#9ca3af;">Waiting for opponent to play...</p>';
+        }
+      }
+
+      function placeAt(cell) { if (sendActionFn) sendActionFn({ type: 'place', cell: cell }); }
+
+      return { render: render, placeAt: placeAt };
+    })();
+
+    // ════════════════════════════════════════
+    // MAIN APP
+    // ════════════════════════════════════════
+    var App = (function() {
+      var socket = null;
+      var currentGame = null;
+      var myPlayerIndex = null;
+      var gameState = null;
+
+      var screens = {};
+
+      function showScreen(name) {
+        var all = ['connect','lobby','waiting','game'];
+        for (var i = 0; i < all.length; i++) {
+          document.getElementById('screen-' + all[i]).classList.remove('active');
+        }
+        document.getElementById('screen-' + name).classList.add('active');
+      }
+
+      function init() {
+        screens = {
+          connect: document.getElementById('screen-connect'),
+          lobby: document.getElementById('screen-lobby'),
+          waiting: document.getElementById('screen-waiting'),
+          game: document.getElementById('screen-game'),
+        };
+        setupConnectScreen();
+        setupLobbyScreen();
+        setupWaitingScreen();
+        setupGameOverlay();
+      }
+
+      function setupConnectScreen() {
+        var btn = document.getElementById('btn-connect-wallet');
+        var usernameInput = document.getElementById('username-input');
+
+        btn.addEventListener('click', function() {
+          var username = usernameInput.value.trim();
+          if (!username) { usernameInput.style.borderColor = '#ef4444'; usernameInput.focus(); return; }
+
+          btn.textContent = 'Connecting...';
+          btn.disabled = true;
+
+          Wallet.connect().then(function(result) {
+            var publicKey = result.publicKey;
+            socket = io();
+            socket.on('connect', function() { socket.emit('register', { wallet: publicKey, username: username }); });
+            socket.on('registered', function() {
+              document.getElementById('wallet-display').textContent = Wallet.shortenAddress(publicKey);
+              document.getElementById('username-display').textContent = username;
+              showScreen('lobby');
+            });
+            socket.on('waiting', function(data) {
+              document.getElementById('waiting-info').textContent = data.gameType.toUpperCase() + ' — ' + data.betAmount + ' SOL bet';
+              showScreen('waiting');
+            });
+            socket.on('lobby_update', updateLobby);
+            socket.on('game_start', onGameStart);
+            socket.on('game_state', onGameState);
+            socket.on('game_over', onGameOver);
+            socket.on('search_cancelled', function() { showScreen('lobby'); });
+            socket.on('error_msg', function(d) { showToast(d.msg, 'error'); });
+          }).catch(function(err) {
+            showToast(err.message || 'Connection failed', 'error');
+            btn.innerHTML = '&#9678; Connect Phantom Wallet';
+            btn.disabled = false;
+          });
+        });
+      }
+
+      function setupLobbyScreen() {
+        var cards = document.querySelectorAll('.game-card');
+        for (var ci = 0; ci < cards.length; ci++) {
+          (function(card) {
+            var betBtns = card.querySelectorAll('.bet-btn');
+            for (var bi = 0; bi < betBtns.length; bi++) {
+              betBtns[bi].addEventListener('click', function() {
+                for (var x = 0; x < betBtns.length; x++) betBtns[x].classList.remove('active');
+                this.classList.add('active');
+              });
+            }
+
+            var gridBtns = card.querySelectorAll('.grid-btn');
+            for (var gi = 0; gi < gridBtns.length; gi++) {
+              gridBtns[gi].addEventListener('click', function() {
+                for (var x = 0; x < gridBtns.length; x++) gridBtns[x].classList.remove('active');
+                this.classList.add('active');
+              });
+            }
+
+            card.querySelector('.btn-play').addEventListener('click', function() {
+              var gameType = card.dataset.game;
+              var activeBet = card.querySelector('.bet-btn.active');
+              var betAmount = parseFloat(activeBet.dataset.bet);
+              var payload = { gameType: gameType, betAmount: betAmount };
+
+              var activeGrid = card.querySelector('.grid-btn.active');
+              if (activeGrid) payload.gridSize = parseInt(activeGrid.dataset.grid);
+
+              socket.emit('find_match', payload);
+            });
+          })(cards[ci]);
+        }
+      }
+
+      function updateLobby(data) {
+        document.getElementById('online-count').textContent = data.onlineCount + ' online';
+        var waitList = document.getElementById('waiting-list');
+        waitList.innerHTML = data.waiting.length === 0
+          ? '<li class="empty-msg">No one waiting</li>'
+          : data.waiting.map(function(w) { return '<li><span>' + w.username + ' — ' + w.gameType + '</span><span>' + w.betAmount + ' SOL</span></li>'; }).join('');
+        var activeList = document.getElementById('active-list');
+        activeList.innerHTML = data.activeGames.length === 0
+          ? '<li class="empty-msg">No active games</li>'
+          : data.activeGames.map(function(g) { return '<li><span>' + g.players.join(' vs ') + '</span><span>' + g.gameType + ' — ' + g.betAmount + ' SOL</span></li>'; }).join('');
+      }
+
+      function setupWaitingScreen() {
+        document.getElementById('btn-cancel-search').addEventListener('click', function() { socket.emit('cancel_search'); });
+      }
+
+      function onGameStart(data) {
+        currentGame = data.gameType;
+        myPlayerIndex = data.playerIndex;
+        document.getElementById('game-type-label').textContent = data.gameType.toUpperCase();
+        document.getElementById('game-bet-label').textContent = data.betAmount + ' SOL';
+        document.getElementById('player1-label').textContent = data.players[0].username;
+        document.getElementById('player2-label').textContent = data.players[1].username;
+        document.getElementById('player1-label').style.color = data.playerIndex === 0 ? '#8b5cf6' : '';
+        document.getElementById('player2-label').style.color = data.playerIndex === 1 ? '#8b5cf6' : '';
+        showScreen('game');
+      }
+
+      function onGameState(state) {
+        gameState = state;
+        var turnEl = document.getElementById('turn-indicator');
+        turnEl.textContent = state.isMyTurn ? 'YOUR TURN' : "OPPONENT'S TURN";
+        turnEl.className = 'turn-indicator ' + (state.isMyTurn ? 'my-turn' : 'their-turn');
+        if (state.gameType === 'domino') DominoUI.render(state, sendAction);
+        else if (state.gameType === 'tictactoe') TicTacToeUI.render(state, sendAction);
+      }
+
+      function sendAction(action) { if (socket) socket.emit('game_action', action); }
+
+      function onGameOver(data) {
+        var overlay = document.getElementById('overlay-gameover');
+        var title = document.getElementById('gameover-title');
+        var detail = document.getElementById('gameover-detail');
+        var payout = document.getElementById('gameover-payout');
+        if (data.isDraw) {
+          title.textContent = 'DRAW!'; title.style.color = '#f59e0b';
+          detail.textContent = 'Nobody wins — bets returned.'; payout.textContent = '';
+        } else {
+          var iWon = data.winnerWallet === Wallet.getPublicKey();
+          title.textContent = iWon ? 'YOU WIN!' : 'YOU LOSE';
+          title.style.color = iWon ? '#10b981' : '#ef4444';
+          detail.textContent = data.reason ? data.winner + ' wins — ' + data.reason : data.winner + ' wins!';
+          payout.textContent = iWon ? '+' + data.payout.toFixed(3) + ' SOL' : '';
+        }
+        overlay.classList.remove('hidden');
+      }
+
+      function setupGameOverlay() {
+        document.getElementById('btn-back-lobby').addEventListener('click', function() {
+          document.getElementById('overlay-gameover').classList.add('hidden');
+          currentGame = null; gameState = null;
+          showScreen('lobby');
+          if (socket) socket.emit('get_lobby');
+        });
+      }
+
+      function showToast(msg, type) {
+        type = type || 'info';
+        var t = document.createElement('div');
+        t.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;background:' + (type === 'error' ? '#ef4444' : '#8b5cf6') + ';color:#fff;padding:0.8rem 1.2rem;border-radius:8px;font-size:0.9rem;font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,0.3);';
+        t.textContent = msg; document.body.appendChild(t);
+        setTimeout(function() { t.remove(); }, 3500);
+      }
+
+      function getSocket() { return socket; }
+      document.addEventListener('DOMContentLoaded', init);
+      return { showScreen: showScreen, getSocket: getSocket, sendAction: sendAction };
+    })();
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/sw.js').catch(function() {});
+      });
+    }
+  </script>
+</body>
+</html>

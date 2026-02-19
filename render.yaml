@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: zoot-games
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server/index.js
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: SOLANA_NETWORK
+        value: devnet
