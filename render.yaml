@@ -10,3 +10,5 @@ services:
         value: 3000
       - key: SOLANA_NETWORK
         value: devnet
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
