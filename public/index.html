@@ -449,9 +449,15 @@
       async function connect() {
         provider = getProvider();
         if (!provider) throw new Error('Phantom wallet not found. Please install it from phantom.app');
-        var resp = await provider.connect();
+        var resp = await provider.connect({ onlyIfTrusted: false });
         publicKey = resp.publicKey.toString();
         return publicKey;
+      }
+
+      function disconnect() {
+        if (provider) try { provider.disconnect(); } catch(_){}
+        publicKey = null;
+        provider = null;
       }
 
       function getPublicKey() { return publicKey; }
@@ -462,7 +468,7 @@
       function getRpcUrl() {
         if (network === 'devnet') return 'https://api.devnet.solana.com';
         if (network === 'testnet') return 'https://api.testnet.solana.com';
-        return 'https://api.mainnet-beta.solana.com';
+        return 'https://solana-rpc.publicnode.com';
       }
 
       function shortenAddress(addr) {
@@ -470,7 +476,7 @@
         return addr.length <= 12 ? addr : addr.slice(0, 6) + '...' + addr.slice(-4);
       }
 
-      return { connect: connect, getPublicKey: getPublicKey, getProvider: getProviderRef, shortenAddress: shortenAddress, getRpcUrl: getRpcUrl, getNetwork: getNetwork, setNetwork: setNetwork };
+      return { connect: connect, disconnect: disconnect, getPublicKey: getPublicKey, getProvider: getProviderRef, shortenAddress: shortenAddress, getRpcUrl: getRpcUrl, getNetwork: getNetwork, setNetwork: setNetwork };
     })();
 
     // ════════════════════════════════════════
@@ -602,19 +608,31 @@
       }
 
       async function refreshBalance() {
+        var walletAddr = PhantomWallet.getPublicKey();
+        if (!walletAddr) return;
+
+        var rpcUrl = PhantomWallet.getRpcUrl();
+        console.log('Fetching balance from:', rpcUrl, 'for:', walletAddr);
+
         try {
-          var web3 = window.solanaWeb3;
-          var rpcUrl = PhantomWallet.getRpcUrl();
-          solConnection = new web3.Connection(rpcUrl, 'confirmed');
-          var walletAddr = PhantomWallet.getPublicKey();
-          if (!walletAddr) return;
-          var pubkey = new web3.PublicKey(walletAddr);
-          var lamports = await solConnection.getBalance(pubkey);
-          var sol = lamports / web3.LAMPORTS_PER_SOL;
+          var body = JSON.stringify({
+            jsonrpc: '2.0', id: 1,
+            method: 'getBalance',
+            params: [walletAddr]
+          });
+          var resp = await fetch(rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body
+          });
+          var json = await resp.json();
+          if (json.error) throw new Error(json.error.message || 'RPC error');
+          var lamports = json.result.value;
+          var sol = lamports / 1000000000;
           updateBalanceUI(sol);
         } catch (e) {
           console.error('Balance fetch error:', e);
-          showToast('Failed to fetch balance: ' + (e.message || e), 'error');
+          showToast('Balance fetch failed — try Refresh', 'error');
         }
       }
 
