@@ -10,5 +10,7 @@ services:
         value: 3000
       - key: SOLANA_NETWORK
         value: devnet
+      - key: SOLANA_RPC
+        value: https://api.devnet.solana.com
       - key: FIREBASE_SERVICE_ACCOUNT
         sync: false

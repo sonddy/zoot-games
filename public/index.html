@@ -382,7 +382,7 @@
         <p class="small-text">Your account &amp; wallet are saved to your Google account</p>
       </div>
 
-      <!-- Step 2: Wallet info (shown after login) -->
+      <!-- Step 2: Signing in progress -->
       <div id="wallet-step" class="connect-form" style="display:none;">
         <div class="user-welcome">
           <img id="user-avatar" class="user-avatar" src="" alt="" />
@@ -391,19 +391,8 @@
             <div class="user-email" id="user-email"></div>
           </div>
         </div>
-        <div class="wallet-info-section">
-          <h4>Your Solana Wallet</h4>
-          <div class="key-row">
-            <label>Public Key (wallet address):</label>
-            <div class="key-value" id="show-public-key" title="Click to copy">Loading...</div>
-          </div>
-          <div class="key-row">
-            <label>Private Key <span class="key-toggle" id="toggle-private-key">(show)</span></label>
-            <div class="key-value" id="show-private-key" style="display:none;" title="Click to copy">Loading...</div>
-          </div>
-          <p class="small-text" style="color:var(--red);margin-top:0.5rem;">Save your private key! You need it to recover your wallet.</p>
-        </div>
-        <button id="btn-enter-lobby" class="btn btn-primary btn-lg" style="width:100%;">Enter Lobby</button>
+        <p style="color:var(--text2);margin-bottom:1rem;">Connecting to server...</p>
+        <div class="spinner" style="width:30px;height:30px;margin:0 auto;"></div>
       </div>
     </div>
   </div>
@@ -427,22 +416,38 @@
         <h3>&#128176; Your Wallet</h3>
         <div class="balance-display"><span id="balance-amount">0.000</span> SOL</div>
         <div class="balance-sub">Platform balance &mdash; deposit SOL to start playing</div>
-        <span class="wallet-address-label">Your deposit address (click to copy):</span>
+        <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.4rem;">
+          <span class="wallet-address-label" style="margin:0;">On-chain balance:</span>
+          <span id="on-chain-balance" style="color:var(--gold);font-weight:700;font-size:0.9rem;">-- SOL</span>
+          <button id="btn-refresh-balance" class="btn" style="padding:0.3rem 0.6rem;font-size:0.75rem;background:var(--surface2);color:var(--text);">&#x21bb; Refresh</button>
+        </div>
+        <span class="wallet-address-label">Your wallet address (send SOL here to deposit):</span>
         <div class="wallet-address-box" id="platform-wallet-addr" title="Click to copy">Loading...</div>
-        <div class="wallet-row">
-          <label>Deposit:</label>
-          <div class="wallet-actions">
-            <input type="number" id="deposit-amount" placeholder="0.00" min="0.001" step="0.001" />
-            <button class="btn-deposit" id="btn-deposit">+ Deposit SOL</button>
+        <div class="wallet-row" style="margin-bottom:0.8rem;">
+          <button class="btn-deposit" id="btn-deposit" style="width:100%;">&#x21bb; Check Deposit (sync on-chain balance)</button>
+        </div>
+        <div class="wallet-row" style="flex-direction:column;align-items:stretch;gap:0.5rem;">
+          <label style="min-width:auto;">Withdraw SOL:</label>
+          <div class="wallet-actions" style="flex-direction:column;gap:0.5rem;">
+            <input type="number" id="withdraw-amount" placeholder="Amount to withdraw" min="0.001" step="0.001" />
+            <input type="text" id="withdraw-address" placeholder="Destination wallet address (where to send)" style="width:100%;" />
+            <button class="btn-withdraw" id="btn-withdraw" style="width:100%;">Send SOL to address</button>
           </div>
         </div>
-        <div class="wallet-row">
-          <label>Withdraw:</label>
-          <div class="wallet-actions">
-            <input type="number" id="withdraw-amount" placeholder="0.00" min="0.001" step="0.001" />
-            <input type="text" id="withdraw-address" placeholder="Destination wallet address" />
-            <button class="btn-withdraw" id="btn-withdraw">- Withdraw</button>
+        <div id="withdraw-status-msg" style="display:none;margin-top:0.6rem;padding:0.5rem 0.8rem;border-radius:8px;font-size:0.85rem;font-weight:600;"></div>
+
+        <!-- Keys section in lobby -->
+        <div class="wallet-info-section" style="margin-top:1rem;">
+          <h4>Your Wallet Keys</h4>
+          <div class="key-row">
+            <label>Public Key (wallet address):</label>
+            <div class="key-value" id="show-public-key" title="Click to copy">Loading...</div>
           </div>
+          <div class="key-row">
+            <label>Private Key <span class="key-toggle" id="toggle-private-key">(show)</span></label>
+            <div class="key-value" id="show-private-key" style="display:none;" title="Click to copy">Loading...</div>
+          </div>
+          <p class="small-text" style="color:var(--red);margin-top:0.5rem;">Save your private key! You need it to recover your wallet.</p>
         </div>
       </div>
 
@@ -843,6 +848,7 @@
         document.getElementById('user-avatar').src = user.photoURL || '';
         document.getElementById('user-display-name').textContent = user.displayName || user.email;
         document.getElementById('user-email').textContent = user.email;
+        connectToServer(user.displayName || user.email.split('@')[0]);
       }
 
       function connectToServer(displayName) {
@@ -871,13 +877,36 @@
           document.getElementById('wallet-display').textContent = Wallet.shortenAddress(data.platformWallet);
           document.getElementById('username-display').textContent = displayName;
           showScreen('lobby');
+          socket.emit('get_balance');
         });
 
         socket.on('balance_update', function(data) {
           updateBalanceUI(data.balance);
+          if (typeof data.onChainBalance === 'number') {
+            document.getElementById('on-chain-balance').textContent = data.onChainBalance.toFixed(6) + ' SOL';
+          }
           if (data.tx) {
-            if (data.tx.type === 'deposit') showToast('Deposited ' + data.tx.amount + ' SOL', 'info');
-            else if (data.tx.type === 'withdraw') showToast('Withdrew ' + data.tx.amount + ' SOL', 'info');
+            if (data.tx.type === 'deposit') showToast('Deposited ' + data.tx.amount + ' SOL from on-chain!', 'info');
+            else if (data.tx.type === 'withdraw') showToast('Sent ' + data.tx.amount + ' SOL to ' + (data.tx.toAddress ? Wallet.shortenAddress(data.tx.toAddress) : 'wallet'), 'info');
+          }
+        });
+
+        socket.on('withdraw_status', function(data) {
+          var el = document.getElementById('withdraw-status-msg');
+          el.style.display = 'block';
+          if (data.status === 'processing') {
+            el.style.background = 'rgba(139,92,246,0.2)'; el.style.color = '#a78bfa';
+            el.textContent = data.msg;
+          } else if (data.status === 'success') {
+            el.style.background = 'rgba(16,185,129,0.2)'; el.style.color = '#10b981';
+            el.innerHTML = data.msg + (data.signature ? '<br><a href="https://explorer.solana.com/tx/' + data.signature + '?cluster=devnet" target="_blank" style="color:#a78bfa;font-size:0.8rem;">View on Solana Explorer</a>' : '');
+            document.getElementById('btn-withdraw').disabled = false;
+            document.getElementById('btn-withdraw').textContent = 'Send SOL to address';
+          } else {
+            el.style.background = 'rgba(239,68,68,0.2)'; el.style.color = '#ef4444';
+            el.textContent = data.msg;
+            document.getElementById('btn-withdraw').disabled = false;
+            document.getElementById('btn-withdraw').textContent = 'Send SOL to address';
           }
         });
 
@@ -900,9 +929,6 @@
 
       function setupConnectScreen() {
         var googleBtn = document.getElementById('btn-google-signin');
-        var enterBtn = document.getElementById('btn-enter-lobby');
-        var togglePK = document.getElementById('toggle-private-key');
-        var pkEl = document.getElementById('show-private-key');
 
         googleBtn.addEventListener('click', function() {
           googleBtn.disabled = true;
@@ -919,14 +945,49 @@
             googleBtn.innerHTML = '<img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G" /> Sign in with Google';
           });
         });
+      }
 
-        enterBtn.addEventListener('click', function() {
-          if (!currentUser || !idToken) { showToast('Please sign in first', 'error'); return; }
-          enterBtn.textContent = 'Connecting...';
-          enterBtn.disabled = true;
-          connectToServer(currentUser.displayName || currentUser.email.split('@')[0]);
+      function setupLobbyScreen() {
+        var togglePK = document.getElementById('toggle-private-key');
+        var pkEl = document.getElementById('show-private-key');
+
+        // Check Deposit (sync on-chain balance)
+        document.getElementById('btn-deposit').addEventListener('click', function() {
+          var btn = this;
+          btn.disabled = true;
+          btn.textContent = 'Checking on-chain balance...';
+          if (socket) socket.emit('check_deposit');
+          setTimeout(function() { btn.disabled = false; btn.innerHTML = '&#x21bb; Check Deposit (sync on-chain balance)'; }, 5000);
         });
 
+        // Refresh balance
+        document.getElementById('btn-refresh-balance').addEventListener('click', function() {
+          if (socket) socket.emit('get_balance');
+          showToast('Refreshing...', 'info');
+        });
+
+        // Withdraw
+        document.getElementById('btn-withdraw').addEventListener('click', function() {
+          var amt = parseFloat(document.getElementById('withdraw-amount').value);
+          var addr = document.getElementById('withdraw-address').value.trim();
+          if (!amt || amt <= 0) { showToast('Enter a valid amount', 'error'); return; }
+          if (!addr || addr.length < 32) { showToast('Enter a valid destination Solana wallet address', 'error'); return; }
+          if (amt > currentBalance) { showToast('Insufficient platform balance', 'error'); return; }
+          this.disabled = true;
+          this.textContent = 'Processing...';
+          document.getElementById('withdraw-status-msg').style.display = 'none';
+          if (socket) socket.emit('withdraw', { amount: amt, toAddress: addr });
+        });
+
+        // Copy wallet address
+        document.getElementById('platform-wallet-addr').addEventListener('click', function() {
+          var addr = this.textContent;
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(addr).then(function() { showToast('Address copied!', 'info'); });
+          }
+        });
+
+        // Key toggle & copy
         togglePK.addEventListener('click', function() {
           if (pkEl.style.display === 'none') {
             pkEl.style.display = 'block';
@@ -942,35 +1003,6 @@
         });
         pkEl.addEventListener('click', function() {
           if (navigator.clipboard) navigator.clipboard.writeText(this.textContent).then(function() { showToast('Private key copied!', 'info'); });
-        });
-      }
-
-      function setupLobbyScreen() {
-        // Deposit
-        document.getElementById('btn-deposit').addEventListener('click', function() {
-          var amt = parseFloat(document.getElementById('deposit-amount').value);
-          if (!amt || amt <= 0) { showToast('Enter a valid amount', 'error'); return; }
-          if (socket) socket.emit('deposit', { amount: amt });
-          document.getElementById('deposit-amount').value = '';
-        });
-
-        // Withdraw
-        document.getElementById('btn-withdraw').addEventListener('click', function() {
-          var amt = parseFloat(document.getElementById('withdraw-amount').value);
-          var addr = document.getElementById('withdraw-address').value.trim();
-          if (!amt || amt <= 0) { showToast('Enter a valid amount', 'error'); return; }
-          if (amt > currentBalance) { showToast('Insufficient balance', 'error'); return; }
-          if (socket) socket.emit('withdraw', { amount: amt, toAddress: addr });
-          document.getElementById('withdraw-amount').value = '';
-          document.getElementById('withdraw-address').value = '';
-        });
-
-        // Copy wallet address
-        document.getElementById('platform-wallet-addr').addEventListener('click', function() {
-          var addr = this.textContent;
-          if (navigator.clipboard) {
-            navigator.clipboard.writeText(addr).then(function() { showToast('Copied!', 'info'); });
-          }
         });
 
         // Game cards

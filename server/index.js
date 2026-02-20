@@ -5,9 +5,15 @@ const { Server } = require('socket.io');
 const path = require('path');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
-const { Keypair } = require('@solana/web3.js');
+const {
+  Keypair, Connection, PublicKey, LAMPORTS_PER_SOL,
+  Transaction, SystemProgram, sendAndConfirmTransaction,
+} = require('@solana/web3.js');
 const DominoGame = require('./games/domino');
 const TicTacToeGame = require('./games/tictactoe');
+
+const SOLANA_RPC = process.env.SOLANA_RPC || 'https://api.devnet.solana.com';
+const solanaConnection = new Connection(SOLANA_RPC, 'confirmed');
 
 let db = null;
 let fbAuth = null;
@@ -61,6 +67,7 @@ async function getUserData(uid) {
       platformWallet: kp.publicKey.toBase58(),
       privateKey: Buffer.from(kp.secretKey).toString('base64'),
       balance: 0,
+      lastOnChainBalance: 0,
       createdAt: Date.now(),
     };
     if (db) {
@@ -78,7 +85,10 @@ async function saveBalance(uid) {
   const data = userBalances.get(uid);
   if (!data || !db) return;
   try {
-    await db.collection('users').doc(uid).update({ balance: data.balance });
+    await db.collection('users').doc(uid).update({
+      balance: data.balance,
+      lastOnChainBalance: data.lastOnChainBalance || 0,
+    });
   } catch (e) {
     console.error('Firestore balance save error:', e.message);
   }
@@ -142,17 +152,40 @@ io.on('connection', (socket) => {
     broadcastLobby();
   });
 
-  socket.on('deposit', async ({ amount }) => {
+  socket.on('check_deposit', async () => {
     const player = players.get(socket.id);
     if (!player) return socket.emit('error_msg', { msg: 'Register first' });
-    const amt = parseFloat(amount);
-    if (!amt || amt <= 0) return socket.emit('error_msg', { msg: 'Invalid amount' });
 
     const data = userBalances.get(player.uid);
     if (!data) return;
-    data.balance += amt;
-    await saveBalance(player.uid);
-    socket.emit('balance_update', { balance: data.balance, tx: { type: 'deposit', amount: amt } });
+
+    try {
+      const pubKey = new PublicKey(data.platformWallet);
+      const lamports = await solanaConnection.getBalance(pubKey);
+      const onChainSOL = lamports / LAMPORTS_PER_SOL;
+
+      const lastOnChain = data.lastOnChainBalance || 0;
+      const deposited = onChainSOL - lastOnChain;
+
+      if (deposited > 0.000001) {
+        data.balance += deposited;
+        data.lastOnChainBalance = onChainSOL;
+        await saveBalance(player.uid);
+        socket.emit('balance_update', {
+          balance: data.balance,
+          onChainBalance: onChainSOL,
+          tx: { type: 'deposit', amount: parseFloat(deposited.toFixed(6)) },
+        });
+      } else {
+        socket.emit('balance_update', {
+          balance: data.balance,
+          onChainBalance: onChainSOL,
+        });
+      }
+    } catch (e) {
+      console.error('Check deposit error:', e.message);
+      socket.emit('error_msg', { msg: 'Failed to check on-chain balance' });
+    }
   });
 
   socket.on('withdraw', async ({ amount, toAddress }) => {
@@ -160,21 +193,72 @@ io.on('connection', (socket) => {
     if (!player) return socket.emit('error_msg', { msg: 'Register first' });
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return socket.emit('error_msg', { msg: 'Invalid amount' });
+    if (!toAddress || toAddress.length < 32) return socket.emit('error_msg', { msg: 'Provide a valid Solana wallet address' });
 
     const data = userBalances.get(player.uid);
     if (!data) return;
-    if (data.balance < amt) return socket.emit('error_msg', { msg: 'Insufficient balance' });
+    if (data.balance < amt) return socket.emit('error_msg', { msg: 'Insufficient platform balance' });
 
-    data.balance -= amt;
-    await saveBalance(player.uid);
-    socket.emit('balance_update', { balance: data.balance, tx: { type: 'withdraw', amount: amt } });
+    try {
+      let destPubKey;
+      try { destPubKey = new PublicKey(toAddress); } catch (_) {
+        return socket.emit('error_msg', { msg: 'Invalid destination address' });
+      }
+
+      const secretKey = Buffer.from(data.privateKey, 'base64');
+      const fromKeypair = Keypair.fromSecretKey(secretKey);
+      const lamportsToSend = Math.floor(amt * LAMPORTS_PER_SOL);
+
+      const walletBalance = await solanaConnection.getBalance(fromKeypair.publicKey);
+      if (walletBalance < lamportsToSend + 5000) {
+        return socket.emit('error_msg', { msg: 'Not enough SOL in wallet for withdrawal + fees. On-chain: ' + (walletBalance / LAMPORTS_PER_SOL).toFixed(6) + ' SOL' });
+      }
+
+      socket.emit('withdraw_status', { status: 'processing', msg: 'Sending transaction...' });
+
+      const tx = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: fromKeypair.publicKey,
+          toPubkey: destPubKey,
+          lamports: lamportsToSend,
+        })
+      );
+      const signature = await sendAndConfirmTransaction(solanaConnection, tx, [fromKeypair]);
+
+      data.balance -= amt;
+      const newOnChain = await solanaConnection.getBalance(fromKeypair.publicKey);
+      data.lastOnChainBalance = newOnChain / LAMPORTS_PER_SOL;
+      await saveBalance(player.uid);
+
+      socket.emit('balance_update', {
+        balance: data.balance,
+        onChainBalance: data.lastOnChainBalance,
+        tx: { type: 'withdraw', amount: amt, signature, toAddress },
+      });
+      socket.emit('withdraw_status', { status: 'success', signature, msg: 'Withdrawal confirmed!' });
+    } catch (e) {
+      console.error('Withdraw error:', e.message);
+      socket.emit('withdraw_status', { status: 'error', msg: 'Transaction failed: ' + e.message });
+      socket.emit('error_msg', { msg: 'Withdrawal failed: ' + e.message });
+    }
   });
 
-  socket.on('get_balance', () => {
+  socket.on('get_balance', async () => {
     const player = players.get(socket.id);
     if (!player) return;
     const data = userBalances.get(player.uid);
-    if (data) socket.emit('balance_update', { balance: data.balance });
+    if (!data) return;
+
+    try {
+      const pubKey = new PublicKey(data.platformWallet);
+      const lamports = await solanaConnection.getBalance(pubKey);
+      socket.emit('balance_update', {
+        balance: data.balance,
+        onChainBalance: lamports / LAMPORTS_PER_SOL,
+      });
+    } catch (e) {
+      socket.emit('balance_update', { balance: data.balance });
+    }
   });
 
   socket.on('find_match', async ({ gameType, betAmount, gridSize }) => {
