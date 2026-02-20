@@ -15,7 +15,6 @@ const TicTacToeGame = require('./games/tictactoe');
 const SOLANA_RPC = process.env.SOLANA_RPC || 'https://api.devnet.solana.com';
 const solanaConnection = new Connection(SOLANA_RPC, 'confirmed');
 
-// Platform escrow wallet — holds all deposited funds for bets
 let escrowKeypair;
 if (process.env.ESCROW_PRIVATE_KEY) {
   escrowKeypair = Keypair.fromSecretKey(Buffer.from(process.env.ESCROW_PRIVATE_KEY, 'base64'));
@@ -29,17 +28,6 @@ if (process.env.ESCROW_PRIVATE_KEY) {
 const ESCROW_ADDRESS = escrowKeypair.publicKey.toBase58();
 console.log('Escrow wallet:', ESCROW_ADDRESS);
 
-let db = null;
-let fbAuth = null;
-try {
-  const fb = require('./firebase');
-  db = fb.db;
-  fbAuth = fb.auth;
-  console.log('Firebase initialized');
-} catch (e) {
-  console.warn('Firebase not configured — running without persistence');
-}
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
@@ -48,210 +36,87 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// REST endpoint to get escrow address (frontend needs it for deposits)
 app.get('/api/escrow', (req, res) => {
   res.json({ escrowAddress: ESCROW_ADDRESS });
 });
 
-// ── In-memory state ──
 const rooms = new Map();
-const players = new Map();     // socketId -> { walletAddress, displayName, roomId }
+const players = new Map();
 const matchQueue = new Map();
-const userBalances = new Map(); // walletAddress -> { balance }
+const usedSignatures = new Set();
 
 const HOUSE_FEE = 0.05;
 
-async function getUserBalance(walletAddress) {
-  if (userBalances.has(walletAddress)) return userBalances.get(walletAddress);
-
-  let data = null;
-  if (db) {
-    try {
-      const doc = await db.collection('wallets').doc(walletAddress).get();
-      if (doc.exists) data = doc.data();
-    } catch (e) {
-      console.error('Firestore read error:', e.message);
-    }
-  }
-
-  if (!data) {
-    data = { balance: 0, createdAt: Date.now() };
-  }
-
-  userBalances.set(walletAddress, data);
-  return data;
+async function sendSOL(toAddress, amount) {
+  const destPubKey = new PublicKey(toAddress);
+  const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
+  const tx = new Transaction().add(
+    SystemProgram.transfer({
+      fromPubkey: escrowKeypair.publicKey,
+      toPubkey: destPubKey,
+      lamports,
+    })
+  );
+  const sig = await sendAndConfirmTransaction(solanaConnection, tx, [escrowKeypair]);
+  console.log(`Sent ${amount} SOL to ${toAddress} — tx: ${sig}`);
+  return sig;
 }
 
-async function saveBalance(walletAddress) {
-  const data = userBalances.get(walletAddress);
-  if (!data || !db) return;
-  try {
-    await db.collection('wallets').doc(walletAddress).set({
-      balance: data.balance,
-      lastUpdated: Date.now(),
-    }, { merge: true });
-  } catch (e) {
-    console.error('Firestore save error:', e.message);
-  }
+async function verifyBetPayment(signature, expectedAmount) {
+  if (usedSignatures.has(signature)) return { ok: false, error: 'Transaction already used' };
+
+  const tx = await solanaConnection.getTransaction(signature, {
+    commitment: 'confirmed',
+    maxSupportedTransactionVersion: 0,
+  });
+  if (!tx || tx.meta.err) return { ok: false, error: 'Transaction not found or failed' };
+
+  const accountKeys = tx.transaction.message.staticAccountKeys || tx.transaction.message.accountKeys;
+  const escrowIndex = accountKeys.findIndex(k => k.toBase58() === ESCROW_ADDRESS);
+  if (escrowIndex === -1) return { ok: false, error: 'Transaction does not pay the escrow' };
+
+  const received = (tx.meta.postBalances[escrowIndex] - tx.meta.preBalances[escrowIndex]) / LAMPORTS_PER_SOL;
+  if (received < expectedAmount * 0.99) return { ok: false, error: 'Insufficient payment. Received ' + received.toFixed(6) + ' SOL' };
+
+  usedSignatures.add(signature);
+  return { ok: true, received };
 }
 
 function createRoom(gameType, betAmount, player1Socket) {
   const id = uuidv4().slice(0, 8);
-  const room = {
-    id, gameType, betAmount,
-    players: [player1Socket],
-    state: 'waiting',
-    game: null,
-    createdAt: Date.now(),
-  };
+  const room = { id, gameType, betAmount, players: [player1Socket], state: 'waiting', game: null, createdAt: Date.now() };
   rooms.set(id, room);
   return room;
 }
 
-// ── Socket.IO ──
 io.on('connection', (socket) => {
   console.log(`Connected: ${socket.id}`);
 
   socket.on('register', async ({ walletAddress, displayName }) => {
-    if (!walletAddress || walletAddress.length < 32) {
-      return socket.emit('error_msg', { msg: 'Invalid wallet address' });
-    }
+    if (!walletAddress || walletAddress.length < 32) return socket.emit('error_msg', { msg: 'Invalid wallet address' });
+    try { new PublicKey(walletAddress); } catch (_) { return socket.emit('error_msg', { msg: 'Invalid Solana address' }); }
 
-    try { new PublicKey(walletAddress); } catch (_) {
-      return socket.emit('error_msg', { msg: 'Invalid Solana wallet address' });
-    }
-
-    const data = await getUserBalance(walletAddress);
-
-    players.set(socket.id, {
-      walletAddress,
-      displayName: displayName || walletAddress.slice(0, 6),
-      roomId: null,
-    });
+    players.set(socket.id, { walletAddress, displayName: displayName || walletAddress.slice(0, 6), roomId: null });
 
     socket.emit('registered', {
       success: true,
       walletAddress,
       displayName: displayName || walletAddress.slice(0, 6),
-      balance: data.balance,
       escrowAddress: ESCROW_ADDRESS,
     });
     broadcastLobby();
   });
 
-  // Confirm deposit — client sends tx signature, server verifies on-chain
-  socket.on('confirm_deposit', async ({ signature, amount }) => {
-    const player = players.get(socket.id);
-    if (!player) return socket.emit('error_msg', { msg: 'Register first' });
-
-    try {
-      const tx = await solanaConnection.getTransaction(signature, {
-        commitment: 'confirmed',
-        maxSupportedTransactionVersion: 0,
-      });
-
-      if (!tx || tx.meta.err) {
-        return socket.emit('error_msg', { msg: 'Transaction not found or failed' });
-      }
-
-      const escrowPubKey = escrowKeypair.publicKey;
-      const accountKeys = tx.transaction.message.staticAccountKeys || tx.transaction.message.accountKeys;
-      const escrowIndex = accountKeys.findIndex(k => k.toBase58() === ESCROW_ADDRESS);
-
-      if (escrowIndex === -1) {
-        return socket.emit('error_msg', { msg: 'Transaction does not involve the escrow wallet' });
-      }
-
-      const preBalance = tx.meta.preBalances[escrowIndex];
-      const postBalance = tx.meta.postBalances[escrowIndex];
-      const receivedLamports = postBalance - preBalance;
-      const receivedSOL = receivedLamports / LAMPORTS_PER_SOL;
-
-      if (receivedSOL < 0.000001) {
-        return socket.emit('error_msg', { msg: 'No SOL received by escrow in this transaction' });
-      }
-
-      const data = userBalances.get(player.walletAddress);
-      data.balance += receivedSOL;
-      await saveBalance(player.walletAddress);
-
-      socket.emit('balance_update', {
-        balance: data.balance,
-        tx: { type: 'deposit', amount: parseFloat(receivedSOL.toFixed(6)), signature },
-      });
-    } catch (e) {
-      console.error('Confirm deposit error:', e.message);
-      socket.emit('error_msg', { msg: 'Failed to verify deposit: ' + e.message });
-    }
-  });
-
-  // Withdraw — server sends SOL from escrow to player's wallet
-  socket.on('withdraw', async ({ amount }) => {
-    const player = players.get(socket.id);
-    if (!player) return socket.emit('error_msg', { msg: 'Register first' });
-    const amt = parseFloat(amount);
-    if (!amt || amt <= 0) return socket.emit('error_msg', { msg: 'Invalid amount' });
-
-    const data = userBalances.get(player.walletAddress);
-    if (!data) return;
-    if (data.balance < amt) return socket.emit('error_msg', { msg: 'Insufficient platform balance' });
-
-    try {
-      const destPubKey = new PublicKey(player.walletAddress);
-      const lamportsToSend = Math.floor(amt * LAMPORTS_PER_SOL);
-
-      const escrowBalance = await solanaConnection.getBalance(escrowKeypair.publicKey);
-      if (escrowBalance < lamportsToSend + 5000) {
-        return socket.emit('error_msg', { msg: 'Escrow wallet has insufficient funds. Contact support.' });
-      }
-
-      socket.emit('withdraw_status', { status: 'processing', msg: 'Sending SOL to your wallet...' });
-
-      const tx = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: escrowKeypair.publicKey,
-          toPubkey: destPubKey,
-          lamports: lamportsToSend,
-        })
-      );
-      const signature = await sendAndConfirmTransaction(solanaConnection, tx, [escrowKeypair]);
-
-      data.balance -= amt;
-      await saveBalance(player.walletAddress);
-
-      socket.emit('balance_update', {
-        balance: data.balance,
-        tx: { type: 'withdraw', amount: amt, signature },
-      });
-      socket.emit('withdraw_status', { status: 'success', signature, msg: 'Withdrawal confirmed!' });
-    } catch (e) {
-      console.error('Withdraw error:', e.message);
-      socket.emit('withdraw_status', { status: 'error', msg: 'Transaction failed: ' + e.message });
-    }
-  });
-
-  socket.on('get_balance', () => {
-    const player = players.get(socket.id);
-    if (!player) return;
-    const data = userBalances.get(player.walletAddress);
-    if (data) socket.emit('balance_update', { balance: data.balance });
-  });
-
-  socket.on('find_match', async ({ gameType, betAmount, gridSize }) => {
+  socket.on('find_match', async ({ gameType, betAmount, gridSize, txSignature }) => {
     const player = players.get(socket.id);
     if (!player) return socket.emit('error_msg', { msg: 'Register first' });
 
     const bet = parseFloat(betAmount);
     if (!bet || bet <= 0) return socket.emit('error_msg', { msg: 'Invalid bet amount' });
+    if (!txSignature) return socket.emit('error_msg', { msg: 'No payment transaction provided' });
 
-    const data = userBalances.get(player.walletAddress);
-    if (!data || data.balance < bet) {
-      return socket.emit('error_msg', { msg: 'Insufficient balance. Deposit SOL first!' });
-    }
-
-    data.balance -= bet;
-    await saveBalance(player.walletAddress);
-    socket.emit('balance_update', { balance: data.balance });
+    const verification = await verifyBetPayment(txSignature, bet);
+    if (!verification.ok) return socket.emit('error_msg', { msg: verification.error });
 
     const opts = {};
     if (gameType === 'tictactoe' && gridSize) opts.gridSize = gridSize;
@@ -275,7 +140,7 @@ io.on('connection', (socket) => {
 
       startGame(room);
     } else {
-      matchQueue.set(queueKey, { socketId: socket.id, bet, options: opts });
+      matchQueue.set(queueKey, { socketId: socket.id, bet, txSignature, options: opts });
       socket.emit('waiting', { msg: 'Waiting for an opponent...', betAmount: bet, gameType });
     }
     broadcastLobby();
@@ -286,11 +151,12 @@ io.on('connection', (socket) => {
       if (val.socketId === socket.id) {
         const player = players.get(socket.id);
         if (player) {
-          const data = userBalances.get(player.walletAddress);
-          if (data) {
-            data.balance += val.bet;
-            await saveBalance(player.walletAddress);
-            socket.emit('balance_update', { balance: data.balance });
+          try {
+            await sendSOL(player.walletAddress, val.bet);
+            socket.emit('balance_update', { refreshWallet: true, msg: 'Bet refunded to your wallet!' });
+          } catch (e) {
+            console.error('Refund error:', e.message);
+            socket.emit('error_msg', { msg: 'Refund failed: ' + e.message });
           }
         }
         matchQueue.delete(key);
@@ -309,10 +175,7 @@ io.on('connection', (socket) => {
 
     const playerIndex = room.players.indexOf(socket.id);
     const result = room.game.handleAction(playerIndex, action);
-
-    if (result.error) {
-      return socket.emit('error_msg', { msg: result.error });
-    }
+    if (result.error) return socket.emit('error_msg', { msg: result.error });
 
     emitGameState(room);
 
@@ -327,12 +190,12 @@ io.on('connection', (socket) => {
         const winnerSocketId = room.players[winnerIdx];
         const winnerPlayer = players.get(winnerSocketId);
         if (winnerPlayer) {
-          const wd = userBalances.get(winnerPlayer.walletAddress);
-          if (wd) {
-            wd.balance += payout;
-            await saveBalance(winnerPlayer.walletAddress);
+          try {
+            const sig = await sendSOL(winnerPlayer.walletAddress, payout);
             const winSock = io.sockets.sockets.get(winnerSocketId);
-            if (winSock) winSock.emit('balance_update', { balance: wd.balance });
+            if (winSock) winSock.emit('balance_update', { refreshWallet: true, msg: 'You won ' + payout.toFixed(3) + ' SOL!' });
+          } catch (e) {
+            console.error('Payout error:', e.message);
           }
         }
         io.to(room.id).emit('game_over', {
@@ -344,18 +207,16 @@ io.on('connection', (socket) => {
         for (const sid of room.players) {
           const p = players.get(sid);
           if (p) {
-            const pd = userBalances.get(p.walletAddress);
-            if (pd) {
-              pd.balance += room.betAmount;
-              await saveBalance(p.walletAddress);
+            try {
+              await sendSOL(p.walletAddress, room.betAmount);
               const s = io.sockets.sockets.get(sid);
-              if (s) s.emit('balance_update', { balance: pd.balance });
+              if (s) s.emit('balance_update', { refreshWallet: true, msg: 'Draw — bet refunded!' });
+            } catch (e) {
+              console.error('Refund error:', e.message);
             }
           }
         }
-        io.to(room.id).emit('game_over', {
-          winner: null, winnerWallet: null, payout: 0, isDraw: true,
-        });
+        io.to(room.id).emit('game_over', { winner: null, winnerWallet: null, payout: 0, isDraw: true });
       }
       setTimeout(() => cleanupRoom(room.id), 5000);
     }
@@ -370,11 +231,7 @@ io.on('connection', (socket) => {
     for (const [key, val] of matchQueue) {
       if (val.socketId === socket.id) {
         if (player) {
-          const data = userBalances.get(player.walletAddress);
-          if (data) {
-            data.balance += val.bet;
-            await saveBalance(player.walletAddress);
-          }
+          try { await sendSOL(player.walletAddress, val.bet); } catch (e) { console.error('Refund on disconnect:', e.message); }
         }
         matchQueue.delete(key);
         break;
@@ -392,13 +249,11 @@ io.on('connection', (socket) => {
         const payout = pot - (pot * HOUSE_FEE);
 
         if (winnerPlayer) {
-          const wd = userBalances.get(winnerPlayer.walletAddress);
-          if (wd) {
-            wd.balance += payout;
-            await saveBalance(winnerPlayer.walletAddress);
+          try {
+            await sendSOL(winnerPlayer.walletAddress, payout);
             const winSock = io.sockets.sockets.get(winnerSocketId);
-            if (winSock) winSock.emit('balance_update', { balance: wd.balance });
-          }
+            if (winSock) winSock.emit('balance_update', { refreshWallet: true, msg: 'Opponent left — you won ' + payout.toFixed(3) + ' SOL!' });
+          } catch (e) { console.error('Payout on disconnect:', e.message); }
         }
 
         io.to(room.id).emit('game_over', {
@@ -417,11 +272,8 @@ io.on('connection', (socket) => {
 });
 
 function startGame(room) {
-  if (room.gameType === 'domino') {
-    room.game = new DominoGame();
-  } else if (room.gameType === 'tictactoe') {
-    room.game = new TicTacToeGame();
-  }
+  if (room.gameType === 'domino') room.game = new DominoGame();
+  else if (room.gameType === 'tictactoe') room.game = new TicTacToeGame();
   room.game.init(room.players.length, room.options || {});
 
   room.players.forEach((sid, idx) => {
@@ -430,10 +282,7 @@ function startGame(room) {
       const p1 = players.get(room.players[0]);
       const p2 = players.get(room.players[1]);
       sock.emit('game_start', {
-        roomId: room.id,
-        gameType: room.gameType,
-        betAmount: room.betAmount,
-        playerIndex: idx,
+        roomId: room.id, gameType: room.gameType, betAmount: room.betAmount, playerIndex: idx,
         players: [
           { username: p1?.displayName, wallet: p1?.walletAddress },
           { username: p2?.displayName, wallet: p2?.walletAddress },
@@ -473,11 +322,7 @@ function broadcastLobby() {
   const activeGames = [];
   for (const [, room] of rooms) {
     if (room.state === 'playing') {
-      activeGames.push({
-        gameType: room.gameType,
-        betAmount: room.betAmount,
-        players: room.players.map((sid) => players.get(sid)?.displayName),
-      });
+      activeGames.push({ gameType: room.gameType, betAmount: room.betAmount, players: room.players.map((sid) => players.get(sid)?.displayName) });
     }
   }
   io.emit('lobby_update', { waiting, activeGames, onlineCount: players.size });

@@ -301,28 +301,11 @@
     <main class="lobby-main">
       <div class="wallet-panel">
         <h3>&#128176; Your Wallet</h3>
-        <div class="balance-display"><span id="balance-amount">0.000</span> SOL</div>
-        <div class="balance-sub">Platform balance &mdash; deposit SOL to start playing</div>
+        <div class="balance-display"><span id="balance-amount">--</span> SOL</div>
+        <div class="balance-sub">Your real Solana wallet balance &mdash; this SOL is used for bets</div>
         <span class="wallet-address-label">Connected wallet (click to copy):</span>
         <div class="wallet-address-box" id="connected-wallet-addr" title="Click to copy">Loading...</div>
-
-        <div class="wallet-row">
-          <label>Deposit:</label>
-          <div class="wallet-actions">
-            <input type="number" id="deposit-amount" placeholder="0.1" min="0.001" step="0.001" value="0.1" />
-            <button class="btn-deposit" id="btn-deposit">Deposit SOL</button>
-          </div>
-        </div>
-        <div id="deposit-status" class="status-msg"></div>
-
-        <div class="wallet-row" style="margin-top:0.5rem;">
-          <label>Withdraw:</label>
-          <div class="wallet-actions">
-            <input type="number" id="withdraw-amount" placeholder="0.1" min="0.001" step="0.001" />
-            <button class="btn-withdraw" id="btn-withdraw">Withdraw to Wallet</button>
-          </div>
-        </div>
-        <div id="withdraw-status" class="status-msg"></div>
+        <button id="btn-refresh-balance" class="btn" style="padding:0.4rem 1rem;font-size:0.85rem;background:var(--surface2);color:var(--text);margin-top:0.3rem;">&#x21bb; Refresh Balance</button>
       </div>
 
       <h2>Choose Your Game</h2>
@@ -586,6 +569,7 @@
       var gameState = null;
       var currentBalance = 0;
       var escrowAddress = null;
+      var solConnection = null;
 
       function showScreen(name) {
         var all = ['connect','lobby','waiting','game'];
@@ -597,6 +581,19 @@
         currentBalance = bal;
         document.getElementById('balance-amount').textContent = bal.toFixed(3);
         document.getElementById('topbar-balance').textContent = bal.toFixed(3) + ' SOL';
+      }
+
+      async function refreshBalance() {
+        try {
+          var web3 = window.solanaWeb3;
+          if (!solConnection) solConnection = new web3.Connection('https://api.devnet.solana.com', 'confirmed');
+          var pubkey = new web3.PublicKey(PhantomWallet.getPublicKey());
+          var lamports = await solConnection.getBalance(pubkey);
+          var sol = lamports / web3.LAMPORTS_PER_SOL;
+          updateBalanceUI(sol);
+        } catch (e) {
+          console.error('Balance fetch error:', e);
+        }
       }
 
       function init() {
@@ -618,37 +615,15 @@
 
         socket.on('registered', function(data) {
           escrowAddress = data.escrowAddress;
-          updateBalanceUI(data.balance || 0);
           document.getElementById('connected-wallet-addr').textContent = data.walletAddress;
           document.getElementById('wallet-display').textContent = PhantomWallet.shortenAddress(data.walletAddress);
           showScreen('lobby');
+          refreshBalance();
         });
 
         socket.on('balance_update', function(data) {
-          updateBalanceUI(data.balance);
-          if (data.tx) {
-            if (data.tx.type === 'deposit') showToast('Deposited ' + data.tx.amount + ' SOL!', 'info');
-            else if (data.tx.type === 'withdraw') showToast('Withdrew ' + data.tx.amount + ' SOL to your wallet!', 'info');
-          }
-        });
-
-        socket.on('withdraw_status', function(data) {
-          var el = document.getElementById('withdraw-status');
-          el.style.display = 'block';
-          if (data.status === 'processing') {
-            el.style.background = 'rgba(139,92,246,0.2)'; el.style.color = '#a78bfa';
-            el.textContent = data.msg;
-          } else if (data.status === 'success') {
-            el.style.background = 'rgba(16,185,129,0.2)'; el.style.color = '#10b981';
-            el.innerHTML = data.msg + (data.signature ? '<br><a href="https://explorer.solana.com/tx/' + data.signature + '?cluster=devnet" target="_blank" style="color:#a78bfa;font-size:0.8rem;">View on Solana Explorer</a>' : '');
-            document.getElementById('btn-withdraw').disabled = false;
-            document.getElementById('btn-withdraw').textContent = 'Withdraw to Wallet';
-          } else {
-            el.style.background = 'rgba(239,68,68,0.2)'; el.style.color = '#ef4444';
-            el.textContent = data.msg;
-            document.getElementById('btn-withdraw').disabled = false;
-            document.getElementById('btn-withdraw').textContent = 'Withdraw to Wallet';
-          }
+          if (data.refreshWallet) refreshBalance();
+          if (data.msg) showToast(data.msg, 'info');
         });
 
         socket.on('waiting', function(data) {
@@ -686,76 +661,10 @@
       }
 
       function setupLobbyScreen() {
-        // Deposit via Phantom signing — real on-chain transfer to escrow
-        document.getElementById('btn-deposit').addEventListener('click', async function() {
-          var amt = parseFloat(document.getElementById('deposit-amount').value);
-          if (!amt || amt <= 0) { showToast('Enter a valid amount', 'error'); return; }
-          if (!escrowAddress) { showToast('Escrow not ready, try again', 'error'); return; }
-
-          var btn = this;
-          var statusEl = document.getElementById('deposit-status');
-          btn.disabled = true;
-          btn.textContent = 'Confirm in Phantom...';
-          statusEl.style.display = 'block';
-          statusEl.style.background = 'rgba(139,92,246,0.2)';
-          statusEl.style.color = '#a78bfa';
-          statusEl.textContent = 'Waiting for Phantom approval...';
-
-          try {
-            var provider = PhantomWallet.getProvider();
-            var web3 = window.solanaWeb3;
-            var connection = new web3.Connection('https://api.devnet.solana.com', 'confirmed');
-
-            var fromPubkey = provider.publicKey;
-            var toPubkey = new web3.PublicKey(escrowAddress);
-            var lamports = Math.floor(amt * web3.LAMPORTS_PER_SOL);
-
-            var transaction = new web3.Transaction().add(
-              web3.SystemProgram.transfer({
-                fromPubkey: fromPubkey,
-                toPubkey: toPubkey,
-                lamports: lamports,
-              })
-            );
-
-            transaction.feePayer = fromPubkey;
-            var bh = await connection.getLatestBlockhash('confirmed');
-            transaction.recentBlockhash = bh.blockhash;
-
-            var signed = await provider.signTransaction(transaction);
-            statusEl.textContent = 'Sending transaction...';
-
-            var signature = await connection.sendRawTransaction(signed.serialize());
-            statusEl.textContent = 'Confirming on-chain...';
-
-            await connection.confirmTransaction(signature, 'confirmed');
-
-            // Tell server to verify and credit
-            socket.emit('confirm_deposit', { signature: signature, amount: amt });
-
-            statusEl.style.background = 'rgba(16,185,129,0.2)';
-            statusEl.style.color = '#10b981';
-            statusEl.innerHTML = 'Deposit confirmed! <a href="https://explorer.solana.com/tx/' + signature + '?cluster=devnet" target="_blank" style="color:#a78bfa;font-size:0.8rem;">View on Explorer</a>';
-            btn.disabled = false;
-            btn.textContent = 'Deposit SOL';
-          } catch (err) {
-            statusEl.style.background = 'rgba(239,68,68,0.2)';
-            statusEl.style.color = '#ef4444';
-            statusEl.textContent = err.message || 'Deposit failed';
-            btn.disabled = false;
-            btn.textContent = 'Deposit SOL';
-          }
-        });
-
-        // Withdraw
-        document.getElementById('btn-withdraw').addEventListener('click', function() {
-          var amt = parseFloat(document.getElementById('withdraw-amount').value);
-          if (!amt || amt <= 0) { showToast('Enter a valid amount', 'error'); return; }
-          if (amt > currentBalance) { showToast('Insufficient platform balance', 'error'); return; }
-          this.disabled = true;
-          this.textContent = 'Processing...';
-          document.getElementById('withdraw-status').style.display = 'none';
-          if (socket) socket.emit('withdraw', { amount: amt });
+        // Refresh balance
+        document.getElementById('btn-refresh-balance').addEventListener('click', function() {
+          refreshBalance();
+          showToast('Refreshing balance...', 'info');
         });
 
         // Copy wallet address
@@ -763,7 +672,7 @@
           if (navigator.clipboard) navigator.clipboard.writeText(this.textContent).then(function() { showToast('Address copied!', 'info'); });
         });
 
-        // Game cards
+        // Game cards — bet by signing a Phantom transfer to escrow
         var cards = document.querySelectorAll('.game-card');
         for (var ci = 0; ci < cards.length; ci++) {
           (function(card) {
@@ -774,16 +683,59 @@
                 this.classList.add('active');
               });
             }
-            card.querySelector('.btn-play').addEventListener('click', function() {
+            card.querySelector('.btn-play').addEventListener('click', async function() {
               var gameType = card.dataset.game;
               var betInput = card.querySelector('.bet-amount-input');
               var betAmount = parseFloat(betInput.value);
               if (!betAmount || betAmount <= 0) { showToast('Enter a bet amount', 'error'); betInput.focus(); return; }
-              if (betAmount > currentBalance) { showToast('Insufficient balance! Deposit SOL first.', 'error'); return; }
-              var payload = { gameType: gameType, betAmount: betAmount };
-              var activeGrid = card.querySelector('.grid-btn.active');
-              if (activeGrid) payload.gridSize = parseInt(activeGrid.dataset.grid);
-              socket.emit('find_match', payload);
+              if (betAmount > currentBalance) { showToast('Not enough SOL in your wallet!', 'error'); return; }
+              if (!escrowAddress) { showToast('Server not ready, try again', 'error'); return; }
+
+              var btn = this;
+              btn.disabled = true;
+              btn.textContent = 'Confirm in Phantom...';
+
+              try {
+                var provider = PhantomWallet.getProvider();
+                var web3 = window.solanaWeb3;
+                if (!solConnection) solConnection = new web3.Connection('https://api.devnet.solana.com', 'confirmed');
+
+                var fromPubkey = provider.publicKey;
+                var toPubkey = new web3.PublicKey(escrowAddress);
+                var lamports = Math.floor(betAmount * web3.LAMPORTS_PER_SOL);
+
+                var transaction = new web3.Transaction().add(
+                  web3.SystemProgram.transfer({
+                    fromPubkey: fromPubkey,
+                    toPubkey: toPubkey,
+                    lamports: lamports,
+                  })
+                );
+                transaction.feePayer = fromPubkey;
+                var bh = await solConnection.getLatestBlockhash('confirmed');
+                transaction.recentBlockhash = bh.blockhash;
+
+                var signed = await provider.signTransaction(transaction);
+                btn.textContent = 'Sending bet...';
+
+                var signature = await solConnection.sendRawTransaction(signed.serialize());
+                btn.textContent = 'Confirming...';
+
+                await solConnection.confirmTransaction(signature, 'confirmed');
+
+                var payload = { gameType: gameType, betAmount: betAmount, txSignature: signature };
+                var activeGrid = card.querySelector('.grid-btn.active');
+                if (activeGrid) payload.gridSize = parseInt(activeGrid.dataset.grid);
+
+                socket.emit('find_match', payload);
+                btn.disabled = false;
+                btn.textContent = 'Find Match';
+                refreshBalance();
+              } catch (err) {
+                showToast(err.message || 'Transaction cancelled', 'error');
+                btn.disabled = false;
+                btn.textContent = 'Find Match';
+              }
             });
           })(cards[ci]);
         }
@@ -852,6 +804,7 @@
           currentGame = null; gameState = null;
           showScreen('lobby');
           if (socket) socket.emit('get_lobby');
+          refreshBalance();
         });
       }
 
