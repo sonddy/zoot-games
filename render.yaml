@@ -14,3 +14,5 @@ services:
         value: https://api.devnet.solana.com
       - key: FIREBASE_SERVICE_ACCOUNT
         sync: false
+      - key: ESCROW_PRIVATE_KEY
+        sync: false
