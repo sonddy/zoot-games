@@ -303,6 +303,15 @@
         <h3>&#128176; Your Wallet</h3>
         <div class="balance-display"><span id="balance-amount">--</span> SOL</div>
         <div class="balance-sub">Your real Solana wallet balance &mdash; this SOL is used for bets</div>
+        <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.8rem;">
+          <span style="font-size:0.8rem;color:var(--text2);">Network:</span>
+          <select id="network-select" style="background:var(--surface);border:1px solid var(--surface2);color:var(--accent2);border-radius:6px;padding:0.3rem 0.6rem;font-size:0.8rem;font-family:inherit;cursor:pointer;">
+            <option value="mainnet-beta">Mainnet</option>
+            <option value="devnet">Devnet</option>
+            <option value="testnet">Testnet</option>
+          </select>
+          <span id="network-indicator" style="font-size:0.7rem;padding:0.2rem 0.5rem;border-radius:999px;background:var(--green);color:#fff;font-weight:600;">Mainnet</span>
+        </div>
         <span class="wallet-address-label">Connected wallet (click to copy):</span>
         <div class="wallet-address-box" id="connected-wallet-addr" title="Click to copy">Loading...</div>
         <button id="btn-refresh-balance" class="btn" style="padding:0.4rem 1rem;font-size:0.85rem;background:var(--surface2);color:var(--text);margin-top:0.3rem;">&#x21bb; Refresh Balance</button>
@@ -429,6 +438,7 @@
     var PhantomWallet = (function() {
       var provider = null;
       var publicKey = null;
+      var network = 'mainnet-beta';
 
       function getProvider() {
         if (window.solana && window.solana.isPhantom) return window.solana;
@@ -446,13 +456,21 @@
 
       function getPublicKey() { return publicKey; }
       function getProviderRef() { return provider; }
+      function getNetwork() { return network; }
+      function setNetwork(n) { network = n; }
+
+      function getRpcUrl() {
+        if (network === 'devnet') return 'https://api.devnet.solana.com';
+        if (network === 'testnet') return 'https://api.testnet.solana.com';
+        return 'https://api.mainnet-beta.solana.com';
+      }
 
       function shortenAddress(addr) {
         if (!addr) return '';
         return addr.length <= 12 ? addr : addr.slice(0, 6) + '...' + addr.slice(-4);
       }
 
-      return { connect: connect, getPublicKey: getPublicKey, getProvider: getProviderRef, shortenAddress: shortenAddress };
+      return { connect: connect, getPublicKey: getPublicKey, getProvider: getProviderRef, shortenAddress: shortenAddress, getRpcUrl: getRpcUrl, getNetwork: getNetwork, setNetwork: setNetwork };
     })();
 
     // ════════════════════════════════════════
@@ -586,13 +604,17 @@
       async function refreshBalance() {
         try {
           var web3 = window.solanaWeb3;
-          if (!solConnection) solConnection = new web3.Connection('https://api.devnet.solana.com', 'confirmed');
-          var pubkey = new web3.PublicKey(PhantomWallet.getPublicKey());
+          var rpcUrl = PhantomWallet.getRpcUrl();
+          solConnection = new web3.Connection(rpcUrl, 'confirmed');
+          var walletAddr = PhantomWallet.getPublicKey();
+          if (!walletAddr) return;
+          var pubkey = new web3.PublicKey(walletAddr);
           var lamports = await solConnection.getBalance(pubkey);
           var sol = lamports / web3.LAMPORTS_PER_SOL;
           updateBalanceUI(sol);
         } catch (e) {
           console.error('Balance fetch error:', e);
+          showToast('Failed to fetch balance: ' + (e.message || e), 'error');
         }
       }
 
@@ -661,6 +683,18 @@
       }
 
       function setupLobbyScreen() {
+        // Network selector
+        document.getElementById('network-select').addEventListener('change', function() {
+          var net = this.value;
+          PhantomWallet.setNetwork(net);
+          var indicator = document.getElementById('network-indicator');
+          if (net === 'mainnet-beta') { indicator.textContent = 'Mainnet'; indicator.style.background = 'var(--green)'; }
+          else if (net === 'devnet') { indicator.textContent = 'Devnet'; indicator.style.background = 'var(--gold)'; }
+          else { indicator.textContent = 'Testnet'; indicator.style.background = 'var(--accent)'; }
+          solConnection = null;
+          refreshBalance();
+        });
+
         // Refresh balance
         document.getElementById('btn-refresh-balance').addEventListener('click', function() {
           refreshBalance();
@@ -698,7 +732,7 @@
               try {
                 var provider = PhantomWallet.getProvider();
                 var web3 = window.solanaWeb3;
-                if (!solConnection) solConnection = new web3.Connection('https://api.devnet.solana.com', 'confirmed');
+                solConnection = new web3.Connection(PhantomWallet.getRpcUrl(), 'confirmed');
 
                 var fromPubkey = provider.publicKey;
                 var toPubkey = new web3.PublicKey(escrowAddress);

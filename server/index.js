@@ -12,7 +12,7 @@ const {
 const DominoGame = require('./games/domino');
 const TicTacToeGame = require('./games/tictactoe');
 
-const SOLANA_RPC = process.env.SOLANA_RPC || 'https://api.devnet.solana.com';
+const SOLANA_RPC = process.env.SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
 const solanaConnection = new Connection(SOLANA_RPC, 'confirmed');
 
 let escrowKeypair;
