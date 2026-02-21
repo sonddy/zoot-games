@@ -169,63 +169,101 @@
     .game-area { flex: 1; display: flex; align-items: stretch; justify-content: center; padding: 0; overflow: hidden; }
     .game-controls { background: var(--bg2); border-top: 1px solid var(--surface2); padding: 1rem 1.5rem; min-height: 0; }
 
-    /* ═══ DOMINO — Blue table design (Domino King style) ═══ */
+    /* ═══ DOMINO — Plato / Domino King exact replica ═══ */
     .domino-screen {
       display: flex; flex-direction: column; height: 100vh; width: 100%;
-      background: linear-gradient(180deg, #1a3a8a 0%, #2563eb 15%, #3b82f6 50%, #2563eb 85%, #1a3a8a 100%);
+      background: linear-gradient(180deg, #1a3a8a 0%, #2563eb 10%, #3b82f6 50%, #2563eb 90%, #1a3a8a 100%);
       position: relative;
     }
 
-    .domino-opp-area {
-      display: flex; flex-direction: column; align-items: center; padding: 0.5rem 1rem 0.3rem;
-      background: linear-gradient(180deg, #0f2660 0%, #1e3a8a 100%);
-      border-bottom: 3px solid #3b82f6;
+    /* ── Opponent top bar ── */
+    .domino-opp-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.4rem 0.7rem;
+      background: linear-gradient(180deg, #0c1d4d 0%, #152d6e 100%);
     }
-    .domino-player-info {
-      display: flex; align-items: center; gap: 0.6rem; color: #fff;
+    .domino-opp-bar .back-btn {
+      width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.12);
+      border: none; color: #fff; font-size: 1.2rem; cursor: pointer; display: flex;
+      align-items: center; justify-content: center;
     }
+    .domino-opp-center { display: flex; flex-direction: column; align-items: center; }
+    .domino-opp-top-row { display: flex; align-items: center; gap: 0.5rem; }
     .domino-avatar {
-      width: 40px; height: 40px; border-radius: 50%; background: #4b5563;
+      width: 44px; height: 44px; border-radius: 50%; background: #374151;
       display: flex; align-items: center; justify-content: center;
-      font-size: 1.2rem; font-weight: 700; color: #fff;
-      border: 2px solid #60a5fa; overflow: hidden;
+      font-size: 1.2rem; font-weight: 800; color: #fff;
+      border: 2.5px solid #60a5fa; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
-    .domino-username { font-size: 0.85rem; font-weight: 600; }
-    .domino-score { font-size: 1.1rem; font-weight: 800; color: #fff; }
-    .domino-online-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; display: inline-block; }
-    .domino-opp-tiles-row {
-      display: flex; gap: 3px; justify-content: center; padding: 0.4rem 0;
-    }
-    .domino-tile-back {
-      width: 22px; height: 38px; border-radius: 4px;
-      background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%);
-      border: 1.5px solid #93c5fd;
-      box-shadow: 1px 2px 4px rgba(0,0,0,0.3);
+    .domino-avatar.my { border-color: #22c55e; }
+    .domino-score-big { font-size: 1.4rem; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+    .domino-name-row { display: flex; align-items: center; gap: 0.3rem; margin-top: 0.1rem; }
+    .domino-online-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; }
+    .domino-username { font-size: 0.8rem; font-weight: 600; color: #93c5fd; }
+    .domino-menu-btn {
+      width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.12);
+      border: none; color: #fff; font-size: 1.2rem; cursor: pointer; display: flex;
+      align-items: center; justify-content: center;
     }
 
+    /* ── Opponent tiles (face-down) ── */
+    .domino-opp-tiles {
+      display: flex; gap: 2px; justify-content: center; padding: 0.3rem 0.5rem;
+      background: linear-gradient(180deg, #152d6e 0%, #1e3a8a 100%);
+    }
+    .domino-tile-back {
+      width: 24px; height: 40px; border-radius: 4px;
+      background: linear-gradient(180deg, #5b9cf6 0%, #3b7de8 50%, #2a5fc4 100%);
+      border: 1.5px solid #7db8ff;
+      box-shadow: 1px 2px 3px rgba(0,0,0,0.25);
+    }
+
+    /* ── Green turn timer bar ── */
+    .domino-timer-bar {
+      height: 4px; background: #1e3a8a; position: relative;
+    }
+    .domino-timer-fill {
+      height: 100%; background: linear-gradient(90deg, #22c55e, #4ade80);
+      border-radius: 0 2px 2px 0; transition: width 0.3s;
+    }
+
+    /* ── Board area ── */
     .domino-board-area {
       flex: 1; position: relative; overflow: hidden;
-      margin: 0.3rem 0.5rem;
-      background: rgba(37,99,235,0.3);
-      border-radius: 12px;
-      border: 2px solid rgba(96,165,250,0.3);
+      margin: 0.4rem 0.5rem;
+      background: rgba(30,90,210,0.25);
+      border-radius: 10px;
+      border: 2.5px solid rgba(96,165,250,0.35);
+      box-shadow: inset 0 2px 12px rgba(0,0,0,0.15);
     }
     .domino-board-inner {
       position: absolute; inset: 0; overflow: auto;
       display: flex; align-items: center; justify-content: center;
     }
-    .domino-board-canvas {
-      position: relative; min-width: 100%; min-height: 100%;
-    }
+    .domino-board-canvas { position: relative; }
     .domino-chain-empty {
-      color: rgba(255,255,255,0.4); font-style: italic; font-size: 1rem;
+      color: rgba(255,255,255,0.35); font-style: italic; font-size: 1rem;
       position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
     }
-    .domino-boneyard-label {
-      position: absolute; bottom: 0.5rem; right: 0.8rem;
-      color: rgba(255,255,255,0.7); font-size: 0.85rem; font-weight: 600;
+
+    /* ── Boneyard stack on right edge ── */
+    .domino-boneyard {
+      position: absolute; right: 0.5rem; bottom: 0.5rem;
+      display: flex; flex-direction: column; align-items: center; gap: 0.2rem;
+    }
+    .domino-boneyard-stack {
+      position: relative; width: 28px; height: 44px;
+    }
+    .domino-boneyard-card {
+      position: absolute; width: 24px; height: 40px; border-radius: 4px;
+      background: linear-gradient(180deg, #5b9cf6, #2a5fc4);
+      border: 1.5px solid #7db8ff;
+    }
+    .domino-boneyard-count {
+      font-size: 0.75rem; color: rgba(255,255,255,0.7); font-weight: 600;
     }
 
+    /* ── Domino tiles ── */
     .dtile {
       display: inline-flex; background: #fff; border-radius: 5px;
       box-shadow: 1px 2px 6px rgba(0,0,0,0.4); position: relative;
@@ -234,7 +272,7 @@
     .dtile-v { flex-direction: column; }
     .dtile-half {
       width: 28px; height: 28px; display: flex; align-items: center;
-      justify-content: center; position: relative;
+      justify-content: center;
     }
     .dtile-div-h { width: 1px; height: 24px; background: #ccc; align-self: center; }
     .dtile-div-v { height: 1px; width: 24px; background: #ccc; align-self: center; }
@@ -246,38 +284,53 @@
       width: 5px; height: 5px; background: #111; border-radius: 50%;
       align-self: center; justify-self: center;
     }
-
-    /* Board tiles are positioned absolutely */
     .dtile-board { position: absolute; }
 
-    .domino-my-area {
-      background: linear-gradient(0deg, #0f2660 0%, #1e3a8a 100%);
-      border-top: 3px solid #3b82f6;
-      padding: 0.5rem 1rem 0.6rem; display: flex; flex-direction: column; align-items: center;
+    /* ── Player hand tile (gray-tinted like reference) ── */
+    .dtile-hand-tile {
+      display: inline-flex; border-radius: 5px;
+      box-shadow: 1px 2px 5px rgba(0,0,0,0.35);
+      background: linear-gradient(180deg, #e8e8e8 0%, #c8c8c8 100%);
+      border: 1.5px solid #aaa;
     }
-    .domino-hand-row {
-      display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;
-      padding: 0.4rem 0;
-    }
-    .dtile-hand {
-      cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
-      border: 2px solid transparent; border-radius: 6px;
-    }
-    .dtile-hand:hover { transform: translateY(-6px); box-shadow: 0 8px 20px rgba(0,0,0,0.5); }
-    .dtile-hand.selected {
-      border-color: #fbbf24; transform: translateY(-10px);
-      box-shadow: 0 0 20px rgba(251,191,36,0.7);
-    }
-    .domino-turn-badge {
-      display: inline-block; padding: 0.3rem 1rem; border-radius: 999px;
-      font-size: 0.85rem; font-weight: 700; margin-top: 0.3rem;
-    }
-    .domino-turn-badge.my-turn { background: #22c55e; color: #fff; }
-    .domino-turn-badge.their-turn { background: #4b5563; color: #9ca3af; }
+    .dtile-hand-tile .pip { background: #222; }
 
+    /* ── My hand area ── */
+    .domino-my-hand {
+      display: flex; gap: 4px; justify-content: center; flex-wrap: nowrap;
+      padding: 0.5rem 0.8rem;
+      background: linear-gradient(180deg, #2563eb 0%, #1e3a8a 100%);
+      border-top: 3px solid #3b82f6;
+      overflow-x: auto;
+    }
+    .domino-hand-wrap {
+      cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+      border: 2px solid transparent; border-radius: 6px; flex-shrink: 0;
+    }
+    .domino-hand-wrap:hover { transform: translateY(-6px); box-shadow: 0 6px 16px rgba(0,0,0,0.5); }
+    .domino-hand-wrap.selected {
+      border-color: #fbbf24; transform: translateY(-10px);
+      box-shadow: 0 0 18px rgba(251,191,36,0.6);
+    }
+
+    /* ── Bottom player bar ── */
+    .domino-my-bar {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 0.4rem 1rem 0.5rem;
+      background: linear-gradient(180deg, #1e3a8a 0%, #0c1d4d 100%);
+    }
+    .domino-my-top-row { display: flex; align-items: center; gap: 0.5rem; }
+    .domino-turn-pill {
+      display: inline-block; padding: 0.25rem 1.2rem; border-radius: 999px;
+      font-size: 0.8rem; font-weight: 700; margin-top: 0.15rem;
+    }
+    .domino-turn-pill.active { background: #2563eb; color: #fff; }
+    .domino-turn-pill.waiting { background: #374151; color: #6b7280; }
+
+    /* ── Action buttons ── */
     .domino-actions {
       display: flex; gap: 0.5rem; align-items: center; justify-content: center;
-      padding: 0.3rem 0;
+      padding: 0.2rem 0;
     }
     .side-btn {
       background: rgba(255,255,255,0.15); border: 2px solid #60a5fa; color: #93c5fd;
@@ -523,6 +576,10 @@
       return '<div class="' + cls + '"><div class="dtile-half">' + renderPips(a) + '</div>' + div + '<div class="dtile-half">' + renderPips(b) + '</div></div>';
     }
 
+    function renderHandTile(a, b) {
+      return '<div class="dtile-hand-tile dtile-v"><div class="dtile-half">' + renderPips(a) + '</div><div class="dtile-div-v"></div><div class="dtile-half">' + renderPips(b) + '</div></div>';
+    }
+
     // ════════════════════════════════════════
     // PHANTOM WALLET
     // ════════════════════════════════════════
@@ -571,16 +628,13 @@
     })();
 
     // ════════════════════════════════════════
-    // DOMINO UI — Blue table (Plato / Domino King style)
-    // Multi-round scoring: first to 50 points wins
+    // DOMINO UI — Plato exact replica
     // ════════════════════════════════════════
     var DominoUI = (function() {
       var selectedTileIndex = null;
       var sendActionFn = null;
       var lastState = null;
-
-      var TILE_W = 28;
-      var GAP = 2;
+      var TW = 28, GAP = 2;
 
       function render(state, sendAction, gameData) {
         lastState = state; sendActionFn = sendAction;
@@ -589,171 +643,164 @@
         var board = state.board, hand = state.hand;
         var oppCount = state.opponentTileCount, boneCount = state.boneyardCount;
         var isMyTurn = state.isMyTurn;
-
         var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
         var myName = (gameData && gameData.players) ? gameData.players[state.playerIndex].username : 'You';
-
         var scores = state.scores || [0, 0];
         var target = state.targetScore || 50;
         var myScore = scores[state.playerIndex];
         var oppScore = scores[1 - state.playerIndex];
 
-        // ── Opponent area ──
-        var html = '<div class="domino-screen">';
-        html += '<div class="domino-opp-area">';
-        html += '<div class="domino-player-info">';
-        html += '<div class="domino-avatar">' + (oppName ? oppName.charAt(0).toUpperCase() : 'O') + '</div>';
-        html += '<span class="domino-score">' + oppScore + '/' + target + '</span>';
-        html += '<span class="domino-username"><span class="domino-online-dot"></span> ' + oppName + '</span>';
-        html += '</div>';
-        html += '<div class="domino-opp-tiles-row">';
-        for (var i = 0; i < oppCount; i++) html += '<div class="domino-tile-back"></div>';
-        html += '</div></div>';
+        var h = '<div class="domino-screen">';
+
+        // ── Opponent top bar (back | avatar score name | menu) ──
+        h += '<div class="domino-opp-bar">';
+        h += '<button class="back-btn" onclick="DominoUI.quit()">&#8592;</button>';
+        h += '<div class="domino-opp-center"><div class="domino-opp-top-row">';
+        h += '<div class="domino-avatar">' + (oppName ? oppName.charAt(0).toUpperCase() : 'O') + '</div>';
+        h += '<span class="domino-score-big">' + oppScore + '/' + target + '</span>';
+        h += '</div><div class="domino-name-row"><div class="domino-online-dot"></div>';
+        h += '<span class="domino-username">' + oppName + '</span></div></div>';
+        h += '<button class="domino-menu-btn">&#8942;</button></div>';
+
+        // ── Opponent face-down tiles ──
+        h += '<div class="domino-opp-tiles">';
+        for (var i = 0; i < oppCount; i++) h += '<div class="domino-tile-back"></div>';
+        h += '</div>';
+
+        // ── Green turn timer bar ──
+        var timerPct = isMyTurn ? '70%' : '30%';
+        h += '<div class="domino-timer-bar"><div class="domino-timer-fill" style="width:' + timerPct + ';"></div></div>';
 
         // ── Board area ──
-        html += '<div class="domino-board-area"><div class="domino-board-inner">';
-        if (board.length === 0) {
-          html += '<span class="domino-chain-empty">Place the first tile!</span>';
-        } else {
-          html += renderSnakeChain(board);
-        }
-        html += '</div>';
-        html += '<div class="domino-boneyard-label">Boneyard: ' + boneCount + '</div>';
-        if (state.round) html += '<div style="position:absolute;top:0.5rem;left:0.8rem;color:rgba(255,255,255,0.5);font-size:0.75rem;font-weight:600;">Round ' + state.round + '</div>';
-        html += '</div>';
+        h += '<div class="domino-board-area"><div class="domino-board-inner">';
+        if (board.length === 0) h += '<span class="domino-chain-empty">Place the first tile!</span>';
+        else h += renderSnakeChain(board);
+        h += '</div>';
 
-        // ── Round-over overlay (inside board area) ──
+        // Boneyard stack on right
+        if (boneCount > 0) {
+          h += '<div class="domino-boneyard"><div class="domino-boneyard-stack">';
+          var cards = Math.min(boneCount, 4);
+          for (var b = 0; b < cards; b++) {
+            h += '<div class="domino-boneyard-card" style="top:' + (b * 2) + 'px;left:' + (b * 1) + 'px;"></div>';
+          }
+          h += '</div><span class="domino-boneyard-count">Boneyard: ' + boneCount + '</span></div>';
+        }
+        h += '</div>';
+
+        // ── Round-over overlay ──
         if (state.roundOver && !state.gameOver) {
-          html += '<div style="position:absolute;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:50;border-radius:12px;">';
-          html += '<div style="background:#1e3a8a;border:2px solid #3b82f6;border-radius:16px;padding:1.5rem 2rem;text-align:center;max-width:320px;width:90%;color:#fff;">';
-          html += '<h3 style="font-size:1.3rem;margin-bottom:0.8rem;color:#fbbf24;">Round ' + state.round + ' Complete</h3>';
+          h += '<div style="position:absolute;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:50;">';
+          h += '<div style="background:#1e3a8a;border:2px solid #3b82f6;border-radius:16px;padding:1.5rem 2rem;text-align:center;max-width:320px;width:90%;color:#fff;">';
+          h += '<h3 style="font-size:1.3rem;margin-bottom:0.8rem;color:#fbbf24;">Round ' + (state.round || 1) + ' Complete</h3>';
           var rwIdx = state.roundWinner;
           if (rwIdx !== null) {
             var rwName = (rwIdx === state.playerIndex) ? myName : oppName;
-            var pts = state.roundPoints || 0;
-            html += '<p style="margin-bottom:0.5rem;">' + rwName + ' wins the round!</p>';
-            html += '<p style="color:#9ca3af;font-size:0.85rem;margin-bottom:0.3rem;">Pip counts: You ' + (state.pipCounts ? state.pipCounts[state.playerIndex] : 0) + ' — ' + oppName + ' ' + (state.pipCounts ? state.pipCounts[1 - state.playerIndex] : 0) + '</p>';
-            html += '<p style="color:#22c55e;font-size:1.1rem;font-weight:700;">+' + pts + ' points to ' + rwName + '</p>';
+            h += '<p style="margin-bottom:0.5rem;">' + rwName + ' wins the round!</p>';
+            h += '<p style="color:#9ca3af;font-size:0.85rem;margin-bottom:0.3rem;">Pip counts: You ' + (state.pipCounts ? state.pipCounts[state.playerIndex] : 0) + ' &mdash; ' + oppName + ' ' + (state.pipCounts ? state.pipCounts[1 - state.playerIndex] : 0) + '</p>';
+            h += '<p style="color:#22c55e;font-size:1.1rem;font-weight:700;">+' + (state.roundPoints || 0) + ' points to ' + rwName + '</p>';
           } else {
-            html += '<p>Tie — no points awarded</p>';
+            h += '<p>Tie &mdash; no points awarded</p>';
           }
-          html += '<p style="margin-top:0.8rem;color:#93c5fd;font-size:0.9rem;">Score: You ' + myScore + ' — ' + oppName + ' ' + oppScore + '</p>';
-          html += '<button onclick="DominoUI.nextRound()" style="margin-top:1rem;background:#22c55e;color:#fff;border:none;border-radius:10px;padding:0.7rem 2rem;font-size:1rem;font-weight:700;cursor:pointer;font-family:inherit;">Next Round</button>';
-          html += '</div></div>';
+          h += '<p style="margin-top:0.8rem;color:#93c5fd;font-size:0.9rem;">Score: You ' + myScore + ' &mdash; ' + oppName + ' ' + oppScore + '</p>';
+          h += '<button onclick="DominoUI.nextRound()" style="margin-top:1rem;background:#22c55e;color:#fff;border:none;border-radius:10px;padding:0.7rem 2rem;font-size:1rem;font-weight:700;cursor:pointer;font-family:inherit;">Next Round</button>';
+          h += '</div></div>';
         }
 
-        // ── My area ──
-        html += '<div class="domino-my-area">';
-        html += '<div class="domino-hand-row">';
+        // ── My hand (gray-tinted tiles, horizontal row) ──
+        h += '<div class="domino-my-hand">';
         for (var j = 0; j < hand.length; j++) {
           var sel = j === selectedTileIndex ? ' selected' : '';
-          html += '<div class="dtile-hand' + sel + '" onclick="DominoUI.selectTile(' + j + ')">';
-          html += renderDominoTile(hand[j][0], hand[j][1], 'v', '');
-          html += '</div>';
+          h += '<div class="domino-hand-wrap' + sel + '" onclick="DominoUI.selectTile(' + j + ')">';
+          h += renderHandTile(hand[j][0], hand[j][1]);
+          h += '</div>';
         }
-        html += '</div>';
+        h += '</div>';
 
-        // Actions row
-        html += '<div class="domino-actions">';
+        // ── Action buttons ──
+        h += '<div class="domino-actions">';
         if (isMyTurn && !state.roundOver) {
           if (selectedTileIndex !== null && hand[selectedTileIndex]) {
             var st = hand[selectedTileIndex];
             if (board.length === 0) {
-              html += '<button class="side-btn" onclick="DominoUI.playTile(\'right\')">Play Tile</button>';
+              h += '<button class="side-btn" onclick="DominoUI.playTile(\'right\')">Play Tile</button>';
             } else {
               var mL = st[0] === state.boardLeft || st[1] === state.boardLeft;
               var mR = st[0] === state.boardRight || st[1] === state.boardRight;
               if (mL && mR && state.boardLeft !== state.boardRight) {
-                html += '<button class="side-btn" onclick="DominoUI.playTile(\'left\')">&#9664; Left</button>';
-                html += '<button class="side-btn" onclick="DominoUI.playTile(\'right\')">Right &#9654;</button>';
+                h += '<button class="side-btn" onclick="DominoUI.playTile(\'left\')">&#9664; Left</button>';
+                h += '<button class="side-btn" onclick="DominoUI.playTile(\'right\')">Right &#9654;</button>';
               } else if (mL) {
-                html += '<button class="side-btn" onclick="DominoUI.playTile(\'left\')">&#9664; Play Left</button>';
+                h += '<button class="side-btn" onclick="DominoUI.playTile(\'left\')">&#9664; Left</button>';
               } else if (mR) {
-                html += '<button class="side-btn" onclick="DominoUI.playTile(\'right\')">Play Right &#9654;</button>';
+                h += '<button class="side-btn" onclick="DominoUI.playTile(\'right\')">Right &#9654;</button>';
               } else {
-                html += '<span style="color:#fca5a5;font-size:0.8rem;">Tile doesn\'t match</span>';
+                h += '<span style="color:#fca5a5;font-size:0.8rem;">Doesn\'t match</span>';
               }
             }
           }
-          if (state.canDraw) html += '<button class="draw-btn" onclick="DominoUI.drawTile()">Draw</button>';
-          if (!state.canPlay && !state.canDraw) html += '<button class="pass-btn" onclick="DominoUI.passTurn()">Pass</button>';
+          if (state.canDraw) h += '<button class="draw-btn" onclick="DominoUI.drawTile()">Draw</button>';
+          if (!state.canPlay && !state.canDraw) h += '<button class="pass-btn" onclick="DominoUI.passTurn()">Pass</button>';
         }
-        html += '</div>';
+        h += '</div>';
 
-        // Player info + score
-        html += '<div class="domino-player-info" style="margin-top:0.2rem;">';
-        html += '<div class="domino-avatar" style="border-color:#22c55e;">' + (myName ? myName.charAt(0).toUpperCase() : 'Y') + '</div>';
-        html += '<span class="domino-score">' + myScore + '/' + target + '</span>';
-        html += '<span class="domino-username"><span class="domino-online-dot"></span> ' + myName + '</span>';
-        html += '</div>';
+        // ── Bottom player bar ──
+        h += '<div class="domino-my-bar">';
+        h += '<div class="domino-my-top-row">';
+        h += '<div class="domino-avatar my">' + (myName ? myName.charAt(0).toUpperCase() : 'Y') + '</div>';
+        h += '<span class="domino-score-big">' + myScore + '/' + target + '</span>';
+        h += '</div>';
+        h += '<div class="domino-name-row"><div class="domino-online-dot"></div>';
+        h += '<span class="domino-username">' + myName + '</span></div>';
         if (!state.roundOver) {
-          var turnCls = isMyTurn ? 'my-turn' : 'their-turn';
-          var turnTxt = isMyTurn ? 'Your Turn' : 'Opponent\'s Turn';
-          html += '<div class="domino-turn-badge ' + turnCls + '">' + turnTxt + '</div>';
+          var pillCls = isMyTurn ? 'active' : 'waiting';
+          var pillTxt = isMyTurn ? 'Your Turn' : 'Opponent\'s Turn';
+          h += '<div class="domino-turn-pill ' + pillCls + '">' + pillTxt + '</div>';
         }
+        h += '</div></div>';
 
-        html += '</div></div>';
-
-        area.innerHTML = html;
-        controls.innerHTML = '';
-        controls.style.display = 'none';
+        area.innerHTML = h;
+        controls.innerHTML = ''; controls.style.display = 'none';
       }
 
       function renderSnakeChain(board) {
-        var tileSize = TILE_W;
-        var fullTile = tileSize * 2 + GAP;
-        var positions = [];
+        var ft = TW * 2 + GAP, positions = [];
         var boardEl = document.querySelector('.domino-board-area');
-        var boardW = boardEl ? boardEl.clientWidth - 20 : 340;
-        var maxTilesPerRow = Math.max(3, Math.floor(boardW / (fullTile + GAP)));
-
-        var cx = 10, cy = 10;
-        var goingRight = true;
-        var tilesInRow = 0;
+        var boardW = boardEl ? boardEl.clientWidth - 50 : 300;
+        var max = Math.max(3, Math.floor(boardW / (ft + GAP)));
+        var cx = 10, cy = 10, right = true, row = 0;
 
         for (var i = 0; i < board.length; i++) {
-          var t = board[i];
-          var isDouble = t[0] === t[1];
-          if (isDouble) {
-            positions.push({ a: t[0], b: t[1], x: cx, y: cy - Math.floor(tileSize / 2), orient: 'v' });
-            if (goingRight) cx += tileSize + GAP + 4; else cx -= tileSize + GAP + 4;
+          var t = board[i], dbl = t[0] === t[1];
+          if (dbl) {
+            positions.push({ a: t[0], b: t[1], x: cx, y: cy - Math.floor(TW / 2), o: 'v' });
+            cx += right ? TW + GAP + 4 : -(TW + GAP + 4);
           } else {
-            positions.push({ a: t[0], b: t[1], x: cx, y: cy, orient: 'h' });
-            if (goingRight) cx += fullTile + GAP; else cx -= fullTile + GAP;
+            positions.push({ a: t[0], b: t[1], x: cx, y: cy, o: 'h' });
+            cx += right ? ft + GAP : -(ft + GAP);
           }
-          tilesInRow++;
-          if (tilesInRow >= maxTilesPerRow && i < board.length - 1) {
-            cy += fullTile + 8;
-            goingRight = !goingRight;
-            tilesInRow = 0;
-            if (!goingRight) cx -= fullTile + GAP; else cx += fullTile + GAP;
+          row++;
+          if (row >= max && i < board.length - 1) {
+            cy += ft + 8; right = !right; row = 0;
+            cx += right ? ft + GAP : -(ft + GAP);
           }
         }
 
-        var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        var mnx = 1e9, mxx = -1e9, mny = 1e9, mxy = -1e9;
         for (var p = 0; p < positions.length; p++) {
-          var pos = positions[p];
-          var pw = pos.orient === 'h' ? fullTile : tileSize + 2;
-          var ph = pos.orient === 'v' ? fullTile : tileSize + 2;
-          if (pos.x < minX) minX = pos.x;
-          if (pos.x + pw > maxX) maxX = pos.x + pw;
-          if (pos.y < minY) minY = pos.y;
-          if (pos.y + ph > maxY) maxY = pos.y + ph;
+          var q = positions[p], pw = q.o === 'h' ? ft : TW + 2, ph = q.o === 'v' ? ft : TW + 2;
+          if (q.x < mnx) mnx = q.x; if (q.x + pw > mxx) mxx = q.x + pw;
+          if (q.y < mny) mny = q.y; if (q.y + ph > mxy) mxy = q.y + ph;
         }
-
-        var chainW = maxX - minX + 20;
-        var chainH = maxY - minY + 20;
-        var html = '<div class="domino-board-canvas" style="width:' + chainW + 'px;height:' + chainH + 'px;">';
+        var cw = mxx - mnx + 20, ch = mxy - mny + 20;
+        var html = '<div class="domino-board-canvas" style="width:' + cw + 'px;height:' + ch + 'px;">';
         for (var k = 0; k < positions.length; k++) {
           var tp = positions[k];
-          var left = tp.x - minX + 10;
-          var top = tp.y - minY + 10;
-          html += '<div class="dtile-board" style="left:' + left + 'px;top:' + top + 'px;">';
-          html += renderDominoTile(tp.a, tp.b, tp.orient, '');
+          html += '<div class="dtile-board" style="left:' + (tp.x - mnx + 10) + 'px;top:' + (tp.y - mny + 10) + 'px;">';
+          html += renderDominoTile(tp.a, tp.b, tp.o, '');
           html += '</div>';
         }
-        html += '</div>';
-        return html;
+        return html + '</div>';
       }
 
       function selectTile(idx) {
@@ -768,10 +815,11 @@
       function drawTile() { if (sendActionFn) sendActionFn({ type: 'draw' }); }
       function passTurn() { if (sendActionFn) sendActionFn({ type: 'pass' }); }
       function nextRound() { if (sendActionFn) sendActionFn({ type: 'next_round' }); selectedTileIndex = null; }
+      function quit() { if (confirm('Leave the game? You will forfeit.')) window.location.reload(); }
 
       return {
         render: function(state, sendAction, gd) { DominoUI._gameData = gd; render(state, sendAction, gd); },
-        selectTile: selectTile, playTile: playTile, drawTile: drawTile, passTurn: passTurn, nextRound: nextRound,
+        selectTile: selectTile, playTile: playTile, drawTile: drawTile, passTurn: passTurn, nextRound: nextRound, quit: quit,
         _gameData: null
       };
     })();
