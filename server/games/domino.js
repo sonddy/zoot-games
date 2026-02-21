@@ -1,21 +1,48 @@
-// Full double-six domino game engine (1v1)
-// Rules: each player gets 7 tiles, highest double starts, match ends on chain,
-// if you can't play you draw from the boneyard until you can (or it's empty then pass).
+// Domino game engine — Draw mode, first to TARGET_SCORE points wins (Plato-style)
+// Each round: 7 tiles each, draw from boneyard, play or pass.
+// Round ends when a player empties their hand or both are blocked.
+// Round winner gets opponent's remaining pip count as points.
+// Game ends when a player reaches the target score.
+
+const TARGET_SCORE = 50;
 
 class DominoGame {
   constructor() {
-    this.hands = [[], []];
-    this.boneyard = [];
-    this.board = [];           // ordered chain of played tiles
-    this.boardLeft = null;     // value exposed on left end
-    this.boardRight = null;    // value exposed on right end
-    this.currentPlayer = 0;
-    this.consecutivePasses = 0;
+    this.scores = [0, 0];
+    this.round = 0;
+    this.roundOver = false;
+    this.roundWinner = null;
+    this.roundPoints = 0;
+    this.pipCounts = [0, 0];
     this.gameOver = false;
     this.winner = null;
+
+    this.hands = [[], []];
+    this.boneyard = [];
+    this.board = [];
+    this.boardLeft = null;
+    this.boardRight = null;
+    this.currentPlayer = 0;
+    this.consecutivePasses = 0;
   }
 
-  init(numPlayers) {
+  init(numPlayers, options) {
+    this.scores = [0, 0];
+    this.round = 0;
+    this._startNewRound();
+  }
+
+  _startNewRound() {
+    this.round++;
+    this.roundOver = false;
+    this.roundWinner = null;
+    this.roundPoints = 0;
+    this.pipCounts = [0, 0];
+    this.consecutivePasses = 0;
+    this.board = [];
+    this.boardLeft = null;
+    this.boardRight = null;
+
     const allTiles = [];
     for (let i = 0; i <= 6; i++) {
       for (let j = i; j <= 6; j++) {
@@ -24,10 +51,8 @@ class DominoGame {
     }
     this._shuffle(allTiles);
 
-    this.hands[0] = allTiles.splice(0, 7);
-    this.hands[1] = allTiles.splice(0, 7);
+    this.hands = [allTiles.splice(0, 7), allTiles.splice(0, 7)];
     this.boneyard = allTiles;
-
     this.currentPlayer = this._findStartingPlayer();
   }
 
@@ -39,12 +64,9 @@ class DominoGame {
   }
 
   _findStartingPlayer() {
-    // Player with highest double goes first
     for (let d = 6; d >= 0; d--) {
       for (let p = 0; p < 2; p++) {
-        if (this.hands[p].some(t => t[0] === d && t[1] === d)) {
-          return p;
-        }
+        if (this.hands[p].some(t => t[0] === d && t[1] === d)) return p;
       }
     }
     return 0;
@@ -52,15 +74,20 @@ class DominoGame {
 
   handleAction(playerIndex, action) {
     if (this.gameOver) return { error: 'Game is over' };
+
+    if (action.type === 'next_round') {
+      if (!this.roundOver) return { error: 'Round is not over yet' };
+      if (this.gameOver) return { error: 'Game is already over' };
+      this._startNewRound();
+      return { newRound: true, gameOver: false };
+    }
+
+    if (this.roundOver) return { error: 'Round is over — waiting for next round' };
     if (playerIndex !== this.currentPlayer) return { error: 'Not your turn' };
 
-    if (action.type === 'play') {
-      return this._playTile(playerIndex, action.tileIndex, action.side);
-    } else if (action.type === 'draw') {
-      return this._drawFromBoneyard(playerIndex);
-    } else if (action.type === 'pass') {
-      return this._pass(playerIndex);
-    }
+    if (action.type === 'play') return this._playTile(playerIndex, action.tileIndex, action.side);
+    if (action.type === 'draw') return this._drawFromBoneyard(playerIndex);
+    if (action.type === 'pass') return this._pass(playerIndex);
 
     return { error: 'Invalid action' };
   }
@@ -68,10 +95,8 @@ class DominoGame {
   _playTile(playerIndex, tileIndex, side) {
     const hand = this.hands[playerIndex];
     if (tileIndex < 0 || tileIndex >= hand.length) return { error: 'Invalid tile' };
-
     const tile = hand[tileIndex];
 
-    // First tile on empty board
     if (this.board.length === 0) {
       hand.splice(tileIndex, 1);
       this.board.push(tile);
@@ -81,7 +106,6 @@ class DominoGame {
       return this._endTurn(playerIndex);
     }
 
-    // Must play on a valid side
     if (!side) side = this._autoPickSide(tile);
     if (!side) return { error: 'Tile does not match either end' };
 
@@ -109,8 +133,6 @@ class DominoGame {
       } else {
         return { error: 'Tile does not match right end' };
       }
-    } else {
-      return { error: 'Invalid side (use "left" or "right")' };
     }
 
     this.consecutivePasses = 0;
@@ -118,39 +140,25 @@ class DominoGame {
   }
 
   _autoPickSide(tile) {
-    const matchesLeft = tile[0] === this.boardLeft || tile[1] === this.boardLeft;
-    const matchesRight = tile[0] === this.boardRight || tile[1] === this.boardRight;
-    if (matchesLeft && !matchesRight) return 'left';
-    if (matchesRight && !matchesLeft) return 'right';
-    if (matchesLeft && matchesRight) return null; // player must choose
+    const mL = tile[0] === this.boardLeft || tile[1] === this.boardLeft;
+    const mR = tile[0] === this.boardRight || tile[1] === this.boardRight;
+    if (mL && !mR) return 'left';
+    if (mR && !mL) return 'right';
     return null;
   }
 
   _drawFromBoneyard(playerIndex) {
-    if (this.boneyard.length === 0) {
-      return { error: 'Boneyard is empty, you must pass' };
-    }
-
-    const tile = this.boneyard.pop();
-    this.hands[playerIndex].push(tile);
-
-    // Don't switch turns — player keeps drawing until they can play or boneyard empties
+    if (this.boneyard.length === 0) return { error: 'Boneyard is empty, you must pass' };
+    this.hands[playerIndex].push(this.boneyard.pop());
     return { drewTile: true, gameOver: false };
   }
 
   _pass(playerIndex) {
-    // Can only pass if boneyard is empty and no playable tiles
-    if (this.boneyard.length > 0) {
-      return { error: 'You must draw from the pile first' };
-    }
-    if (this._hasPlayableTile(playerIndex)) {
-      return { error: 'You have a playable tile' };
-    }
+    if (this.boneyard.length > 0) return { error: 'You must draw from the pile first' };
+    if (this._hasPlayableTile(playerIndex)) return { error: 'You have a playable tile' };
 
     this.consecutivePasses++;
-    if (this.consecutivePasses >= 2) {
-      return this._endGameBlocked();
-    }
+    if (this.consecutivePasses >= 2) return this._endRoundBlocked();
 
     this.currentPlayer = 1 - this.currentPlayer;
     return { gameOver: false };
@@ -164,27 +172,63 @@ class DominoGame {
     );
   }
 
+  _pipCount(playerIndex) {
+    return this.hands[playerIndex].reduce((s, t) => s + t[0] + t[1], 0);
+  }
+
   _endTurn(playerIndex) {
     if (this.hands[playerIndex].length === 0) {
-      this.gameOver = true;
-      this.winner = playerIndex;
-      return { gameOver: true, winner: playerIndex };
+      return this._endRound(playerIndex);
     }
     this.currentPlayer = 1 - this.currentPlayer;
     return { gameOver: false };
   }
 
-  _endGameBlocked() {
-    // Both players blocked — lowest pip count wins
-    const score0 = this.hands[0].reduce((s, t) => s + t[0] + t[1], 0);
-    const score1 = this.hands[1].reduce((s, t) => s + t[0] + t[1], 0);
+  _endRound(roundWinner) {
+    this.roundOver = true;
+    this.roundWinner = roundWinner;
+    const loserIndex = 1 - roundWinner;
+    this.pipCounts = [this._pipCount(0), this._pipCount(1)];
+    this.roundPoints = this.pipCounts[loserIndex];
+    this.scores[roundWinner] += this.roundPoints;
 
-    this.gameOver = true;
-    if (score0 < score1) this.winner = 0;
-    else if (score1 < score0) this.winner = 1;
-    else this.winner = null; // draw
+    if (this.scores[roundWinner] >= TARGET_SCORE) {
+      this.gameOver = true;
+      this.winner = roundWinner;
+      return { gameOver: true, winner: roundWinner, roundOver: true };
+    }
+    return { gameOver: false, roundOver: true, winner: roundWinner };
+  }
 
-    return { gameOver: true, winner: this.winner };
+  _endRoundBlocked() {
+    this.pipCounts = [this._pipCount(0), this._pipCount(1)];
+
+    if (this.pipCounts[0] < this.pipCounts[1]) {
+      return this._endRoundBlockedWinner(0);
+    } else if (this.pipCounts[1] < this.pipCounts[0]) {
+      return this._endRoundBlockedWinner(1);
+    }
+
+    // Tie — no points, start new round
+    this.roundOver = true;
+    this.roundWinner = null;
+    this.roundPoints = 0;
+    return { gameOver: false, roundOver: true, winner: null };
+  }
+
+  _endRoundBlockedWinner(winner) {
+    this.roundOver = true;
+    this.roundWinner = winner;
+    const loser = 1 - winner;
+    this.roundPoints = this.pipCounts[loser] - this.pipCounts[winner];
+    this.scores[winner] += this.roundPoints;
+
+    if (this.scores[winner] >= TARGET_SCORE) {
+      this.gameOver = true;
+      this.winner = winner;
+      return { gameOver: true, winner, roundOver: true };
+    }
+    return { gameOver: false, roundOver: true, winner };
   }
 
   getStateForPlayer(playerIndex) {
@@ -197,8 +241,15 @@ class DominoGame {
       boardRight: this.boardRight,
       boneyardCount: this.boneyard.length,
       currentPlayer: this.currentPlayer,
-      isMyTurn: this.currentPlayer === playerIndex,
+      isMyTurn: !this.roundOver && this.currentPlayer === playerIndex,
       playerIndex,
+      scores: this.scores,
+      targetScore: TARGET_SCORE,
+      round: this.round,
+      roundOver: this.roundOver,
+      roundWinner: this.roundWinner,
+      roundPoints: this.roundPoints,
+      pipCounts: this.pipCounts,
       gameOver: this.gameOver,
       winner: this.winner,
       canPlay: this._hasPlayableTile(playerIndex),

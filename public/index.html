@@ -173,6 +173,7 @@
     .domino-screen {
       display: flex; flex-direction: column; height: 100vh; width: 100%;
       background: linear-gradient(180deg, #1a3a8a 0%, #2563eb 15%, #3b82f6 50%, #2563eb 85%, #1a3a8a 100%);
+      position: relative;
     }
 
     .domino-opp-area {
@@ -570,15 +571,15 @@
     })();
 
     // ════════════════════════════════════════
-    // DOMINO UI — Blue table (Domino King style)
+    // DOMINO UI — Blue table (Plato / Domino King style)
+    // Multi-round scoring: first to 50 points wins
     // ════════════════════════════════════════
     var DominoUI = (function() {
       var selectedTileIndex = null;
       var sendActionFn = null;
       var lastState = null;
 
-      var TILE_W = 28; // half-width px
-      var TILE_H = 28; // half-height px
+      var TILE_W = 28;
       var GAP = 2;
 
       function render(state, sendAction, gameData) {
@@ -592,11 +593,17 @@
         var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
         var myName = (gameData && gameData.players) ? gameData.players[state.playerIndex].username : 'You';
 
+        var scores = state.scores || [0, 0];
+        var target = state.targetScore || 50;
+        var myScore = scores[state.playerIndex];
+        var oppScore = scores[1 - state.playerIndex];
+
         // ── Opponent area ──
         var html = '<div class="domino-screen">';
         html += '<div class="domino-opp-area">';
         html += '<div class="domino-player-info">';
         html += '<div class="domino-avatar">' + (oppName ? oppName.charAt(0).toUpperCase() : 'O') + '</div>';
+        html += '<span class="domino-score">' + oppScore + '/' + target + '</span>';
         html += '<span class="domino-username"><span class="domino-online-dot"></span> ' + oppName + '</span>';
         html += '</div>';
         html += '<div class="domino-opp-tiles-row">';
@@ -612,7 +619,28 @@
         }
         html += '</div>';
         html += '<div class="domino-boneyard-label">Boneyard: ' + boneCount + '</div>';
+        if (state.round) html += '<div style="position:absolute;top:0.5rem;left:0.8rem;color:rgba(255,255,255,0.5);font-size:0.75rem;font-weight:600;">Round ' + state.round + '</div>';
         html += '</div>';
+
+        // ── Round-over overlay (inside board area) ──
+        if (state.roundOver && !state.gameOver) {
+          html += '<div style="position:absolute;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:50;border-radius:12px;">';
+          html += '<div style="background:#1e3a8a;border:2px solid #3b82f6;border-radius:16px;padding:1.5rem 2rem;text-align:center;max-width:320px;width:90%;color:#fff;">';
+          html += '<h3 style="font-size:1.3rem;margin-bottom:0.8rem;color:#fbbf24;">Round ' + state.round + ' Complete</h3>';
+          var rwIdx = state.roundWinner;
+          if (rwIdx !== null) {
+            var rwName = (rwIdx === state.playerIndex) ? myName : oppName;
+            var pts = state.roundPoints || 0;
+            html += '<p style="margin-bottom:0.5rem;">' + rwName + ' wins the round!</p>';
+            html += '<p style="color:#9ca3af;font-size:0.85rem;margin-bottom:0.3rem;">Pip counts: You ' + (state.pipCounts ? state.pipCounts[state.playerIndex] : 0) + ' — ' + oppName + ' ' + (state.pipCounts ? state.pipCounts[1 - state.playerIndex] : 0) + '</p>';
+            html += '<p style="color:#22c55e;font-size:1.1rem;font-weight:700;">+' + pts + ' points to ' + rwName + '</p>';
+          } else {
+            html += '<p>Tie — no points awarded</p>';
+          }
+          html += '<p style="margin-top:0.8rem;color:#93c5fd;font-size:0.9rem;">Score: You ' + myScore + ' — ' + oppName + ' ' + oppScore + '</p>';
+          html += '<button onclick="DominoUI.nextRound()" style="margin-top:1rem;background:#22c55e;color:#fff;border:none;border-radius:10px;padding:0.7rem 2rem;font-size:1rem;font-weight:700;cursor:pointer;font-family:inherit;">Next Round</button>';
+          html += '</div></div>';
+        }
 
         // ── My area ──
         html += '<div class="domino-my-area">';
@@ -627,7 +655,7 @@
 
         // Actions row
         html += '<div class="domino-actions">';
-        if (isMyTurn) {
+        if (isMyTurn && !state.roundOver) {
           if (selectedTileIndex !== null && hand[selectedTileIndex]) {
             var st = hand[selectedTileIndex];
             if (board.length === 0) {
@@ -652,16 +680,19 @@
         }
         html += '</div>';
 
-        // Turn badge
+        // Player info + score
         html += '<div class="domino-player-info" style="margin-top:0.2rem;">';
         html += '<div class="domino-avatar" style="border-color:#22c55e;">' + (myName ? myName.charAt(0).toUpperCase() : 'Y') + '</div>';
+        html += '<span class="domino-score">' + myScore + '/' + target + '</span>';
         html += '<span class="domino-username"><span class="domino-online-dot"></span> ' + myName + '</span>';
         html += '</div>';
-        var turnCls = isMyTurn ? 'my-turn' : 'their-turn';
-        var turnTxt = isMyTurn ? 'Your Turn' : 'Opponent\'s Turn';
-        html += '<div class="domino-turn-badge ' + turnCls + '">' + turnTxt + '</div>';
+        if (!state.roundOver) {
+          var turnCls = isMyTurn ? 'my-turn' : 'their-turn';
+          var turnTxt = isMyTurn ? 'Your Turn' : 'Opponent\'s Turn';
+          html += '<div class="domino-turn-badge ' + turnCls + '">' + turnTxt + '</div>';
+        }
 
-        html += '</div></div>'; // close my-area and domino-screen
+        html += '</div></div>';
 
         area.innerHTML = html;
         controls.innerHTML = '';
@@ -669,17 +700,13 @@
       }
 
       function renderSnakeChain(board) {
-        // Calculate tile positions in a snake pattern
         var tileSize = TILE_W;
         var fullTile = tileSize * 2 + GAP;
         var positions = [];
-
-        // Board width for snake wrapping
         var boardEl = document.querySelector('.domino-board-area');
         var boardW = boardEl ? boardEl.clientWidth - 20 : 340;
         var maxTilesPerRow = Math.max(3, Math.floor(boardW / (fullTile + GAP)));
 
-        var dir = 0; // 0=right, 1=down, 2=left, 3=up (not used for simple snake)
         var cx = 10, cy = 10;
         var goingRight = true;
         var tilesInRow = 0;
@@ -687,32 +714,22 @@
         for (var i = 0; i < board.length; i++) {
           var t = board[i];
           var isDouble = t[0] === t[1];
-
           if (isDouble) {
-            // Doubles are vertical (perpendicular)
             positions.push({ a: t[0], b: t[1], x: cx, y: cy - Math.floor(tileSize / 2), orient: 'v' });
-            if (goingRight) cx += tileSize + GAP + 4;
-            else cx -= tileSize + GAP + 4;
+            if (goingRight) cx += tileSize + GAP + 4; else cx -= tileSize + GAP + 4;
           } else {
-            // Normal tiles horizontal
             positions.push({ a: t[0], b: t[1], x: cx, y: cy, orient: 'h' });
-            if (goingRight) cx += fullTile + GAP;
-            else cx -= fullTile + GAP;
+            if (goingRight) cx += fullTile + GAP; else cx -= fullTile + GAP;
           }
           tilesInRow++;
-
-          // Check if we need to wrap (snake turn)
           if (tilesInRow >= maxTilesPerRow && i < board.length - 1) {
-            // Turn down then reverse direction
             cy += fullTile + 8;
             goingRight = !goingRight;
             tilesInRow = 0;
-            if (!goingRight) cx -= fullTile + GAP;
-            else cx += fullTile + GAP;
+            if (!goingRight) cx -= fullTile + GAP; else cx += fullTile + GAP;
           }
         }
 
-        // Calculate bounds for centering
         var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
         for (var p = 0; p < positions.length; p++) {
           var pos = positions[p];
@@ -726,7 +743,6 @@
 
         var chainW = maxX - minX + 20;
         var chainH = maxY - minY + 20;
-
         var html = '<div class="domino-board-canvas" style="width:' + chainW + 'px;height:' + chainH + 'px;">';
         for (var k = 0; k < positions.length; k++) {
           var tp = positions[k];
@@ -751,10 +767,11 @@
       }
       function drawTile() { if (sendActionFn) sendActionFn({ type: 'draw' }); }
       function passTurn() { if (sendActionFn) sendActionFn({ type: 'pass' }); }
+      function nextRound() { if (sendActionFn) sendActionFn({ type: 'next_round' }); selectedTileIndex = null; }
 
       return {
         render: function(state, sendAction, gd) { DominoUI._gameData = gd; render(state, sendAction, gd); },
-        selectTile: selectTile, playTile: playTile, drawTile: drawTile, passTurn: passTurn,
+        selectTile: selectTile, playTile: playTile, drawTile: drawTile, passTurn: passTurn, nextRound: nextRound,
         _gameData: null
       };
     })();
