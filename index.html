@@ -166,43 +166,136 @@
     .turn-indicator { font-size: 0.9rem; font-weight: 600; padding: 0.3rem 0.8rem; border-radius: 999px; }
     .turn-indicator.my-turn { background: var(--green); color: #fff; }
     .turn-indicator.their-turn { background: var(--surface); color: var(--text2); }
-    .game-area { flex: 1; display: flex; align-items: center; justify-content: center; padding: 1rem; overflow: auto; }
-    .game-controls { background: var(--bg2); border-top: 1px solid var(--surface2); padding: 1rem 1.5rem; min-height: 80px; }
+    .game-area { flex: 1; display: flex; align-items: stretch; justify-content: center; padding: 0; overflow: hidden; }
+    .game-controls { background: var(--bg2); border-top: 1px solid var(--surface2); padding: 1rem 1.5rem; min-height: 0; }
 
-    .domino-table {
-      background: radial-gradient(ellipse at center, var(--felt) 0%, var(--felt2) 100%);
-      border-radius: 16px; padding: 2rem; min-height: 260px; width: 100%; max-width: 760px;
-      display: flex; flex-direction: column; align-items: center; gap: 1rem;
-      box-shadow: inset 0 2px 20px rgba(0,0,0,0.3);
+    /* ═══ DOMINO — Blue table design (Domino King style) ═══ */
+    .domino-screen {
+      display: flex; flex-direction: column; height: 100vh; width: 100%;
+      background: linear-gradient(180deg, #1a3a8a 0%, #2563eb 15%, #3b82f6 50%, #2563eb 85%, #1a3a8a 100%);
     }
-    .domino-info-bar { display: flex; gap: 2rem; font-size: 0.85rem; color: rgba(255,255,255,0.7); }
-    .domino-chain { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 3px; min-height: 70px; }
-    .domino-chain-empty { color: rgba(255,255,255,0.5); font-style: italic; font-size: 0.9rem; }
-    .dtile { display: inline-flex; background: #f5f0e8; border-radius: 5px; box-shadow: 1px 2px 4px rgba(0,0,0,0.35); position: relative; overflow: hidden; }
+
+    .domino-opp-area {
+      display: flex; flex-direction: column; align-items: center; padding: 0.5rem 1rem 0.3rem;
+      background: linear-gradient(180deg, #0f2660 0%, #1e3a8a 100%);
+      border-bottom: 3px solid #3b82f6;
+    }
+    .domino-player-info {
+      display: flex; align-items: center; gap: 0.6rem; color: #fff;
+    }
+    .domino-avatar {
+      width: 40px; height: 40px; border-radius: 50%; background: #4b5563;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem; font-weight: 700; color: #fff;
+      border: 2px solid #60a5fa; overflow: hidden;
+    }
+    .domino-username { font-size: 0.85rem; font-weight: 600; }
+    .domino-score { font-size: 1.1rem; font-weight: 800; color: #fff; }
+    .domino-online-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; display: inline-block; }
+    .domino-opp-tiles-row {
+      display: flex; gap: 3px; justify-content: center; padding: 0.4rem 0;
+    }
+    .domino-tile-back {
+      width: 22px; height: 38px; border-radius: 4px;
+      background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%);
+      border: 1.5px solid #93c5fd;
+      box-shadow: 1px 2px 4px rgba(0,0,0,0.3);
+    }
+
+    .domino-board-area {
+      flex: 1; position: relative; overflow: hidden;
+      margin: 0.3rem 0.5rem;
+      background: rgba(37,99,235,0.3);
+      border-radius: 12px;
+      border: 2px solid rgba(96,165,250,0.3);
+    }
+    .domino-board-inner {
+      position: absolute; inset: 0; overflow: auto;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .domino-board-canvas {
+      position: relative; min-width: 100%; min-height: 100%;
+    }
+    .domino-chain-empty {
+      color: rgba(255,255,255,0.4); font-style: italic; font-size: 1rem;
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    }
+    .domino-boneyard-label {
+      position: absolute; bottom: 0.5rem; right: 0.8rem;
+      color: rgba(255,255,255,0.7); font-size: 0.85rem; font-weight: 600;
+    }
+
+    .dtile {
+      display: inline-flex; background: #fff; border-radius: 5px;
+      box-shadow: 1px 2px 6px rgba(0,0,0,0.4); position: relative;
+    }
     .dtile-h { flex-direction: row; }
     .dtile-v { flex-direction: column; }
-    .dtile-half { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; position: relative; }
-    .dtile-div-h { width: 1px; height: 26px; background: #bbb; align-self: center; }
-    .dtile-div-v { height: 1px; width: 26px; background: #bbb; align-self: center; }
-    .pip-container { width: 24px; height: 24px; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); }
-    .pip { width: 5px; height: 5px; background: #222; border-radius: 50%; align-self: center; justify-self: center; }
-    .domino-hand-area { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
-    .dtile-hand { cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; border: 2px solid transparent; }
-    .dtile-hand:hover { transform: translateY(-5px); box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
-    .dtile-hand.selected { border-color: var(--gold); transform: translateY(-8px); box-shadow: 0 0 16px rgba(245,158,11,0.6); }
-    .domino-actions { display: flex; gap: 0.5rem; align-items: center; justify-content: center; margin-top: 0.5rem; }
-    .side-btn {
-      background: var(--surface); border: 2px solid var(--accent); color: var(--accent2);
-      border-radius: var(--radius-sm); padding: 0.4rem 0.8rem; font-family: inherit;
-      font-weight: 600; font-size: 0.8rem; cursor: pointer; transition: all 0.15s;
+    .dtile-half {
+      width: 28px; height: 28px; display: flex; align-items: center;
+      justify-content: center; position: relative;
     }
-    .side-btn:hover { background: var(--accent); color: #fff; }
-    .draw-btn { background: var(--gold); color: #000; border: none; border-radius: var(--radius-sm); padding: 0.5rem 1rem; font-family: inherit; font-weight: 700; cursor: pointer; font-size: 0.85rem; }
-    .draw-btn:hover { opacity: 0.85; }
-    .pass-btn { background: var(--red); color: #fff; border: none; border-radius: var(--radius-sm); padding: 0.5rem 1rem; font-family: inherit; font-weight: 700; cursor: pointer; font-size: 0.85rem; }
-    .pass-btn:hover { opacity: 0.85; }
-    .opp-tiles { display: flex; gap: 3px; margin-bottom: 0.5rem; }
-    .opp-tile { width: 18px; height: 32px; background: linear-gradient(135deg, #2d5aa0, #1a3a6e); border-radius: 3px; border: 1px solid #4a7bd4; box-shadow: 1px 1px 3px rgba(0,0,0,0.3); }
+    .dtile-div-h { width: 1px; height: 24px; background: #ccc; align-self: center; }
+    .dtile-div-v { height: 1px; width: 24px; background: #ccc; align-self: center; }
+    .pip-container {
+      width: 22px; height: 22px; display: grid;
+      grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+    }
+    .pip {
+      width: 5px; height: 5px; background: #111; border-radius: 50%;
+      align-self: center; justify-self: center;
+    }
+
+    /* Board tiles are positioned absolutely */
+    .dtile-board { position: absolute; }
+
+    .domino-my-area {
+      background: linear-gradient(0deg, #0f2660 0%, #1e3a8a 100%);
+      border-top: 3px solid #3b82f6;
+      padding: 0.5rem 1rem 0.6rem; display: flex; flex-direction: column; align-items: center;
+    }
+    .domino-hand-row {
+      display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;
+      padding: 0.4rem 0;
+    }
+    .dtile-hand {
+      cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+      border: 2px solid transparent; border-radius: 6px;
+    }
+    .dtile-hand:hover { transform: translateY(-6px); box-shadow: 0 8px 20px rgba(0,0,0,0.5); }
+    .dtile-hand.selected {
+      border-color: #fbbf24; transform: translateY(-10px);
+      box-shadow: 0 0 20px rgba(251,191,36,0.7);
+    }
+    .domino-turn-badge {
+      display: inline-block; padding: 0.3rem 1rem; border-radius: 999px;
+      font-size: 0.85rem; font-weight: 700; margin-top: 0.3rem;
+    }
+    .domino-turn-badge.my-turn { background: #22c55e; color: #fff; }
+    .domino-turn-badge.their-turn { background: #4b5563; color: #9ca3af; }
+
+    .domino-actions {
+      display: flex; gap: 0.5rem; align-items: center; justify-content: center;
+      padding: 0.3rem 0;
+    }
+    .side-btn {
+      background: rgba(255,255,255,0.15); border: 2px solid #60a5fa; color: #93c5fd;
+      border-radius: 8px; padding: 0.4rem 0.9rem; font-family: inherit;
+      font-weight: 700; font-size: 0.8rem; cursor: pointer; transition: all 0.15s;
+    }
+    .side-btn:hover { background: #3b82f6; color: #fff; }
+    .draw-btn {
+      background: #f59e0b; color: #000; border: none; border-radius: 8px;
+      padding: 0.5rem 1.2rem; font-family: inherit; font-weight: 700;
+      cursor: pointer; font-size: 0.85rem;
+    }
+    .draw-btn:hover { background: #d97706; }
+    .pass-btn {
+      background: #ef4444; color: #fff; border: none; border-radius: 8px;
+      padding: 0.5rem 1.2rem; font-family: inherit; font-weight: 700;
+      cursor: pointer; font-size: 0.85rem;
+    }
+    .pass-btn:hover { background: #dc2626; }
 
     .ttt-grid { display: grid; gap: 5px; }
     .ttt-cell {
@@ -257,9 +350,6 @@
       .topbar { flex-wrap: wrap; gap: 0.5rem; }
       .logo h1 { font-size: 2rem; }
       .logo-mark { width: 64px; height: 64px; font-size: 1.8rem; }
-      .dtile-half { width: 24px; height: 24px; }
-      .pip-container { width: 18px; height: 18px; }
-      .pip { width: 4px; height: 4px; }
     }
   </style>
 </head>
@@ -480,70 +570,193 @@
     })();
 
     // ════════════════════════════════════════
-    // DOMINO UI
+    // DOMINO UI — Blue table (Domino King style)
     // ════════════════════════════════════════
     var DominoUI = (function() {
       var selectedTileIndex = null;
       var sendActionFn = null;
       var lastState = null;
 
-      function render(state, sendAction) {
+      var TILE_W = 28; // half-width px
+      var TILE_H = 28; // half-height px
+      var GAP = 2;
+
+      function render(state, sendAction, gameData) {
         lastState = state; sendActionFn = sendAction;
-        renderBoard(state); renderControls(state);
-      }
-
-      function renderBoard(state) {
         var area = document.getElementById('game-area');
-        var board = state.board, oppCount = state.opponentTileCount, boneCount = state.boneyardCount;
-        var html = '<div class="domino-table">';
-        html += '<div class="opp-tiles">';
-        for (var i = 0; i < oppCount; i++) html += '<div class="opp-tile"></div>';
-        html += '</div>';
-        html += '<div class="domino-info-bar"><span>Opponent: ' + oppCount + ' tiles</span><span>Boneyard: ' + boneCount + ' tiles</span></div>';
-        html += '<div class="domino-chain">';
-        if (board.length === 0) { html += '<span class="domino-chain-empty">Place the first tile!</span>'; }
-        else { for (var j = 0; j < board.length; j++) { var t = board[j]; html += renderDominoTile(t[0], t[1], t[0] === t[1] ? 'v' : 'h', ''); } }
-        html += '</div></div>';
-        area.innerHTML = html;
-      }
-
-      function renderControls(state) {
         var controls = document.getElementById('game-controls');
-        var hand = state.hand, isMyTurn = state.isMyTurn, canDraw = state.canDraw, canPlay = state.canPlay;
-        var board = state.board, boardLeft = state.boardLeft, boardRight = state.boardRight;
-        var html = '<div class="domino-hand-area">';
-        for (var i = 0; i < hand.length; i++) {
-          var sel = i === selectedTileIndex ? ' selected' : '';
-          html += '<div class="dtile-hand' + sel + '" onclick="DominoUI.selectTile(' + i + ')">';
-          html += renderDominoTile(hand[i][0], hand[i][1], 'v', '') + '</div>';
+        var board = state.board, hand = state.hand;
+        var oppCount = state.opponentTileCount, boneCount = state.boneyardCount;
+        var isMyTurn = state.isMyTurn;
+
+        var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
+        var myName = (gameData && gameData.players) ? gameData.players[state.playerIndex].username : 'You';
+
+        // ── Opponent area ──
+        var html = '<div class="domino-screen">';
+        html += '<div class="domino-opp-area">';
+        html += '<div class="domino-player-info">';
+        html += '<div class="domino-avatar">' + (oppName ? oppName.charAt(0).toUpperCase() : 'O') + '</div>';
+        html += '<span class="domino-username"><span class="domino-online-dot"></span> ' + oppName + '</span>';
+        html += '</div>';
+        html += '<div class="domino-opp-tiles-row">';
+        for (var i = 0; i < oppCount; i++) html += '<div class="domino-tile-back"></div>';
+        html += '</div></div>';
+
+        // ── Board area ──
+        html += '<div class="domino-board-area"><div class="domino-board-inner">';
+        if (board.length === 0) {
+          html += '<span class="domino-chain-empty">Place the first tile!</span>';
+        } else {
+          html += renderSnakeChain(board);
         }
-        html += '</div><div class="domino-actions">';
+        html += '</div>';
+        html += '<div class="domino-boneyard-label">Boneyard: ' + boneCount + '</div>';
+        html += '</div>';
+
+        // ── My area ──
+        html += '<div class="domino-my-area">';
+        html += '<div class="domino-hand-row">';
+        for (var j = 0; j < hand.length; j++) {
+          var sel = j === selectedTileIndex ? ' selected' : '';
+          html += '<div class="dtile-hand' + sel + '" onclick="DominoUI.selectTile(' + j + ')">';
+          html += renderDominoTile(hand[j][0], hand[j][1], 'v', '');
+          html += '</div>';
+        }
+        html += '</div>';
+
+        // Actions row
+        html += '<div class="domino-actions">';
         if (isMyTurn) {
           if (selectedTileIndex !== null && hand[selectedTileIndex]) {
             var st = hand[selectedTileIndex];
-            if (board.length === 0) { html += '<button class="side-btn" onclick="DominoUI.playTile(\'right\')">Play Tile</button>'; }
-            else {
-              var mL = st[0] === boardLeft || st[1] === boardLeft;
-              var mR = st[0] === boardRight || st[1] === boardRight;
-              if (mL && mR && boardLeft !== boardRight) { html += '<button class="side-btn" onclick="DominoUI.playTile(\'left\')">&#9664; Left</button><button class="side-btn" onclick="DominoUI.playTile(\'right\')">Right &#9654;</button>'; }
-              else if (mL) { html += '<button class="side-btn" onclick="DominoUI.playTile(\'left\')">&#9664; Play Left</button>'; }
-              else if (mR) { html += '<button class="side-btn" onclick="DominoUI.playTile(\'right\')">Play Right &#9654;</button>'; }
-              else { html += '<span style="color:#ef4444;font-size:0.8rem;">Tile doesn\'t match</span>'; }
+            if (board.length === 0) {
+              html += '<button class="side-btn" onclick="DominoUI.playTile(\'right\')">Play Tile</button>';
+            } else {
+              var mL = st[0] === state.boardLeft || st[1] === state.boardLeft;
+              var mR = st[0] === state.boardRight || st[1] === state.boardRight;
+              if (mL && mR && state.boardLeft !== state.boardRight) {
+                html += '<button class="side-btn" onclick="DominoUI.playTile(\'left\')">&#9664; Left</button>';
+                html += '<button class="side-btn" onclick="DominoUI.playTile(\'right\')">Right &#9654;</button>';
+              } else if (mL) {
+                html += '<button class="side-btn" onclick="DominoUI.playTile(\'left\')">&#9664; Play Left</button>';
+              } else if (mR) {
+                html += '<button class="side-btn" onclick="DominoUI.playTile(\'right\')">Play Right &#9654;</button>';
+              } else {
+                html += '<span style="color:#fca5a5;font-size:0.8rem;">Tile doesn\'t match</span>';
+              }
             }
           }
-          if (canDraw) html += '<button class="draw-btn" onclick="DominoUI.drawTile()">Draw from Boneyard</button>';
-          if (!canPlay && !canDraw) html += '<button class="pass-btn" onclick="DominoUI.passTurn()">Pass</button>';
-        } else { html += '<span style="color:#9ca3af;">Waiting for opponent...</span>'; }
+          if (state.canDraw) html += '<button class="draw-btn" onclick="DominoUI.drawTile()">Draw</button>';
+          if (!state.canPlay && !state.canDraw) html += '<button class="pass-btn" onclick="DominoUI.passTurn()">Pass</button>';
+        }
         html += '</div>';
-        controls.innerHTML = html;
+
+        // Turn badge
+        html += '<div class="domino-player-info" style="margin-top:0.2rem;">';
+        html += '<div class="domino-avatar" style="border-color:#22c55e;">' + (myName ? myName.charAt(0).toUpperCase() : 'Y') + '</div>';
+        html += '<span class="domino-username"><span class="domino-online-dot"></span> ' + myName + '</span>';
+        html += '</div>';
+        var turnCls = isMyTurn ? 'my-turn' : 'their-turn';
+        var turnTxt = isMyTurn ? 'Your Turn' : 'Opponent\'s Turn';
+        html += '<div class="domino-turn-badge ' + turnCls + '">' + turnTxt + '</div>';
+
+        html += '</div></div>'; // close my-area and domino-screen
+
+        area.innerHTML = html;
+        controls.innerHTML = '';
+        controls.style.display = 'none';
       }
 
-      function selectTile(idx) { selectedTileIndex = selectedTileIndex === idx ? null : idx; if (lastState && sendActionFn) renderControls(lastState); }
-      function playTile(side) { if (selectedTileIndex === null || !sendActionFn) return; sendActionFn({ type: 'play', tileIndex: selectedTileIndex, side: side }); selectedTileIndex = null; }
+      function renderSnakeChain(board) {
+        // Calculate tile positions in a snake pattern
+        var tileSize = TILE_W;
+        var fullTile = tileSize * 2 + GAP;
+        var positions = [];
+
+        // Board width for snake wrapping
+        var boardEl = document.querySelector('.domino-board-area');
+        var boardW = boardEl ? boardEl.clientWidth - 20 : 340;
+        var maxTilesPerRow = Math.max(3, Math.floor(boardW / (fullTile + GAP)));
+
+        var dir = 0; // 0=right, 1=down, 2=left, 3=up (not used for simple snake)
+        var cx = 10, cy = 10;
+        var goingRight = true;
+        var tilesInRow = 0;
+
+        for (var i = 0; i < board.length; i++) {
+          var t = board[i];
+          var isDouble = t[0] === t[1];
+
+          if (isDouble) {
+            // Doubles are vertical (perpendicular)
+            positions.push({ a: t[0], b: t[1], x: cx, y: cy - Math.floor(tileSize / 2), orient: 'v' });
+            if (goingRight) cx += tileSize + GAP + 4;
+            else cx -= tileSize + GAP + 4;
+          } else {
+            // Normal tiles horizontal
+            positions.push({ a: t[0], b: t[1], x: cx, y: cy, orient: 'h' });
+            if (goingRight) cx += fullTile + GAP;
+            else cx -= fullTile + GAP;
+          }
+          tilesInRow++;
+
+          // Check if we need to wrap (snake turn)
+          if (tilesInRow >= maxTilesPerRow && i < board.length - 1) {
+            // Turn down then reverse direction
+            cy += fullTile + 8;
+            goingRight = !goingRight;
+            tilesInRow = 0;
+            if (!goingRight) cx -= fullTile + GAP;
+            else cx += fullTile + GAP;
+          }
+        }
+
+        // Calculate bounds for centering
+        var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (var p = 0; p < positions.length; p++) {
+          var pos = positions[p];
+          var pw = pos.orient === 'h' ? fullTile : tileSize + 2;
+          var ph = pos.orient === 'v' ? fullTile : tileSize + 2;
+          if (pos.x < minX) minX = pos.x;
+          if (pos.x + pw > maxX) maxX = pos.x + pw;
+          if (pos.y < minY) minY = pos.y;
+          if (pos.y + ph > maxY) maxY = pos.y + ph;
+        }
+
+        var chainW = maxX - minX + 20;
+        var chainH = maxY - minY + 20;
+
+        var html = '<div class="domino-board-canvas" style="width:' + chainW + 'px;height:' + chainH + 'px;">';
+        for (var k = 0; k < positions.length; k++) {
+          var tp = positions[k];
+          var left = tp.x - minX + 10;
+          var top = tp.y - minY + 10;
+          html += '<div class="dtile-board" style="left:' + left + 'px;top:' + top + 'px;">';
+          html += renderDominoTile(tp.a, tp.b, tp.orient, '');
+          html += '</div>';
+        }
+        html += '</div>';
+        return html;
+      }
+
+      function selectTile(idx) {
+        selectedTileIndex = selectedTileIndex === idx ? null : idx;
+        if (lastState && sendActionFn) render(lastState, sendActionFn, DominoUI._gameData);
+      }
+      function playTile(side) {
+        if (selectedTileIndex === null || !sendActionFn) return;
+        sendActionFn({ type: 'play', tileIndex: selectedTileIndex, side: side });
+        selectedTileIndex = null;
+      }
       function drawTile() { if (sendActionFn) sendActionFn({ type: 'draw' }); }
       function passTurn() { if (sendActionFn) sendActionFn({ type: 'pass' }); }
 
-      return { render: render, selectTile: selectTile, playTile: playTile, drawTile: drawTile, passTurn: passTurn };
+      return {
+        render: function(state, sendAction, gd) { DominoUI._gameData = gd; render(state, sendAction, gd); },
+        selectTile: selectTile, playTile: playTile, drawTile: drawTile, passTurn: passTurn,
+        _gameData: null
+      };
     })();
 
     // ════════════════════════════════════════
@@ -591,6 +804,7 @@
       var currentGame = null;
       var myPlayerIndex = null;
       var gameState = null;
+      var currentGameData = null;
       var currentBalance = 0;
       var escrowAddress = null;
       var solConnection = null;
@@ -812,22 +1026,34 @@
       function onGameStart(data) {
         currentGame = data.gameType;
         myPlayerIndex = data.playerIndex;
-        document.getElementById('game-type-label').textContent = data.gameType.toUpperCase();
-        document.getElementById('game-bet-label').textContent = data.betAmount + ' SOL';
-        document.getElementById('player1-label').textContent = data.players[0].username;
-        document.getElementById('player2-label').textContent = data.players[1].username;
-        document.getElementById('player1-label').style.color = data.playerIndex === 0 ? '#8b5cf6' : '';
-        document.getElementById('player2-label').style.color = data.playerIndex === 1 ? '#8b5cf6' : '';
+        currentGameData = data;
+
+        var topbar = document.querySelector('.game-topbar');
+        if (data.gameType === 'domino') {
+          topbar.style.display = 'none';
+        } else {
+          topbar.style.display = '';
+          document.getElementById('game-type-label').textContent = data.gameType.toUpperCase();
+          document.getElementById('game-bet-label').textContent = data.betAmount + ' SOL';
+          document.getElementById('player1-label').textContent = data.players[0].username;
+          document.getElementById('player2-label').textContent = data.players[1].username;
+          document.getElementById('player1-label').style.color = data.playerIndex === 0 ? '#8b5cf6' : '';
+          document.getElementById('player2-label').style.color = data.playerIndex === 1 ? '#8b5cf6' : '';
+        }
         showScreen('game');
       }
 
       function onGameState(state) {
         gameState = state;
-        var turnEl = document.getElementById('turn-indicator');
-        turnEl.textContent = state.isMyTurn ? 'YOUR TURN' : "OPPONENT'S TURN";
-        turnEl.className = 'turn-indicator ' + (state.isMyTurn ? 'my-turn' : 'their-turn');
-        if (state.gameType === 'domino') DominoUI.render(state, sendAction);
-        else if (state.gameType === 'tictactoe') TicTacToeUI.render(state, sendAction);
+
+        if (state.gameType === 'domino') {
+          DominoUI.render(state, sendAction, currentGameData);
+        } else {
+          var turnEl = document.getElementById('turn-indicator');
+          turnEl.textContent = state.isMyTurn ? 'YOUR TURN' : "OPPONENT'S TURN";
+          turnEl.className = 'turn-indicator ' + (state.isMyTurn ? 'my-turn' : 'their-turn');
+          if (state.gameType === 'tictactoe') TicTacToeUI.render(state, sendAction);
+        }
       }
 
       function sendAction(action) { if (socket) socket.emit('game_action', action); }
@@ -853,7 +1079,9 @@
       function setupGameOverlay() {
         document.getElementById('btn-back-lobby').addEventListener('click', function() {
           document.getElementById('overlay-gameover').classList.add('hidden');
-          currentGame = null; gameState = null;
+          currentGame = null; gameState = null; currentGameData = null;
+          document.querySelector('.game-topbar').style.display = '';
+          document.getElementById('game-controls').style.display = '';
           showScreen('lobby');
           if (socket) socket.emit('get_lobby');
           refreshBalance();
