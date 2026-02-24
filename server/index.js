@@ -191,6 +191,7 @@ io.on('connection', (socket) => {
       walletAddress,
       displayName: displayName || walletAddress.slice(0, 6),
       escrowAddress: ESCROW_ADDRESS,
+      testMode: TEST_MODE,
     });
     broadcastLobby();
   });

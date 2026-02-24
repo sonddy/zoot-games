@@ -2260,6 +2260,7 @@
       var currentBalance = 0;
       var escrowAddress = null;
       var solConnection = null;
+      var isTestMode = false;
 
       function showScreen(name) {
         var all = ['connect','lobby','waiting','game'];
@@ -2321,6 +2322,7 @@
 
         socket.on('registered', function(data) {
           escrowAddress = data.escrowAddress;
+          isTestMode = !!data.testMode;
           document.getElementById('connected-wallet-addr').textContent = data.walletAddress;
           document.getElementById('wallet-display').textContent = PhantomWallet.shortenAddress(data.walletAddress);
           showScreen('lobby');
@@ -2406,11 +2408,25 @@
               var betInput = card.querySelector('.bet-amount-input');
               var betAmount = parseFloat(betInput.value);
               if (!betAmount || betAmount <= 0) { showToast('Enter a bet amount', 'error'); betInput.focus(); return; }
-              if (betAmount > currentBalance) { showToast('Not enough SOL in your wallet!', 'error'); return; }
               if (!escrowAddress) { showToast('Server not ready, try again', 'error'); return; }
 
               var btn = this;
               btn.disabled = true;
+
+              var payload = { gameType: gameType, betAmount: betAmount };
+              var activeGrid = card.querySelector('.grid-btn.active');
+              if (activeGrid) payload.gridSize = parseInt(activeGrid.dataset.grid);
+
+              if (isTestMode) {
+                payload.txSignature = 'test_' + Date.now();
+                socket.emit('find_match', payload);
+                btn.disabled = false;
+                btn.textContent = 'Find Match';
+                return;
+              }
+
+              if (betAmount > currentBalance) { showToast('Not enough SOL in your wallet!', 'error'); btn.disabled = false; return; }
+
               btn.textContent = 'Confirm in Phantom...';
 
               try {
@@ -2441,10 +2457,7 @@
 
                 await solConnection.confirmTransaction(signature, 'confirmed');
 
-                var payload = { gameType: gameType, betAmount: betAmount, txSignature: signature };
-                var activeGrid = card.querySelector('.grid-btn.active');
-                if (activeGrid) payload.gridSize = parseInt(activeGrid.dataset.grid);
-
+                payload.txSignature = signature;
                 socket.emit('find_match', payload);
                 btn.disabled = false;
                 btn.textContent = 'Find Match';
@@ -2536,11 +2549,22 @@
       }
 
       async function acceptBet(betId, betAmount, btn) {
-        if (!socket) return showToast('Not connected', 'error');
-        if (betAmount > currentBalance) return showToast('Not enough SOL in your wallet!', 'error');
+        if (!socket) return showToast('Not connected to server', 'error');
         if (!escrowAddress) return showToast('Server not ready, try again', 'error');
 
         btn.disabled = true;
+
+        if (isTestMode) {
+          btn.textContent = 'Joining...';
+          socket.emit('accept_bet', { betId: betId, txSignature: 'test_accept_' + Date.now() });
+          return;
+        }
+
+        if (betAmount > currentBalance) return (function() {
+          showToast('Not enough SOL in your wallet!', 'error');
+          btn.disabled = false;
+        })();
+
         btn.textContent = 'Confirm in Phantom...';
 
         try {
