@@ -451,6 +451,12 @@
       border: none; color: #fff; font-size: 1.2rem; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
     }
+    .mancala-flying-seed {
+      position: fixed; width: 12px; height: 12px; border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #f5d98a, #c9a96e);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5); z-index: 200;
+      pointer-events: none; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
     @media (max-width: 480px) {
       .mancala-board { border-radius: 40px; padding: 8px 4px; gap: 4px; }
       .mancala-store { min-width: 36px; min-height: 80px; border-radius: 30px; }
@@ -458,6 +464,7 @@
       .mancala-pit { min-width: 32px; }
       .mancala-seed { width: 6px; height: 6px; }
       .mancala-seeds { max-width: 28px; }
+      .mancala-flying-seed { width: 9px; height: 9px; }
     }
 
     /* ═══ CHECKERS ═══ */
@@ -913,6 +920,54 @@
   <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
   <script>
     // ════════════════════════════════════════
+    // GAME SOUNDS (Web Audio API)
+    // ════════════════════════════════════════
+    var GameSounds = (function() {
+      var ctx = null;
+      function getCtx() {
+        if (!ctx) { try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {} }
+        return ctx;
+      }
+      function tone(freq, dur, type, vol) {
+        var c = getCtx(); if (!c) return;
+        var o = c.createOscillator(), g = c.createGain();
+        o.type = type || 'sine'; o.frequency.value = freq;
+        g.gain.setValueAtTime(vol || 0.15, c.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
+        o.connect(g); g.connect(c.destination);
+        o.start(c.currentTime); o.stop(c.currentTime + dur);
+      }
+      function noise(dur, vol) {
+        var c = getCtx(); if (!c) return;
+        var buf = c.createBuffer(1, c.sampleRate * dur, c.sampleRate);
+        var data = buf.getChannelData(0);
+        for (var i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.3;
+        var src = c.createBufferSource(); src.buffer = buf;
+        var g = c.createGain(); g.gain.setValueAtTime(vol || 0.08, c.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
+        var filt = c.createBiquadFilter(); filt.type = 'bandpass'; filt.frequency.value = 800; filt.Q.value = 1;
+        src.connect(filt); filt.connect(g); g.connect(c.destination);
+        src.start(c.currentTime); src.stop(c.currentTime + dur);
+      }
+      return {
+        place: function() { tone(600, 0.1, 'sine', 0.12); },
+        capture: function() { tone(800, 0.08, 'square', 0.08); setTimeout(function(){ tone(1000, 0.1, 'square', 0.08); }, 80); },
+        seedDrop: function() { tone(400 + Math.random() * 200, 0.08, 'triangle', 0.1); noise(0.05, 0.06); },
+        seedStore: function() { tone(700, 0.12, 'sine', 0.15); tone(900, 0.12, 'sine', 0.1); },
+        move: function() { noise(0.06, 0.07); tone(500, 0.08, 'sine', 0.1); },
+        jump: function() { tone(500, 0.06, 'square', 0.1); setTimeout(function(){ tone(650, 0.08, 'square', 0.1); }, 60); },
+        king: function() { tone(600, 0.15, 'sine', 0.15); setTimeout(function(){ tone(800, 0.15, 'sine', 0.15); }, 100); setTimeout(function(){ tone(1000, 0.2, 'sine', 0.15); }, 200); },
+        check: function() { tone(900, 0.15, 'sawtooth', 0.08); setTimeout(function(){ tone(700, 0.15, 'sawtooth', 0.08); }, 120); },
+        win: function() { [523,659,784,1047].forEach(function(f,i){ setTimeout(function(){ tone(f, 0.2, 'sine', 0.15); }, i*120); }); },
+        lose: function() { [400,350,300,250].forEach(function(f,i){ setTimeout(function(){ tone(f, 0.25, 'sawtooth', 0.06); }, i*150); }); },
+        turn: function() { tone(880, 0.06, 'sine', 0.08); },
+        click: function() { tone(1200, 0.04, 'sine', 0.06); },
+        resign: function() { tone(300, 0.3, 'sawtooth', 0.06); tone(200, 0.4, 'sawtooth', 0.04); },
+        timer: function() { tone(1000, 0.05, 'square', 0.1); },
+      };
+    })();
+
+    // ════════════════════════════════════════
     // PIP RENDERER
     // ════════════════════════════════════════
     var PipLayouts = {
@@ -1251,6 +1306,7 @@
       }
       function playTile(side) {
         if (selectedTileIndex === null || !sendActionFn) return;
+        GameSounds.place();
         sendActionFn({ type: 'play', tileIndex: selectedTileIndex, side: side });
         selectedTileIndex = null;
       }
@@ -1320,7 +1376,7 @@
           : '<p style="text-align:center;color:#9ca3af;">Waiting for opponent to play...</p>';
       }
 
-      function placeAt(cell) { if (sendActionFn) sendActionFn({ type: 'place', cell: cell }); }
+      function placeAt(cell) { GameSounds.place(); if (sendActionFn) sendActionFn({ type: 'place', cell: cell }); }
       return { render: render, placeAt: placeAt };
     })();
 
@@ -1331,6 +1387,9 @@
       var sendActionFn = null;
       var menuOpen = false;
       var timerInterval = null;
+      var animating = false;
+      var lastState = null;
+      var lastGameData = null;
 
       function startTimer(state) {
         if (timerInterval) clearInterval(timerInterval);
@@ -1350,12 +1409,21 @@
         }, 500);
       }
 
+      function pitDataAttr(pitIdx) { return 'data-pit="' + pitIdx + '"'; }
+
       function render(state, sendAction, gameData) {
+        if (animating) { lastState = state; lastGameData = gameData; sendActionFn = sendAction; return; }
         sendActionFn = sendAction;
+        lastState = state;
+        lastGameData = gameData;
+        _renderBoard(state, gameData);
+      }
+
+      function _renderBoard(state, gameData) {
         var area = document.getElementById('game-area');
         var controls = document.getElementById('game-controls');
         var pits = state.pits;
-        var isMyTurn = state.isMyTurn;
+        var isMyTurn = state.isMyTurn && !animating;
         var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
         var myName = (gameData && gameData.players) ? gameData.players[state.playerIndex].username : 'You';
 
@@ -1389,7 +1457,7 @@
           myPits = [7, 8, 9, 10, 11, 12];
         }
 
-        h += '<div class="mancala-store" style="grid-column:1;grid-row:1/3;">';
+        h += '<div class="mancala-store" ' + pitDataAttr(oppStore) + ' style="grid-column:1;grid-row:1/3;">';
         h += '<div class="mancala-store-label">' + oppName.charAt(0) + '</div>';
         h += '<div class="mancala-store-count">' + pits[oppStore] + '</div>';
         h += renderSeeds(pits[oppStore], true);
@@ -1397,7 +1465,7 @@
 
         for (var i = 0; i < 6; i++) {
           var pi = oppPits[i];
-          h += '<div class="mancala-pit disabled" style="grid-column:' + (i + 2) + ';grid-row:1;">';
+          h += '<div class="mancala-pit disabled" ' + pitDataAttr(pi) + ' style="grid-column:' + (i + 2) + ';grid-row:1;">';
           h += renderSeeds(pits[pi], false);
           h += '<div class="mancala-pit-count">' + pits[pi] + '</div></div>';
         }
@@ -1407,12 +1475,12 @@
           var canClick = isMyTurn && pits[pj] > 0 && !state.gameOver;
           var cls = canClick ? '' : ' disabled';
           var click = canClick ? ' onclick="MancalaUI.sow(' + pj + ')"' : '';
-          h += '<div class="mancala-pit' + cls + '" style="grid-column:' + (j + 2) + ';grid-row:2;"' + click + '>';
+          h += '<div class="mancala-pit' + cls + '" ' + pitDataAttr(pj) + ' style="grid-column:' + (j + 2) + ';grid-row:2;"' + click + '>';
           h += renderSeeds(pits[pj], false);
           h += '<div class="mancala-pit-count">' + pits[pj] + '</div></div>';
         }
 
-        h += '<div class="mancala-store" style="grid-column:8;grid-row:1/3;">';
+        h += '<div class="mancala-store" ' + pitDataAttr(myStore) + ' style="grid-column:8;grid-row:1/3;">';
         h += '<div class="mancala-store-label">' + myName.charAt(0) + '</div>';
         h += '<div class="mancala-store-count">' + pits[myStore] + '</div>';
         h += renderSeeds(pits[myStore], true);
@@ -1443,14 +1511,105 @@
         return h;
       }
 
-      function sow(pit) { if (sendActionFn) sendActionFn({ type: 'sow', pit: pit }); }
+      function getPitCenter(pitIdx) {
+        var el = document.querySelector('[data-pit="' + pitIdx + '"]');
+        if (!el) return null;
+        var r = el.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }
+
+      function sow(pit) {
+        if (!sendActionFn || animating) return;
+        if (!lastState) { sendActionFn({ type: 'sow', pit: pit }); return; }
+
+        var pits = lastState.pits.slice();
+        var seeds = pits[pit];
+        if (seeds === 0) return;
+
+        var playerIndex = lastState.playerIndex;
+        var oppStoreIdx = playerIndex === 0 ? 13 : 6;
+
+        var path = [];
+        var pos = pit;
+        pits[pit] = 0;
+        for (var i = 0; i < seeds; i++) {
+          pos = (pos + 1) % 14;
+          if (pos === oppStoreIdx) pos = (pos + 1) % 14;
+          path.push(pos);
+          pits[pos]++;
+        }
+
+        var fromCenter = getPitCenter(pit);
+        if (!fromCenter) { sendActionFn({ type: 'sow', pit: pit }); return; }
+
+        animating = true;
+        _renderBoard(Object.assign({}, lastState, { pits: lastState.pits.slice() }), lastGameData);
+
+        var srcEl = document.querySelector('[data-pit="' + pit + '"]');
+        if (srcEl) {
+          var seedEls = srcEl.querySelectorAll('.mancala-seed');
+          for (var s = 0; s < seedEls.length; s++) seedEls[s].style.opacity = '0.3';
+          var countEl = srcEl.querySelector('.mancala-pit-count');
+          if (countEl) countEl.textContent = '0';
+        }
+
+        var delay = 0;
+        var INTERVAL = 180;
+        var myStore = playerIndex === 0 ? 6 : 13;
+
+        for (var j = 0; j < path.length; j++) {
+          (function(targetPit, idx) {
+            setTimeout(function() {
+              var to = getPitCenter(targetPit);
+              if (!to) { finishIfLast(idx); return; }
+
+              var seed = document.createElement('div');
+              seed.className = 'mancala-flying-seed';
+              seed.style.left = fromCenter.x - 6 + 'px';
+              seed.style.top = fromCenter.y - 6 + 'px';
+              document.body.appendChild(seed);
+
+              requestAnimationFrame(function() {
+                seed.style.left = (to.x - 6 + (Math.random() - 0.5) * 10) + 'px';
+                seed.style.top = (to.y - 6 + (Math.random() - 0.5) * 10) + 'px';
+              });
+
+              if (targetPit === myStore) GameSounds.seedStore();
+              else GameSounds.seedDrop();
+
+              setTimeout(function() {
+                if (seed.parentNode) seed.parentNode.removeChild(seed);
+
+                var tgtEl = document.querySelector('[data-pit="' + targetPit + '"]');
+                if (tgtEl) {
+                  var sc = tgtEl.querySelector('.mancala-store-count') || tgtEl.querySelector('.mancala-pit-count');
+                  if (sc) sc.textContent = parseInt(sc.textContent || '0') + 1;
+                }
+
+                finishIfLast(idx);
+              }, 280);
+            }, delay);
+          })(path[j], j);
+          delay += INTERVAL;
+        }
+
+        function finishIfLast(idx) {
+          if (idx === path.length - 1) {
+            setTimeout(function() {
+              animating = false;
+              if (sendActionFn) sendActionFn({ type: 'sow', pit: pit });
+            }, 200);
+          }
+        }
+      }
+
       function quit() { if (confirm('Leave? You forfeit.')) window.location.reload(); }
       function resign(e) {
         if (e) { e.stopPropagation(); e.preventDefault(); }
         menuOpen = false;
-        if (confirm('Resign this game?')) { if (sendActionFn) sendActionFn({ type: 'resign' }); }
+        if (confirm('Resign this game?')) { GameSounds.resign(); if (sendActionFn) sendActionFn({ type: 'resign' }); }
       }
-      function toggleMenu(e) { if (e) e.stopPropagation(); menuOpen = !menuOpen; }
+      function toggleMenu(e) { if (e) e.stopPropagation(); menuOpen = !menuOpen; GameSounds.click(); }
 
       document.addEventListener('click', function() { menuOpen = false; });
 
@@ -1621,6 +1780,8 @@
 
       function moveTo(sq) {
         if (sendActionFn && selectedSquare !== null) {
+          var isJump = Math.abs(Math.floor(selectedSquare/8) - Math.floor(sq/8)) === 2;
+          if (isJump) GameSounds.jump(); else GameSounds.move();
           sendActionFn({ type: 'move', from: selectedSquare, to: sq });
           selectedSquare = null;
           legalMoves = [];
@@ -1631,9 +1792,9 @@
       function resign(e) {
         if (e) { e.stopPropagation(); e.preventDefault(); }
         menuOpen = false;
-        if (confirm('Resign this game?')) { if (sendActionFn) sendActionFn({ type: 'resign' }); }
+        if (confirm('Resign this game?')) { GameSounds.resign(); if (sendActionFn) sendActionFn({ type: 'resign' }); }
       }
-      function toggleMenu(e) { if (e) e.stopPropagation(); menuOpen = !menuOpen; }
+      function toggleMenu(e) { if (e) e.stopPropagation(); menuOpen = !menuOpen; GameSounds.click(); }
 
       document.addEventListener('click', function() { menuOpen = false; selectedSquare = null; legalMoves = []; });
 
@@ -1867,12 +2028,15 @@
             return;
           }
         }
+        var captured = lastState.board[sq];
+        if (captured) GameSounds.capture(); else GameSounds.move();
         if (sendActionFn) sendActionFn({ type: 'move', from: selectedSquare, to: sq });
         selectedSquare = null; legalMoves = [];
       }
 
       function promote(pieceType) {
         if (promotionPending && sendActionFn) {
+          GameSounds.king();
           sendActionFn({ type: 'move', from: promotionPending.from, to: promotionPending.to, promotion: pieceType });
           promotionPending = null; selectedSquare = null; legalMoves = [];
         }
@@ -1996,14 +2160,14 @@
         if (!state.gameOver) startTimer(state);
       }
 
-      function placeAt(cell) { if (sendActionFn) sendActionFn({ type: 'place', cell: cell }); }
+      function placeAt(cell) { GameSounds.place(); if (sendActionFn) sendActionFn({ type: 'place', cell: cell }); }
       function quit() { if (confirm('Leave? You forfeit.')) window.location.reload(); }
       function resign(e) {
         if (e) { e.stopPropagation(); e.preventDefault(); }
         menuOpen = false;
-        if (confirm('Resign this game?')) { if (sendActionFn) sendActionFn({ type: 'resign' }); }
+        if (confirm('Resign this game?')) { GameSounds.resign(); if (sendActionFn) sendActionFn({ type: 'resign' }); }
       }
-      function toggleMenu(e) { if (e) e.stopPropagation(); menuOpen = !menuOpen; }
+      function toggleMenu(e) { if (e) e.stopPropagation(); menuOpen = !menuOpen; GameSounds.click(); }
 
       document.addEventListener('click', function() { menuOpen = false; });
 
@@ -2261,7 +2425,10 @@
       }
 
       function onGameState(state) {
+        var prevTurn = gameState ? gameState.isMyTurn : null;
         gameState = state;
+        if (prevTurn !== null && state.isMyTurn && !prevTurn) GameSounds.turn();
+        if (state.inCheck) GameSounds.check();
 
         if (state.gameType === 'domino') {
           DominoUI.render(state, sendAction, currentGameData);
@@ -2291,12 +2458,14 @@
         if (data.isDraw) {
           title.textContent = 'DRAW!'; title.style.color = '#f59e0b';
           detail.textContent = 'Nobody wins — bets returned.'; payout.textContent = '';
+          GameSounds.turn();
         } else {
           var iWon = data.winnerWallet === PhantomWallet.getPublicKey();
           title.textContent = iWon ? 'YOU WIN!' : 'YOU LOSE';
           title.style.color = iWon ? '#10b981' : '#ef4444';
           detail.textContent = data.reason ? data.winner + ' wins — ' + data.reason : data.winner + ' wins!';
           payout.textContent = iWon ? '+' + data.payout.toFixed(3) + ' SOL' : '';
+          if (iWon) GameSounds.win(); else GameSounds.lose();
         }
         overlay.classList.remove('hidden');
       }

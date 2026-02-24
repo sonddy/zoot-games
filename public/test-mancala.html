@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ZG Mancala — Test Play</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  :root {
+    --bg: #0f172a; --bg2: #1e293b; --surface: #334155; --surface2: #475569;
+    --text: #f1f5f9; --text2: #94a3b8; --accent: #8b5cf6; --accent2: #a78bfa;
+    --green: #22c55e; --red: #ef4444; --gold: #f59e0b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; min-height: 100vh; }
+
+  #start-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 1rem; }
+  #start-screen h1 { font-size: 1.5rem; color: var(--accent2); }
+  #start-screen p { color: var(--text2); font-size: 0.9rem; max-width: 400px; text-align: center; }
+  #start-btn { background: #d97706; color: #fff; border: none; border-radius: 12px; padding: 1rem 2.5rem; font-size: 1.1rem; font-weight: 700; cursor: pointer; font-family: inherit; }
+  #start-btn:hover { opacity: 0.9; }
+
+  .screen { display: none; width: 100%; height: 100vh; }
+  .screen.active { display: flex; }
+
+  .mancala-screen {
+    display: flex; flex-direction: column; position: fixed; inset: 0; z-index: 10;
+    background: linear-gradient(180deg, #5b3a1a 0%, #8b6914 30%, #a07d2e 50%, #8b6914 70%, #5b3a1a 100%);
+    font-family: 'Inter', sans-serif; color: #fff; overflow: hidden;
+  }
+  .mancala-topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.5rem 1rem; background: rgba(0,0,0,0.3);
+  }
+  .mancala-topbar .back-btn {
+    width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.12);
+    border: none; color: #fff; font-size: 1.2rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mancala-player-info { text-align: center; }
+  .mancala-player-info .name { font-weight: 700; font-size: 0.9rem; }
+  .mancala-player-info .score { font-size: 1.5rem; font-weight: 800; color: #fbbf24; }
+  .mancala-timer { height: 4px; background: rgba(0,0,0,0.3); }
+  .mancala-timer-fill { height: 100%; border-radius: 0 2px 2px 0; transition: width 1s linear; }
+  .mancala-timer-fill.green { background: linear-gradient(90deg, #22c55e, #4ade80); }
+  .mancala-timer-fill.yellow { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+  .mancala-timer-fill.red { background: linear-gradient(90deg, #ef4444, #f87171); }
+  .mancala-board-wrap {
+    flex: 1; display: flex; align-items: center; justify-content: center; padding: 0.5rem;
+  }
+  .mancala-board {
+    display: grid; grid-template-columns: auto repeat(6, 1fr) auto;
+    grid-template-rows: 1fr 1fr; gap: 6px;
+    background: linear-gradient(135deg, #654321, #8B7355);
+    border: 4px solid #4a3520; border-radius: 60px; padding: 12px 8px;
+    box-shadow: inset 0 4px 20px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.4);
+    width: 100%; max-width: 540px;
+  }
+  .mancala-store {
+    grid-row: 1 / 3; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse, #3a2a10 0%, #2a1a08 100%);
+    border-radius: 40px; min-width: 48px; min-height: 100px; padding: 8px;
+    box-shadow: inset 0 3px 10px rgba(0,0,0,0.6); position: relative;
+  }
+  .mancala-store-count {
+    font-size: 1.6rem; font-weight: 800; color: #fbbf24;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  }
+  .mancala-store-label { font-size: 0.6rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px; }
+  .mancala-pit {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(circle, #3a2a10 0%, #2a1a08 100%);
+    border-radius: 50%; aspect-ratio: 1; min-width: 38px;
+    box-shadow: inset 0 3px 8px rgba(0,0,0,0.6); cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s; position: relative;
+  }
+  .mancala-pit:hover { transform: scale(1.08); box-shadow: inset 0 3px 8px rgba(0,0,0,0.6), 0 0 12px rgba(251,191,36,0.4); }
+  .mancala-pit.disabled { cursor: default; opacity: 0.6; }
+  .mancala-pit.disabled:hover { transform: none; box-shadow: inset 0 3px 8px rgba(0,0,0,0.6); }
+  .mancala-seeds {
+    display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; align-items: center;
+    max-width: 36px; padding: 2px;
+  }
+  .mancala-seed {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #c9a96e, #8b6914);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+  }
+  .mancala-pit-count {
+    font-size: 0.7rem; font-weight: 700; color: rgba(255,255,255,0.7); margin-top: 2px;
+  }
+  .mancala-turn-pill {
+    display: inline-block; padding: 0.3rem 1.2rem; border-radius: 999px;
+    font-size: 0.85rem; font-weight: 700; margin-top: 0.3rem;
+  }
+  .mancala-turn-pill.active { background: #d97706; color: #fff; }
+  .mancala-turn-pill.waiting { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); }
+  .mancala-menu-wrap { position: relative; }
+  .mancala-menu-btn {
+    width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.12);
+    border: none; color: #fff; font-size: 1.2rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .domino-dropdown { display: none; position: absolute; top: 44px; right: 0; background: #654321; border: 1.5px solid #8b6914; border-radius: 10px; min-width: 140px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 100; }
+  .domino-dropdown.open { display: block; }
+  .domino-dropdown-item { padding: 0.7rem 1rem; color: #fff; font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; background: none; width: 100%; text-align: left; font-family: inherit; }
+  .domino-dropdown-item:hover { background: rgba(255,255,255,0.12); }
+  .domino-dropdown-item.danger { color: #f87171; }
+
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+  .overlay.hidden { display: none; }
+  .overlay-box { background: #3a2a10; border: 2px solid #8b6914; border-radius: 16px; padding: 2.5rem; text-align: center; max-width: 400px; width: 90%; color: #fff; }
+  .overlay-box h2 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+  .overlay-box p { color: #c9a96e; margin-bottom: 0.5rem; }
+  .payout-text { font-size: 1.3rem; font-weight: 700; color: #fbbf24; margin: 1rem 0; }
+
+  @media (max-width: 480px) {
+    .mancala-board { border-radius: 40px; padding: 8px 4px; gap: 4px; }
+    .mancala-store { min-width: 36px; min-height: 80px; border-radius: 30px; }
+    .mancala-store-count { font-size: 1.2rem; }
+    .mancala-pit { min-width: 32px; }
+    .mancala-seed { width: 6px; height: 6px; }
+    .mancala-seeds { max-width: 28px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="start-screen">
+  <h1>&#127794; ZG Mancala &mdash; Test Play</h1>
+  <p>Click below to start a mancala match. You play as Player 1. A bot auto-plays as Player 2.</p>
+  <button id="start-btn" onclick="startMatch()">Start Mancala Match</button>
+</div>
+
+<div id="game-screen" class="screen">
+  <div id="game-area" style="width:100%;height:100%;"></div>
+</div>
+
+<div id="overlay-gameover" class="overlay hidden">
+  <div class="overlay-box">
+    <h2 id="gameover-title"></h2>
+    <p id="gameover-detail"></p>
+    <div class="payout-text" id="gameover-payout"></div>
+    <button onclick="location.reload()" style="background:#d97706;color:#fff;border:none;border-radius:12px;padding:0.8rem 2rem;font-size:1rem;font-weight:700;cursor:pointer;font-family:inherit;margin-top:1rem;">Play Again</button>
+  </div>
+</div>
+
+<script>
+var sock1, sock2, myGameData;
+
+var MancalaUI = (function() {
+  var sendActionFn = null;
+  var menuOpen = false;
+  var timerInterval = null;
+
+  function startTimer(state) {
+    if (timerInterval) clearInterval(timerInterval);
+    var startRemaining = state.turnRemainingMs || 0;
+    var total = state.turnTimeMs || 20000;
+    var startTs = Date.now();
+    timerInterval = setInterval(function() {
+      var elapsed = Date.now() - startTs;
+      var rem = Math.max(0, startRemaining - elapsed);
+      var pct = (rem / total) * 100;
+      var fill = document.querySelector('.mancala-timer-fill');
+      if (fill) {
+        fill.style.width = pct + '%';
+        fill.className = 'mancala-timer-fill ' + (pct > 50 ? 'green' : pct > 25 ? 'yellow' : 'red');
+      }
+      if (rem <= 0) clearInterval(timerInterval);
+    }, 500);
+  }
+
+  function render(state, sendAction, gameData) {
+    sendActionFn = sendAction;
+    var area = document.getElementById('game-area');
+    var pits = state.pits;
+    var isMyTurn = state.isMyTurn;
+    var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
+    var myName = (gameData && gameData.players) ? gameData.players[state.playerIndex].username : 'You';
+
+    var h = '<div class="mancala-screen">';
+    h += '<div class="mancala-topbar">';
+    h += '<button class="back-btn" onclick="MancalaUI.quit()">&#8592;</button>';
+    h += '<div class="mancala-player-info"><div class="name">' + oppName + '</div>';
+    h += '<div class="score">' + state.scores[1 - state.playerIndex] + '</div></div>';
+    h += '<div class="mancala-menu-wrap"><button class="mancala-menu-btn" onclick="MancalaUI.toggleMenu(event)">&#8942;</button>';
+    h += '<div class="domino-dropdown' + (menuOpen ? ' open' : '') + '">';
+    h += '<button class="domino-dropdown-item danger" onclick="MancalaUI.resign(event)">Resign</button>';
+    h += '</div></div></div>';
+
+    var remaining = state.turnRemainingMs || 0;
+    var total = state.turnTimeMs || 20000;
+    var pct = (remaining / total) * 100;
+    var timerCls = pct > 50 ? 'green' : pct > 25 ? 'yellow' : 'red';
+    h += '<div class="mancala-timer"><div class="mancala-timer-fill ' + timerCls + '" style="width:' + pct + '%;"></div></div>';
+
+    h += '<div class="mancala-board-wrap"><div class="mancala-board">';
+
+    var oppStore, myStore, oppPits, myPits;
+    if (state.playerIndex === 0) {
+      oppStore = 13; myStore = 6;
+      oppPits = [12, 11, 10, 9, 8, 7];
+      myPits = [0, 1, 2, 3, 4, 5];
+    } else {
+      oppStore = 6; myStore = 13;
+      oppPits = [5, 4, 3, 2, 1, 0];
+      myPits = [7, 8, 9, 10, 11, 12];
+    }
+
+    h += '<div class="mancala-store" style="grid-column:1;grid-row:1/3;">';
+    h += '<div class="mancala-store-label">' + oppName.charAt(0) + '</div>';
+    h += '<div class="mancala-store-count">' + pits[oppStore] + '</div>';
+    h += renderSeeds(pits[oppStore], true);
+    h += '</div>';
+
+    for (var i = 0; i < 6; i++) {
+      var pi = oppPits[i];
+      h += '<div class="mancala-pit disabled" style="grid-column:' + (i + 2) + ';grid-row:1;">';
+      h += renderSeeds(pits[pi], false);
+      h += '<div class="mancala-pit-count">' + pits[pi] + '</div></div>';
+    }
+
+    for (var j = 0; j < 6; j++) {
+      var pj = myPits[j];
+      var canClick = isMyTurn && pits[pj] > 0 && !state.gameOver;
+      var cls = canClick ? '' : ' disabled';
+      var click = canClick ? ' onclick="MancalaUI.sow(' + pj + ')"' : '';
+      h += '<div class="mancala-pit' + cls + '" style="grid-column:' + (j + 2) + ';grid-row:2;"' + click + '>';
+      h += renderSeeds(pits[pj], false);
+      h += '<div class="mancala-pit-count">' + pits[pj] + '</div></div>';
+    }
+
+    h += '<div class="mancala-store" style="grid-column:8;grid-row:1/3;">';
+    h += '<div class="mancala-store-label">' + myName.charAt(0) + '</div>';
+    h += '<div class="mancala-store-count">' + pits[myStore] + '</div>';
+    h += renderSeeds(pits[myStore], true);
+    h += '</div>';
+
+    h += '</div></div>';
+
+    h += '<div style="text-align:center;padding:0.5rem;">';
+    h += '<div class="mancala-player-info"><div class="name">' + myName + '</div>';
+    h += '<div class="score">' + state.scores[state.playerIndex] + '</div></div>';
+    var pillCls = isMyTurn ? 'active' : 'waiting';
+    var pillTxt = isMyTurn ? 'Your Turn' : "Opponent's Turn";
+    h += '<div class="mancala-turn-pill ' + pillCls + '">' + pillTxt + '</div>';
+    h += '</div></div>';
+
+    area.innerHTML = h;
+    if (!state.gameOver) startTimer(state);
+  }
+
+  function renderSeeds(count, isStore) {
+    if (count === 0) return '';
+    var max = isStore ? 24 : 10;
+    var show = Math.min(count, max);
+    var h = '<div class="mancala-seeds">';
+    for (var i = 0; i < show; i++) h += '<div class="mancala-seed"></div>';
+    h += '</div>';
+    return h;
+  }
+
+  function sow(pit) { if (sendActionFn) sendActionFn({ type: 'sow', pit: pit }); }
+  function quit() { if (confirm('Leave?')) location.reload(); }
+  function resign(e) {
+    if (e) { e.stopPropagation(); e.preventDefault(); }
+    menuOpen = false;
+    if (confirm('Resign?')) { if (sendActionFn) sendActionFn({ type: 'resign' }); }
+  }
+  function toggleMenu(e) { if (e) e.stopPropagation(); menuOpen = !menuOpen; }
+  document.addEventListener('click', function() { menuOpen = false; });
+
+  return { render: render, sow: sow, quit: quit, resign: resign, toggleMenu: toggleMenu };
+})();
+
+function startMatch() {
+  document.getElementById('start-screen').style.display = 'none';
+  document.getElementById('game-screen').classList.add('active');
+
+  sock1 = io();
+  sock2 = io();
+
+  sock1.on('connect', function() {
+    sock1.emit('register', { walletAddress: 'MancalaP1_' + Date.now(), displayName: 'You' });
+  });
+  sock2.on('connect', function() {
+    sock2.emit('register', { walletAddress: 'MancalaBot_' + Date.now(), displayName: 'Bot' });
+  });
+
+  sock1.on('registered', function() {
+    sock1.emit('find_match', { gameType: 'mancala', betAmount: 0.001, txSignature: 'test_m1_' + Date.now() });
+  });
+  sock2.on('registered', function() {
+    sock2.emit('find_match', { gameType: 'mancala', betAmount: 0.001, txSignature: 'test_m2_' + Date.now() });
+  });
+
+  sock1.on('game_start', function(data) { myGameData = data; });
+  sock1.on('game_state', function(state) {
+    MancalaUI.render(state, function(action) { sock1.emit('game_action', action); }, myGameData);
+  });
+
+  sock2.on('game_state', function(state) {
+    if (state.isMyTurn && !state.gameOver) {
+      setTimeout(function() { botPlay(state); }, 800);
+    }
+  });
+
+  sock1.on('game_over', function(data) {
+    var title = document.getElementById('gameover-title');
+    var detail = document.getElementById('gameover-detail');
+    if (data.isDraw) {
+      title.textContent = 'Draw!';
+      detail.textContent = 'Equal seeds in stores.';
+    } else if (data.winner === 'You') {
+      title.textContent = 'You Win! \u{1F389}';
+      detail.textContent = 'You collected more seeds!';
+    } else {
+      title.textContent = 'You Lose!';
+      detail.textContent = 'Bot collected more seeds.';
+    }
+    document.getElementById('gameover-payout').textContent = '';
+    document.getElementById('overlay-gameover').classList.remove('hidden');
+  });
+}
+
+function botPlay(state) {
+  var pits = state.pits;
+  var myStore = state.playerIndex === 0 ? 6 : 13;
+  var range = state.playerIndex === 0 ? [0, 5] : [7, 12];
+
+  for (var i = range[0]; i <= range[1]; i++) {
+    if (pits[i] === 0) continue;
+    var landing = (i + pits[i]) % 14;
+    if (landing === myStore) {
+      sock2.emit('game_action', { type: 'sow', pit: i });
+      return;
+    }
+  }
+
+  var best = -1, bestSeeds = 0;
+  for (var j = range[0]; j <= range[1]; j++) {
+    if (pits[j] > bestSeeds) { bestSeeds = pits[j]; best = j; }
+  }
+  if (best >= 0) sock2.emit('game_action', { type: 'sow', pit: best });
+}
+</script>
+</body>
+</html>

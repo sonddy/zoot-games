@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ZG Morpion — Test Play</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  :root {
+    --bg: #0f172a; --bg2: #1e293b; --surface: #334155; --surface2: #475569;
+    --text: #f1f5f9; --text2: #94a3b8; --accent: #8b5cf6; --accent2: #a78bfa;
+    --green: #22c55e; --red: #ef4444; --gold: #f59e0b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; min-height: 100vh; }
+
+  #start-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 1rem; }
+  #start-screen h1 { font-size: 1.5rem; color: var(--accent2); }
+  #start-screen p { color: var(--text2); font-size: 0.9rem; max-width: 400px; text-align: center; }
+  #start-btn { background: var(--accent); color: #fff; border: none; border-radius: 12px; padding: 1rem 2.5rem; font-size: 1.1rem; font-weight: 700; cursor: pointer; font-family: inherit; }
+  #start-btn:hover { opacity: 0.9; }
+
+  .screen { display: none; width: 100%; height: 100vh; }
+  .screen.active { display: flex; }
+
+  .morpion-screen {
+    display: flex; flex-direction: column; position: fixed; inset: 0; z-index: 10;
+    background: linear-gradient(180deg, #0a192f 0%, #112240 40%, #1a365d 100%);
+    font-family: 'Inter', sans-serif; color: #fff; overflow: hidden;
+  }
+  .morpion-topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.5rem 1rem; background: rgba(0,0,0,0.3);
+  }
+  .morpion-topbar .back-btn {
+    width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.12);
+    border: none; color: #fff; font-size: 1.2rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .morpion-player-info { text-align: center; }
+  .morpion-player-info .name { font-weight: 700; font-size: 0.9rem; }
+  .morpion-player-info .symbol { font-size: 1.2rem; font-weight: 800; }
+  .morpion-player-info .symbol.x-color { color: #ef4444; }
+  .morpion-player-info .symbol.o-color { color: #3b82f6; }
+  .morpion-timer { height: 4px; background: rgba(0,0,0,0.3); }
+  .morpion-timer-fill { height: 100%; border-radius: 0 2px 2px 0; transition: width 1s linear; }
+  .morpion-timer-fill.green { background: linear-gradient(90deg, #22c55e, #4ade80); }
+  .morpion-timer-fill.yellow { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+  .morpion-timer-fill.red { background: linear-gradient(90deg, #ef4444, #f87171); }
+  .morpion-board-wrap {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    padding: 0.5rem; overflow: hidden;
+  }
+  .morpion-board {
+    display: grid; gap: 0;
+    width: min(95vw, 80vh - 120px, 520px); aspect-ratio: 1;
+    background: #e8dcc8;
+    border: 2px solid #8b6914; border-radius: 4px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  .morpion-cell {
+    aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+    border: 0.5px solid rgba(0,0,0,0.2); cursor: pointer;
+    transition: background 0.12s; position: relative;
+    font-weight: 800; user-select: none;
+  }
+  .morpion-cell:hover { background: rgba(0,0,0,0.08); }
+  .morpion-cell.taken { cursor: default; }
+  .morpion-cell.taken:hover { background: transparent; }
+  .morpion-cell.last-move { background: rgba(251,191,36,0.25); }
+  .morpion-cell.win-cell { background: rgba(34,197,94,0.35); }
+  .morpion-cell .x-mark { color: #dc2626; font-size: min(3vw, 1.4rem); line-height: 1; }
+  .morpion-cell .o-mark { color: #2563eb; font-size: min(3vw, 1.4rem); line-height: 1; }
+  .morpion-turn-pill {
+    display: inline-block; padding: 0.3rem 1.2rem; border-radius: 999px;
+    font-size: 0.85rem; font-weight: 700; margin-top: 0.3rem;
+  }
+  .morpion-turn-pill.active { background: #8b5cf6; color: #fff; }
+  .morpion-turn-pill.waiting { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); }
+  .morpion-menu-wrap { position: relative; }
+  .morpion-menu-btn {
+    width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.12);
+    border: none; color: #fff; font-size: 1.2rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .domino-dropdown { display: none; position: absolute; top: 44px; right: 0; background: #1e3a8a; border: 1.5px solid #3b82f6; border-radius: 10px; min-width: 140px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 100; }
+  .domino-dropdown.open { display: block; }
+  .domino-dropdown-item { padding: 0.7rem 1rem; color: #fff; font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; background: none; width: 100%; text-align: left; font-family: inherit; }
+  .domino-dropdown-item:hover { background: rgba(255,255,255,0.12); }
+  .domino-dropdown-item.danger { color: #f87171; }
+
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+  .overlay.hidden { display: none; }
+  .overlay-box { background: var(--bg2); border: 1px solid var(--surface2); border-radius: 16px; padding: 2.5rem; text-align: center; max-width: 400px; width: 90%; }
+  .overlay-box h2 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+  .overlay-box p { color: var(--text2); margin-bottom: 0.5rem; }
+  .payout-text { font-size: 1.3rem; font-weight: 700; color: var(--gold); margin: 1rem 0; }
+
+  @media (max-width: 480px) {
+    .morpion-cell .x-mark, .morpion-cell .o-mark { font-size: min(4.5vw, 1.1rem); }
+  }
+</style>
+</head>
+<body>
+
+<div id="start-screen">
+  <h1>ZG Morpion &mdash; Test Play</h1>
+  <p>Click below to start a morpion match. You play as Player 1. A bot auto-plays as Player 2.</p>
+  <button id="start-btn" onclick="startMatch()">Start Morpion Match</button>
+</div>
+
+<div id="game-screen" class="screen">
+  <div id="game-area" style="width:100%;height:100%;"></div>
+</div>
+
+<div id="overlay-gameover" class="overlay hidden">
+  <div class="overlay-box">
+    <h2 id="gameover-title"></h2>
+    <p id="gameover-detail"></p>
+    <div class="payout-text" id="gameover-payout"></div>
+    <button onclick="location.reload()" style="background:var(--accent);color:#fff;border:none;border-radius:12px;padding:0.8rem 2rem;font-size:1rem;font-weight:700;cursor:pointer;font-family:inherit;margin-top:1rem;">Play Again</button>
+  </div>
+</div>
+
+<script>
+var sock1, sock2, myGameData, gameStarted = false;
+
+var MorpionUI = (function() {
+  var sendActionFn = null;
+  var menuOpen = false;
+  var timerInterval = null;
+
+  function startTimer(state) {
+    if (timerInterval) clearInterval(timerInterval);
+    var startRemaining = state.turnRemainingMs || 0;
+    var total = state.turnTimeMs || 30000;
+    var startTs = Date.now();
+    timerInterval = setInterval(function() {
+      var elapsed = Date.now() - startTs;
+      var rem = Math.max(0, startRemaining - elapsed);
+      var pct = (rem / total) * 100;
+      var fill = document.querySelector('.morpion-timer-fill');
+      if (fill) {
+        fill.style.width = pct + '%';
+        fill.className = 'morpion-timer-fill ' + (pct > 50 ? 'green' : pct > 25 ? 'yellow' : 'red');
+      }
+      if (rem <= 0) clearInterval(timerInterval);
+    }, 500);
+  }
+
+  function render(state, sendAction, gameData) {
+    sendActionFn = sendAction;
+    var area = document.getElementById('game-area');
+    var board = state.board;
+    var size = state.size || 15;
+    var isMyTurn = state.isMyTurn;
+    var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
+    var myName = (gameData && gameData.players) ? gameData.players[state.playerIndex].username : 'You';
+    var mySymbol = state.symbol || 'X';
+    var oppSymbol = mySymbol === 'X' ? 'O' : 'X';
+    var winCells = state.winningCells || [];
+
+    var h = '<div class="morpion-screen">';
+    h += '<div class="morpion-topbar">';
+    h += '<button class="back-btn" onclick="MorpionUI.quit()">&#8592;</button>';
+    h += '<div class="morpion-player-info">';
+    h += '<div class="name">' + oppName + '</div>';
+    h += '<div class="symbol ' + (oppSymbol === 'X' ? 'x-color' : 'o-color') + '">' + oppSymbol + '</div>';
+    h += '</div>';
+    h += '<div class="morpion-menu-wrap"><button class="morpion-menu-btn" onclick="MorpionUI.toggleMenu(event)">&#8942;</button>';
+    h += '<div class="domino-dropdown' + (menuOpen ? ' open' : '') + '">';
+    h += '<button class="domino-dropdown-item danger" onclick="MorpionUI.resign(event)">Resign</button>';
+    h += '</div></div></div>';
+
+    var remaining = state.turnRemainingMs || 0;
+    var total = state.turnTimeMs || 30000;
+    var pct = (remaining / total) * 100;
+    var timerCls = pct > 50 ? 'green' : pct > 25 ? 'yellow' : 'red';
+    h += '<div class="morpion-timer"><div class="morpion-timer-fill ' + timerCls + '" style="width:' + pct + '%;"></div></div>';
+
+    h += '<div class="morpion-board-wrap">';
+    h += '<div class="morpion-board" style="grid-template-columns:repeat(' + size + ',1fr);">';
+
+    for (var i = 0; i < size * size; i++) {
+      var val = board[i];
+      var isLast = state.lastMove === i;
+      var isWin = winCells.indexOf(i) >= 0;
+      var cls = 'morpion-cell';
+      if (val !== null) cls += ' taken';
+      if (isLast && !isWin) cls += ' last-move';
+      if (isWin) cls += ' win-cell';
+
+      var onclick = '';
+      if (val === null && isMyTurn && !state.gameOver) {
+        onclick = ' onclick="MorpionUI.placeAt(' + i + ')"';
+      }
+
+      var content = '';
+      if (val === state.playerIndex) {
+        content = '<span class="' + (mySymbol === 'X' ? 'x-mark' : 'o-mark') + '">' + mySymbol + '</span>';
+      } else if (val !== null) {
+        content = '<span class="' + (oppSymbol === 'X' ? 'x-mark' : 'o-mark') + '">' + oppSymbol + '</span>';
+      }
+
+      h += '<div class="' + cls + '"' + onclick + '>' + content + '</div>';
+    }
+
+    h += '</div></div>';
+
+    h += '<div style="text-align:center;padding:0.5rem;">';
+    h += '<div class="morpion-player-info">';
+    h += '<div class="name">' + myName + '</div>';
+    h += '<div class="symbol ' + (mySymbol === 'X' ? 'x-color' : 'o-color') + '">' + mySymbol + '</div>';
+    h += '</div>';
+    var pillCls = isMyTurn ? 'active' : 'waiting';
+    var pillTxt = isMyTurn ? 'Your Turn' : "Opponent's Turn";
+    h += '<div class="morpion-turn-pill ' + pillCls + '">' + pillTxt + '</div>';
+    h += '</div></div>';
+
+    area.innerHTML = h;
+    if (!state.gameOver) startTimer(state);
+  }
+
+  function placeAt(cell) { if (sendActionFn) sendActionFn({ type: 'place', cell: cell }); }
+  function quit() { if (confirm('Leave?')) location.reload(); }
+  function resign(e) {
+    if (e) { e.stopPropagation(); e.preventDefault(); }
+    menuOpen = false;
+    if (confirm('Resign?')) { if (sendActionFn) sendActionFn({ type: 'resign' }); }
+  }
+  function toggleMenu(e) { if (e) e.stopPropagation(); menuOpen = !menuOpen; }
+  document.addEventListener('click', function() { menuOpen = false; });
+
+  return { render: render, placeAt: placeAt, quit: quit, resign: resign, toggleMenu: toggleMenu };
+})();
+
+function startMatch() {
+  document.getElementById('start-screen').style.display = 'none';
+  document.getElementById('game-screen').classList.add('active');
+
+  sock1 = io();
+  sock2 = io();
+
+  sock1.on('connect', function() {
+    sock1.emit('register', { walletAddress: 'TestPlayer1_' + Date.now(), displayName: 'You' });
+  });
+  sock2.on('connect', function() {
+    sock2.emit('register', { walletAddress: 'TestBot2_' + Date.now(), displayName: 'Bot' });
+  });
+
+  sock1.on('registered', function() {
+    sock1.emit('find_match', { gameType: 'morpion', betAmount: 0.001, txSignature: 'test_sig_1_' + Date.now() });
+  });
+  sock2.on('registered', function() {
+    sock2.emit('find_match', { gameType: 'morpion', betAmount: 0.001, txSignature: 'test_sig_2_' + Date.now() });
+  });
+
+  sock1.on('game_start', function(data) { myGameData = data; });
+  sock1.on('game_state', function(state) {
+    MorpionUI.render(state, function(action) { sock1.emit('game_action', action); }, myGameData);
+  });
+
+  sock2.on('game_state', function(state) {
+    if (state.isMyTurn && !state.gameOver) {
+      setTimeout(function() { botPlay(state); }, 600);
+    }
+  });
+
+  sock1.on('game_over', function(data) {
+    var title = document.getElementById('gameover-title');
+    var detail = document.getElementById('gameover-detail');
+    var payout = document.getElementById('gameover-payout');
+    if (data.isDraw) {
+      title.textContent = 'Draw!';
+      detail.textContent = 'No one wins.';
+      payout.textContent = '';
+    } else if (data.winner === 'You') {
+      title.textContent = 'You Win!';
+      detail.textContent = data.resigned ? '(Bot resigned)' : 'Five in a row!';
+      payout.textContent = '';
+    } else {
+      title.textContent = 'You Lose!';
+      detail.textContent = data.resigned ? '(You resigned)' : 'Bot got five in a row.';
+      payout.textContent = '';
+    }
+    document.getElementById('overlay-gameover').classList.remove('hidden');
+  });
+}
+
+function botPlay(state) {
+  var size = state.size || 15;
+  var board = state.board;
+  var me = state.playerIndex;
+  var opp = 1 - me;
+
+  var best = findBestMove(board, size, me, opp);
+  if (best !== null) {
+    sock2.emit('game_action', { type: 'place', cell: best });
+    return;
+  }
+
+  var center = Math.floor(size / 2) * size + Math.floor(size / 2);
+  if (board[center] === null) {
+    sock2.emit('game_action', { type: 'place', cell: center });
+    return;
+  }
+  for (var i = 0; i < board.length; i++) {
+    if (board[i] === null) { sock2.emit('game_action', { type: 'place', cell: i }); return; }
+  }
+}
+
+function findBestMove(board, size, me, opp) {
+  var dirs = [[0,1],[1,0],[1,1],[1,-1]];
+
+  function countLine(r, c, dr, dc, player) {
+    var count = 0;
+    for (var s = 1; s < 5; s++) {
+      var nr = r + dr * s, nc = c + dc * s;
+      if (nr < 0 || nr >= size || nc < 0 || nc >= size) break;
+      if (board[nr * size + nc] !== player) break;
+      count++;
+    }
+    return count;
+  }
+
+  function scoreCell(cell, player) {
+    var r = Math.floor(cell / size), c = cell % size;
+    var maxLine = 0;
+    for (var d = 0; d < dirs.length; d++) {
+      var fwd = countLine(r, c, dirs[d][0], dirs[d][1], player);
+      var bwd = countLine(r, c, -dirs[d][0], -dirs[d][1], player);
+      maxLine = Math.max(maxLine, fwd + bwd + 1);
+    }
+    return maxLine;
+  }
+
+  var bestScore = -1, bestCell = null;
+  for (var i = 0; i < board.length; i++) {
+    if (board[i] !== null) continue;
+    var hasNeighbor = false;
+    var r = Math.floor(i / size), c = i % size;
+    for (var dr = -1; dr <= 1 && !hasNeighbor; dr++) {
+      for (var dc = -1; dc <= 1 && !hasNeighbor; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        var nr = r + dr, nc = c + dc;
+        if (nr >= 0 && nr < size && nc >= 0 && nc < size && board[nr * size + nc] !== null) hasNeighbor = true;
+      }
+    }
+    if (!hasNeighbor && board.some(function(v) { return v !== null; })) continue;
+
+    var myScore = scoreCell(i, me);
+    if (myScore >= 5) return i;
+    var oppScore = scoreCell(i, opp);
+    if (oppScore >= 5) return i;
+
+    var score = myScore * 2 + oppScore * 3;
+    if (score > bestScore) { bestScore = score; bestCell = i; }
+  }
+  return bestCell;
+}
+</script>
+</body>
+</html>
