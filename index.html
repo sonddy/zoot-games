@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="ZG" />
   <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
-  <meta name="description" content="Play Domino, Tic Tac Toe & more — bet Solana crypto and win!" />
+  <meta name="description" content="Play Domino, Tic Tac Toe, Mancala, Checkers, Chess — bet Solana crypto and win!" />
   <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
@@ -108,7 +108,7 @@
     #screen-lobby { flex-direction: column; }
     .lobby-main { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; width: 100%; }
     .lobby-main > h2 { font-size: 1.5rem; margin-bottom: 1.5rem; font-weight: 700; }
-    .game-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.5rem; margin-bottom: 2.5rem; }
+    .game-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.2rem; margin-bottom: 2.5rem; }
     .game-card {
       background: var(--bg2); border: 1px solid var(--surface2); border-radius: var(--radius);
       padding: 1.8rem; transition: border-color 0.2s, transform 0.2s;
@@ -375,6 +375,241 @@
     .ttt-cell.o { color: var(--gold); }
     .ttt-cell.taken { cursor: default; }
 
+    /* ═══ MANCALA ═══ */
+    .mancala-screen {
+      display: flex; flex-direction: column; position: fixed; inset: 0; z-index: 10;
+      background: linear-gradient(180deg, #5b3a1a 0%, #8b6914 30%, #a07d2e 50%, #8b6914 70%, #5b3a1a 100%);
+      font-family: 'Inter', sans-serif; color: #fff; overflow: hidden;
+    }
+    .mancala-topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.5rem 1rem; background: rgba(0,0,0,0.3);
+    }
+    .mancala-topbar .back-btn {
+      width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.12);
+      border: none; color: #fff; font-size: 1.2rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .mancala-player-info { text-align: center; }
+    .mancala-player-info .name { font-weight: 700; font-size: 0.9rem; }
+    .mancala-player-info .score { font-size: 1.5rem; font-weight: 800; color: #fbbf24; }
+    .mancala-timer { height: 4px; background: rgba(0,0,0,0.3); }
+    .mancala-timer-fill { height: 100%; border-radius: 0 2px 2px 0; transition: width 1s linear; }
+    .mancala-board-wrap {
+      flex: 1; display: flex; align-items: center; justify-content: center; padding: 0.5rem;
+    }
+    .mancala-board {
+      display: grid; grid-template-columns: auto repeat(6, 1fr) auto;
+      grid-template-rows: 1fr 1fr; gap: 6px;
+      background: linear-gradient(135deg, #654321, #8B7355);
+      border: 4px solid #4a3520; border-radius: 60px; padding: 12px 8px;
+      box-shadow: inset 0 4px 20px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.4);
+      width: 100%; max-width: 540px;
+    }
+    .mancala-store {
+      grid-row: 1 / 3; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: radial-gradient(ellipse, #3a2a10 0%, #2a1a08 100%);
+      border-radius: 40px; min-width: 48px; min-height: 100px; padding: 8px;
+      box-shadow: inset 0 3px 10px rgba(0,0,0,0.6); position: relative;
+    }
+    .mancala-store-count {
+      font-size: 1.6rem; font-weight: 800; color: #fbbf24;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+    .mancala-store-label { font-size: 0.6rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px; }
+    .mancala-pit {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: radial-gradient(circle, #3a2a10 0%, #2a1a08 100%);
+      border-radius: 50%; aspect-ratio: 1; min-width: 38px;
+      box-shadow: inset 0 3px 8px rgba(0,0,0,0.6); cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s; position: relative;
+    }
+    .mancala-pit:hover { transform: scale(1.08); box-shadow: inset 0 3px 8px rgba(0,0,0,0.6), 0 0 12px rgba(251,191,36,0.4); }
+    .mancala-pit.disabled { cursor: default; opacity: 0.6; }
+    .mancala-pit.disabled:hover { transform: none; box-shadow: inset 0 3px 8px rgba(0,0,0,0.6); }
+    .mancala-seeds {
+      display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; align-items: center;
+      max-width: 36px; padding: 2px;
+    }
+    .mancala-seed {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #c9a96e, #8b6914);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    }
+    .mancala-pit-count {
+      font-size: 0.7rem; font-weight: 700; color: rgba(255,255,255,0.7); margin-top: 2px;
+    }
+    .mancala-turn-pill {
+      display: inline-block; padding: 0.3rem 1.2rem; border-radius: 999px;
+      font-size: 0.85rem; font-weight: 700; margin-top: 0.3rem;
+    }
+    .mancala-turn-pill.active { background: #d97706; color: #fff; }
+    .mancala-turn-pill.waiting { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); }
+    .mancala-menu-wrap { position: relative; }
+    .mancala-menu-btn {
+      width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.12);
+      border: none; color: #fff; font-size: 1.2rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    @media (max-width: 480px) {
+      .mancala-board { border-radius: 40px; padding: 8px 4px; gap: 4px; }
+      .mancala-store { min-width: 36px; min-height: 80px; border-radius: 30px; }
+      .mancala-store-count { font-size: 1.2rem; }
+      .mancala-pit { min-width: 32px; }
+      .mancala-seed { width: 6px; height: 6px; }
+      .mancala-seeds { max-width: 28px; }
+    }
+
+    /* ═══ CHECKERS ═══ */
+    .checkers-screen {
+      display: flex; flex-direction: column; position: fixed; inset: 0; z-index: 10;
+      background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      font-family: 'Inter', sans-serif; color: #fff; overflow: hidden;
+    }
+    .checkers-topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.5rem 1rem; background: rgba(0,0,0,0.3);
+    }
+    .checkers-topbar .back-btn {
+      width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.12);
+      border: none; color: #fff; font-size: 1.2rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .checkers-player-info { text-align: center; }
+    .checkers-player-info .name { font-weight: 700; font-size: 0.9rem; }
+    .checkers-player-info .pieces-count { font-size: 0.8rem; color: #93c5fd; }
+    .checkers-timer { height: 4px; background: rgba(0,0,0,0.3); }
+    .checkers-timer-fill { height: 100%; border-radius: 0 2px 2px 0; transition: width 1s linear; }
+    .checkers-board-wrap {
+      flex: 1; display: flex; align-items: center; justify-content: center; padding: 0.5rem;
+    }
+    .checkers-board {
+      display: grid; grid-template-columns: repeat(8, 1fr); gap: 0;
+      width: min(90vw, 90vh - 160px, 480px); aspect-ratio: 1;
+      border: 3px solid #8b6914; border-radius: 4px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    .checkers-sq {
+      aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+      position: relative; cursor: default;
+    }
+    .checkers-sq.light { background: #f0d9b5; }
+    .checkers-sq.dark { background: #b58863; }
+    .checkers-sq.highlight { background: #7fb069; cursor: pointer; }
+    .checkers-sq.selected { background: #e8c840; }
+    .checkers-piece {
+      width: 80%; height: 80%; border-radius: 50%; position: relative;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.4); transition: transform 0.15s;
+    }
+    .checkers-piece.p0 {
+      background: radial-gradient(circle at 35% 35%, #ff6b6b, #c0392b);
+      border: 2px solid #922b21;
+    }
+    .checkers-piece.p1 {
+      background: radial-gradient(circle at 35% 35%, #555, #222);
+      border: 2px solid #111;
+    }
+    .checkers-piece.king::after {
+      content: '♛'; position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2em; color: #fbbf24; text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    }
+    .checkers-piece.selectable { cursor: pointer; }
+    .checkers-piece.selectable:hover { transform: scale(1.1); }
+    .checkers-turn-pill {
+      display: inline-block; padding: 0.3rem 1.2rem; border-radius: 999px;
+      font-size: 0.85rem; font-weight: 700; margin-top: 0.3rem;
+    }
+    .checkers-turn-pill.active { background: #e74c3c; color: #fff; }
+    .checkers-turn-pill.waiting { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); }
+    .checkers-menu-wrap { position: relative; }
+    .checkers-menu-btn {
+      width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.12);
+      border: none; color: #fff; font-size: 1.2rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    @media (max-width: 480px) {
+      .checkers-piece.king::after { font-size: 0.9em; }
+    }
+
+    /* ═══ CHESS ═══ */
+    .chess-screen {
+      display: flex; flex-direction: column; position: fixed; inset: 0; z-index: 10;
+      background: linear-gradient(180deg, #1a1a1a 0%, #2d2d2d 50%, #1a1a1a 100%);
+      font-family: 'Inter', sans-serif; color: #fff; overflow: hidden;
+    }
+    .chess-topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.5rem 1rem; background: rgba(0,0,0,0.4);
+    }
+    .chess-topbar .back-btn {
+      width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.12);
+      border: none; color: #fff; font-size: 1.2rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .chess-player-info { text-align: center; }
+    .chess-player-info .name { font-weight: 700; font-size: 0.9rem; }
+    .chess-player-info .material { font-size: 0.8rem; color: #93c5fd; }
+    .chess-timer { height: 4px; background: rgba(0,0,0,0.3); }
+    .chess-timer-fill { height: 100%; border-radius: 0 2px 2px 0; transition: width 1s linear; }
+    .chess-board-wrap {
+      flex: 1; display: flex; align-items: center; justify-content: center; padding: 0.5rem;
+    }
+    .chess-board {
+      display: grid; grid-template-columns: repeat(8, 1fr); gap: 0;
+      width: min(90vw, 90vh - 160px, 480px); aspect-ratio: 1;
+      border: 3px solid #8b6914; border-radius: 4px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    .chess-sq {
+      aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+      position: relative; cursor: default; font-size: min(5vw, 3rem);
+    }
+    .chess-sq.light { background: #f0d9b5; }
+    .chess-sq.dark { background: #b58863; }
+    .chess-sq.highlight { cursor: pointer; position: relative; }
+    .chess-sq.highlight::after {
+      content: ''; position: absolute; width: 30%; height: 30%; border-radius: 50%;
+      background: rgba(0,0,0,0.25);
+    }
+    .chess-sq.highlight.has-piece::after {
+      width: 90%; height: 90%; background: none; border: 3px solid rgba(0,0,0,0.25); border-radius: 50%;
+    }
+    .chess-sq.selected { background: #e8c840; }
+    .chess-sq.last-move { background: rgba(255,255,100,0.3); }
+    .chess-sq.in-check { background: radial-gradient(circle, #ff0000 0%, transparent 70%); }
+    .chess-piece {
+      user-select: none; cursor: pointer; text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      transition: transform 0.1s; line-height: 1;
+    }
+    .chess-piece:hover { transform: scale(1.15); }
+    .chess-turn-pill {
+      display: inline-block; padding: 0.3rem 1.2rem; border-radius: 999px;
+      font-size: 0.85rem; font-weight: 700; margin-top: 0.3rem;
+    }
+    .chess-turn-pill.active { background: #8b5cf6; color: #fff; }
+    .chess-turn-pill.waiting { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); }
+    .chess-menu-wrap { position: relative; }
+    .chess-menu-btn {
+      width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.12);
+      border: none; color: #fff; font-size: 1.2rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .chess-promo-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex;
+      align-items: center; justify-content: center; z-index: 100;
+    }
+    .chess-promo-box {
+      background: #2d2d2d; border: 2px solid #8b6914; border-radius: 12px; padding: 1.5rem;
+      display: flex; gap: 0.5rem;
+    }
+    .chess-promo-btn {
+      width: 60px; height: 60px; font-size: 2.5rem; background: #f0d9b5; border: 2px solid #8b6914;
+      border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: transform 0.15s, background 0.15s;
+    }
+    .chess-promo-btn:hover { transform: scale(1.1); background: #e8c840; }
+
     .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; }
     .overlay.hidden { display: none; }
     .overlay-box { background: var(--bg2); border: 1px solid var(--surface2); border-radius: var(--radius); padding: 2.5rem; text-align: center; max-width: 400px; width: 90%; }
@@ -500,6 +735,42 @@
               <button class="grid-btn" data-grid="7">7&times;7</button>
             </div>
           </div>
+          <div class="bet-input-group">
+            <label>Bet:</label>
+            <input type="number" class="bet-amount-input" placeholder="0.5" min="0.001" step="0.001" value="0.5" />
+            <span class="sol-label">SOL</span>
+          </div>
+          <button class="btn btn-primary btn-play">Find Match</button>
+        </div>
+
+        <div class="game-card" data-game="mancala">
+          <div class="game-card-icon">&#127794;</div>
+          <h3>Mancala</h3>
+          <p>Ancient strategy &mdash; sow seeds, capture stones, fill your store!</p>
+          <div class="bet-input-group">
+            <label>Bet:</label>
+            <input type="number" class="bet-amount-input" placeholder="0.5" min="0.001" step="0.001" value="0.5" />
+            <span class="sol-label">SOL</span>
+          </div>
+          <button class="btn btn-primary btn-play">Find Match</button>
+        </div>
+
+        <div class="game-card" data-game="checkers">
+          <div class="game-card-icon">&#9823;</div>
+          <h3>Checkers</h3>
+          <p>Jump, capture &amp; king your pieces &mdash; classic 8&times;8 board battle!</p>
+          <div class="bet-input-group">
+            <label>Bet:</label>
+            <input type="number" class="bet-amount-input" placeholder="0.5" min="0.001" step="0.001" value="0.5" />
+            <span class="sol-label">SOL</span>
+          </div>
+          <button class="btn btn-primary btn-play">Find Match</button>
+        </div>
+
+        <div class="game-card" data-game="chess">
+          <div class="game-card-icon">&#9812;</div>
+          <h3>Chess</h3>
+          <p>The ultimate strategy game &mdash; checkmate your opponent to win!</p>
           <div class="bet-input-group">
             <label>Bet:</label>
             <input type="number" class="bet-amount-input" placeholder="0.5" min="0.001" step="0.001" value="0.5" />
@@ -976,6 +1247,576 @@
     })();
 
     // ════════════════════════════════════════
+    // MANCALA UI
+    // ════════════════════════════════════════
+    var MancalaUI = (function() {
+      var sendActionFn = null;
+      var menuOpen = false;
+      var timerInterval = null;
+
+      function startTimer(state) {
+        if (timerInterval) clearInterval(timerInterval);
+        var startRemaining = state.turnRemainingMs || 0;
+        var total = state.turnTimeMs || 20000;
+        var startTs = Date.now();
+        timerInterval = setInterval(function() {
+          var elapsed = Date.now() - startTs;
+          var rem = Math.max(0, startRemaining - elapsed);
+          var pct = (rem / total) * 100;
+          var fill = document.querySelector('.mancala-timer-fill');
+          if (fill) {
+            fill.style.width = pct + '%';
+            fill.className = 'mancala-timer-fill ' + (pct > 50 ? 'green' : pct > 25 ? 'yellow' : 'red');
+          }
+          if (rem <= 0) clearInterval(timerInterval);
+        }, 500);
+      }
+
+      function render(state, sendAction, gameData) {
+        sendActionFn = sendAction;
+        var area = document.getElementById('game-area');
+        var controls = document.getElementById('game-controls');
+        var pits = state.pits;
+        var isMyTurn = state.isMyTurn;
+        var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
+        var myName = (gameData && gameData.players) ? gameData.players[state.playerIndex].username : 'You';
+
+        var h = '<div class="mancala-screen">';
+
+        h += '<div class="mancala-topbar">';
+        h += '<button class="back-btn" onclick="MancalaUI.quit()">&#8592;</button>';
+        h += '<div class="mancala-player-info"><div class="name">' + oppName + '</div>';
+        h += '<div class="score">' + state.scores[1 - state.playerIndex] + '</div></div>';
+        h += '<div class="mancala-menu-wrap"><button class="mancala-menu-btn" onclick="MancalaUI.toggleMenu(event)">&#8942;</button>';
+        h += '<div class="domino-dropdown' + (menuOpen ? ' open' : '') + '">';
+        h += '<button class="domino-dropdown-item danger" onclick="MancalaUI.resign(event)">Resign</button>';
+        h += '</div></div></div>';
+
+        var remaining = state.turnRemainingMs || 0;
+        var total = state.turnTimeMs || 20000;
+        var pct = (remaining / total) * 100;
+        var timerCls = pct > 50 ? 'green' : pct > 25 ? 'yellow' : 'red';
+        h += '<div class="mancala-timer"><div class="mancala-timer-fill ' + timerCls + '" style="width:' + pct + '%;"></div></div>';
+
+        h += '<div class="mancala-board-wrap"><div class="mancala-board">';
+
+        var oppStore, myStore, oppPits, myPits;
+        if (state.playerIndex === 0) {
+          oppStore = 13; myStore = 6;
+          oppPits = [12, 11, 10, 9, 8, 7];
+          myPits = [0, 1, 2, 3, 4, 5];
+        } else {
+          oppStore = 6; myStore = 13;
+          oppPits = [5, 4, 3, 2, 1, 0];
+          myPits = [7, 8, 9, 10, 11, 12];
+        }
+
+        h += '<div class="mancala-store" style="grid-column:1;grid-row:1/3;">';
+        h += '<div class="mancala-store-label">' + oppName.charAt(0) + '</div>';
+        h += '<div class="mancala-store-count">' + pits[oppStore] + '</div>';
+        h += renderSeeds(pits[oppStore], true);
+        h += '</div>';
+
+        for (var i = 0; i < 6; i++) {
+          var pi = oppPits[i];
+          h += '<div class="mancala-pit disabled" style="grid-column:' + (i + 2) + ';grid-row:1;">';
+          h += renderSeeds(pits[pi], false);
+          h += '<div class="mancala-pit-count">' + pits[pi] + '</div></div>';
+        }
+
+        for (var j = 0; j < 6; j++) {
+          var pj = myPits[j];
+          var canClick = isMyTurn && pits[pj] > 0 && !state.gameOver;
+          var cls = canClick ? '' : ' disabled';
+          var click = canClick ? ' onclick="MancalaUI.sow(' + pj + ')"' : '';
+          h += '<div class="mancala-pit' + cls + '" style="grid-column:' + (j + 2) + ';grid-row:2;"' + click + '>';
+          h += renderSeeds(pits[pj], false);
+          h += '<div class="mancala-pit-count">' + pits[pj] + '</div></div>';
+        }
+
+        h += '<div class="mancala-store" style="grid-column:8;grid-row:1/3;">';
+        h += '<div class="mancala-store-label">' + myName.charAt(0) + '</div>';
+        h += '<div class="mancala-store-count">' + pits[myStore] + '</div>';
+        h += renderSeeds(pits[myStore], true);
+        h += '</div>';
+
+        h += '</div></div>';
+
+        h += '<div style="text-align:center;padding:0.5rem;">';
+        h += '<div class="mancala-player-info"><div class="name">' + myName + '</div>';
+        h += '<div class="score">' + state.scores[state.playerIndex] + '</div></div>';
+        var pillCls = isMyTurn ? 'active' : 'waiting';
+        var pillTxt = isMyTurn ? 'Your Turn' : "Opponent's Turn";
+        h += '<div class="mancala-turn-pill ' + pillCls + '">' + pillTxt + '</div>';
+        h += '</div></div>';
+
+        area.innerHTML = h;
+        controls.innerHTML = ''; controls.style.display = 'none';
+        if (!state.gameOver) startTimer(state);
+      }
+
+      function renderSeeds(count, isStore) {
+        if (count === 0) return '';
+        var max = isStore ? 24 : 10;
+        var show = Math.min(count, max);
+        var h = '<div class="mancala-seeds">';
+        for (var i = 0; i < show; i++) h += '<div class="mancala-seed"></div>';
+        h += '</div>';
+        return h;
+      }
+
+      function sow(pit) { if (sendActionFn) sendActionFn({ type: 'sow', pit: pit }); }
+      function quit() { if (confirm('Leave? You forfeit.')) window.location.reload(); }
+      function resign(e) {
+        if (e) { e.stopPropagation(); e.preventDefault(); }
+        menuOpen = false;
+        if (confirm('Resign this game?')) { if (sendActionFn) sendActionFn({ type: 'resign' }); }
+      }
+      function toggleMenu(e) { if (e) e.stopPropagation(); menuOpen = !menuOpen; }
+
+      document.addEventListener('click', function() { menuOpen = false; });
+
+      return { render: render, sow: sow, quit: quit, resign: resign, toggleMenu: toggleMenu };
+    })();
+
+    // ════════════════════════════════════════
+    // CHECKERS UI
+    // ════════════════════════════════════════
+    var CheckersUI = (function() {
+      var sendActionFn = null;
+      var selectedSquare = null;
+      var legalMoves = [];
+      var menuOpen = false;
+      var timerInterval = null;
+      var lastState = null;
+
+      function startTimer(state) {
+        if (timerInterval) clearInterval(timerInterval);
+        var startRemaining = state.turnRemainingMs || 0;
+        var total = state.turnTimeMs || 30000;
+        var startTs = Date.now();
+        timerInterval = setInterval(function() {
+          var elapsed = Date.now() - startTs;
+          var rem = Math.max(0, startRemaining - elapsed);
+          var pct = (rem / total) * 100;
+          var fill = document.querySelector('.checkers-timer-fill');
+          if (fill) {
+            fill.style.width = pct + '%';
+            fill.className = 'checkers-timer-fill ' + (pct > 50 ? 'green' : pct > 25 ? 'yellow' : 'red');
+          }
+          if (rem <= 0) clearInterval(timerInterval);
+        }, 500);
+      }
+
+      function computeMoves(state, from) {
+        var piece = state.board[from];
+        if (!piece || piece.player !== state.playerIndex) return [];
+        var moves = [];
+        var dirs = piece.king
+          ? [[-1,-1],[-1,1],[1,-1],[1,1]]
+          : piece.player === 0 ? [[-1,-1],[-1,1]] : [[1,-1],[1,1]];
+        var r = Math.floor(from / 8), c = from % 8;
+
+        var jumps = [];
+        for (var d = 0; d < dirs.length; d++) {
+          var dr = dirs[d][0], dc = dirs[d][1];
+          var mr = r + dr, mc = c + dc, lr = r + 2 * dr, lc = c + 2 * dc;
+          if (lr < 0 || lr > 7 || lc < 0 || lc > 7) continue;
+          var mid = state.board[mr * 8 + mc];
+          var land = state.board[lr * 8 + lc];
+          if (mid && mid.player !== piece.player && !land) jumps.push(lr * 8 + lc);
+        }
+
+        var hasAnyJumps = false;
+        if (state.mustJumpFrom !== null) {
+          hasAnyJumps = true;
+        } else {
+          for (var i = 0; i < 64 && !hasAnyJumps; i++) {
+            var p = state.board[i];
+            if (p && p.player === state.playerIndex) {
+              var pd = p.king ? [[-1,-1],[-1,1],[1,-1],[1,1]] : (p.player === 0 ? [[-1,-1],[-1,1]] : [[1,-1],[1,1]]);
+              var pr = Math.floor(i / 8), pc2 = i % 8;
+              for (var d2 = 0; d2 < pd.length; d2++) {
+                var mr2 = pr + pd[d2][0], mc2 = pc2 + pd[d2][1];
+                var lr2 = pr + 2 * pd[d2][0], lc2 = pc2 + 2 * pd[d2][1];
+                if (lr2 >= 0 && lr2 <= 7 && lc2 >= 0 && lc2 <= 7) {
+                  var mid2 = state.board[mr2 * 8 + mc2], land2 = state.board[lr2 * 8 + lc2];
+                  if (mid2 && mid2.player !== state.playerIndex && !land2) { hasAnyJumps = true; break; }
+                }
+              }
+            }
+          }
+        }
+
+        if (hasAnyJumps) return jumps;
+
+        for (var d3 = 0; d3 < dirs.length; d3++) {
+          var nr = r + dirs[d3][0], nc = c + dirs[d3][1];
+          if (nr >= 0 && nr <= 7 && nc >= 0 && nc <= 7 && !state.board[nr * 8 + nc]) {
+            moves.push(nr * 8 + nc);
+          }
+        }
+        return moves;
+      }
+
+      function render(state, sendAction, gameData) {
+        sendActionFn = sendAction;
+        lastState = state;
+        var area = document.getElementById('game-area');
+        var controls = document.getElementById('game-controls');
+        var board = state.board;
+        var isMyTurn = state.isMyTurn;
+        var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
+        var myName = (gameData && gameData.players) ? gameData.players[state.playerIndex].username : 'You';
+        var flip = state.playerIndex === 1;
+
+        var h = '<div class="checkers-screen">';
+
+        h += '<div class="checkers-topbar">';
+        h += '<button class="back-btn" onclick="CheckersUI.quit()">&#8592;</button>';
+        h += '<div class="checkers-player-info"><div class="name">' + oppName + '</div>';
+        h += '<div class="pieces-count">Pieces: ' + state.pieces[1 - state.playerIndex] + '</div></div>';
+        h += '<div class="checkers-menu-wrap"><button class="checkers-menu-btn" onclick="CheckersUI.toggleMenu(event)">&#8942;</button>';
+        h += '<div class="domino-dropdown' + (menuOpen ? ' open' : '') + '">';
+        h += '<button class="domino-dropdown-item danger" onclick="CheckersUI.resign(event)">Resign</button>';
+        h += '</div></div></div>';
+
+        var remaining = state.turnRemainingMs || 0;
+        var total = state.turnTimeMs || 30000;
+        var pct = (remaining / total) * 100;
+        var timerCls = pct > 50 ? 'green' : pct > 25 ? 'yellow' : 'red';
+        h += '<div class="checkers-timer"><div class="checkers-timer-fill ' + timerCls + '" style="width:' + pct + '%;"></div></div>';
+
+        h += '<div class="checkers-board-wrap"><div class="checkers-board">';
+
+        for (var idx = 0; idx < 64; idx++) {
+          var viewIdx = flip ? 63 - idx : idx;
+          var r = Math.floor(viewIdx / 8), c = viewIdx % 8;
+          var isDark = (r + c) % 2 === 1;
+          var sq = board[viewIdx];
+          var isSelected = selectedSquare === viewIdx;
+          var isLegal = legalMoves.indexOf(viewIdx) >= 0;
+
+          var cls = 'checkers-sq ' + (isDark ? 'dark' : 'light');
+          if (isSelected) cls += ' selected';
+          if (isLegal) cls += ' highlight';
+
+          var onclick = '';
+          if (isLegal && isMyTurn) {
+            onclick = ' onclick="CheckersUI.moveTo(' + viewIdx + ')"';
+          } else if (sq && sq.player === state.playerIndex && isMyTurn) {
+            onclick = ' onclick="CheckersUI.selectPiece(' + viewIdx + ')"';
+          }
+
+          h += '<div class="' + cls + '"' + onclick + '>';
+          if (sq) {
+            var pcls = 'checkers-piece p' + sq.player;
+            if (sq.king) pcls += ' king';
+            if (sq.player === state.playerIndex && isMyTurn) pcls += ' selectable';
+            h += '<div class="' + pcls + '"></div>';
+          }
+          h += '</div>';
+        }
+
+        h += '</div></div>';
+
+        h += '<div style="text-align:center;padding:0.5rem;">';
+        h += '<div class="checkers-player-info"><div class="name">' + myName + '</div>';
+        h += '<div class="pieces-count">Pieces: ' + state.pieces[state.playerIndex] + '</div></div>';
+        var pillCls = isMyTurn ? 'active' : 'waiting';
+        var pillTxt = isMyTurn ? 'Your Turn' : "Opponent's Turn";
+        h += '<div class="checkers-turn-pill ' + pillCls + '">' + pillTxt + '</div>';
+        h += '</div></div>';
+
+        area.innerHTML = h;
+        controls.innerHTML = ''; controls.style.display = 'none';
+        if (!state.gameOver) startTimer(state);
+      }
+
+      function selectPiece(sq) {
+        if (!lastState || !lastState.isMyTurn) return;
+        if (lastState.mustJumpFrom !== null && sq !== lastState.mustJumpFrom) return;
+        selectedSquare = sq;
+        legalMoves = computeMoves(lastState, sq);
+        render(lastState, sendActionFn, CheckersUI._gameData);
+      }
+
+      function moveTo(sq) {
+        if (sendActionFn && selectedSquare !== null) {
+          sendActionFn({ type: 'move', from: selectedSquare, to: sq });
+          selectedSquare = null;
+          legalMoves = [];
+        }
+      }
+
+      function quit() { if (confirm('Leave? You forfeit.')) window.location.reload(); }
+      function resign(e) {
+        if (e) { e.stopPropagation(); e.preventDefault(); }
+        menuOpen = false;
+        if (confirm('Resign this game?')) { if (sendActionFn) sendActionFn({ type: 'resign' }); }
+      }
+      function toggleMenu(e) { if (e) e.stopPropagation(); menuOpen = !menuOpen; }
+
+      document.addEventListener('click', function() { menuOpen = false; selectedSquare = null; legalMoves = []; });
+
+      return { render: render, selectPiece: selectPiece, moveTo: moveTo, quit: quit, resign: resign, toggleMenu: toggleMenu, _gameData: null };
+    })();
+
+    // ════════════════════════════════════════
+    // CHESS UI
+    // ════════════════════════════════════════
+    var ChessUI = (function() {
+      var sendActionFn = null;
+      var selectedSquare = null;
+      var legalMoves = [];
+      var menuOpen = false;
+      var timerInterval = null;
+      var lastState = null;
+      var promotionPending = null;
+
+      var PIECE_UNICODE = {
+        K: ['\u2654', '\u265A'], Q: ['\u2655', '\u265B'], R: ['\u2656', '\u265C'],
+        B: ['\u2657', '\u265D'], N: ['\u2658', '\u265E'], P: ['\u2659', '\u265F']
+      };
+
+      function startTimer(state) {
+        if (timerInterval) clearInterval(timerInterval);
+        var startRemaining = state.turnRemainingMs || 0;
+        var total = state.turnTimeMs || 60000;
+        var startTs = Date.now();
+        timerInterval = setInterval(function() {
+          var elapsed = Date.now() - startTs;
+          var rem = Math.max(0, startRemaining - elapsed);
+          var pct = (rem / total) * 100;
+          var fill = document.querySelector('.chess-timer-fill');
+          if (fill) {
+            fill.style.width = pct + '%';
+            fill.className = 'chess-timer-fill ' + (pct > 50 ? 'green' : pct > 25 ? 'yellow' : 'red');
+          }
+          if (rem <= 0) clearInterval(timerInterval);
+        }, 500);
+      }
+
+      function render(state, sendAction, gameData) {
+        sendActionFn = sendAction;
+        lastState = state;
+        var area = document.getElementById('game-area');
+        var controls = document.getElementById('game-controls');
+        var board = state.board;
+        var isMyTurn = state.isMyTurn;
+        var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
+        var myName = (gameData && gameData.players) ? gameData.players[state.playerIndex].username : 'You';
+        var flip = state.playerIndex === 1;
+        var lastMove = state.lastMove;
+        var kingPos = -1;
+        if (state.inCheck) {
+          for (var k = 0; k < 64; k++) {
+            if (board[k] && board[k].type === 'K' && board[k].player === state.currentPlayer) { kingPos = k; break; }
+          }
+        }
+
+        var h = '<div class="chess-screen">';
+
+        h += '<div class="chess-topbar">';
+        h += '<button class="back-btn" onclick="ChessUI.quit()">&#8592;</button>';
+        h += '<div class="chess-player-info"><div class="name">' + oppName + '</div>';
+        h += '<div class="material">Material: ' + state.material[1 - state.playerIndex] + '</div></div>';
+        h += '<div class="chess-menu-wrap"><button class="chess-menu-btn" onclick="ChessUI.toggleMenu(event)">&#8942;</button>';
+        h += '<div class="domino-dropdown' + (menuOpen ? ' open' : '') + '">';
+        h += '<button class="domino-dropdown-item danger" onclick="ChessUI.resign(event)">Resign</button>';
+        h += '</div></div></div>';
+
+        var remaining = state.turnRemainingMs || 0;
+        var total = state.turnTimeMs || 60000;
+        var pct = (remaining / total) * 100;
+        var timerCls = pct > 50 ? 'green' : pct > 25 ? 'yellow' : 'red';
+        h += '<div class="chess-timer"><div class="chess-timer-fill ' + timerCls + '" style="width:' + pct + '%;"></div></div>';
+
+        h += '<div class="chess-board-wrap"><div class="chess-board">';
+
+        for (var idx = 0; idx < 64; idx++) {
+          var viewIdx = flip ? 63 - idx : idx;
+          var r = Math.floor(viewIdx / 8), c = viewIdx % 8;
+          var isLight = (r + c) % 2 === 0;
+          var sq = board[viewIdx];
+          var isSelected = selectedSquare === viewIdx;
+          var isLegal = legalMoves.indexOf(viewIdx) >= 0;
+          var isLastMove = lastMove && (viewIdx === lastMove.from || viewIdx === lastMove.to);
+
+          var cls = 'chess-sq ' + (isLight ? 'light' : 'dark');
+          if (isSelected) cls += ' selected';
+          else if (isLastMove) cls += ' last-move';
+          if (isLegal) {
+            cls += ' highlight';
+            if (sq) cls += ' has-piece';
+          }
+          if (viewIdx === kingPos) cls += ' in-check';
+
+          var onclick = '';
+          if (isLegal && isMyTurn) {
+            onclick = ' onclick="ChessUI.moveTo(' + viewIdx + ')"';
+          } else if (sq && sq.player === state.playerIndex && isMyTurn) {
+            onclick = ' onclick="ChessUI.selectPiece(' + viewIdx + ')"';
+          }
+
+          h += '<div class="' + cls + '"' + onclick + '>';
+          if (sq) {
+            var unicode = PIECE_UNICODE[sq.type][sq.player];
+            h += '<span class="chess-piece">' + unicode + '</span>';
+          }
+          h += '</div>';
+        }
+
+        h += '</div></div>';
+
+        h += '<div style="text-align:center;padding:0.5rem;">';
+        h += '<div class="chess-player-info"><div class="name">' + myName + '</div>';
+        h += '<div class="material">Material: ' + state.material[state.playerIndex] + '</div></div>';
+        var pillCls = isMyTurn ? 'active' : 'waiting';
+        var pillTxt = isMyTurn ? 'Your Turn' : "Opponent's Turn";
+        if (state.inCheck && isMyTurn) pillTxt = 'Check!';
+        h += '<div class="chess-turn-pill ' + pillCls + '">' + pillTxt + '</div>';
+        h += '</div></div>';
+
+        if (promotionPending !== null) {
+          h += '<div class="chess-promo-overlay">';
+          h += '<div class="chess-promo-box">';
+          var promoPlayer = state.playerIndex;
+          var promoPieces = ['Q', 'R', 'B', 'N'];
+          for (var pi = 0; pi < promoPieces.length; pi++) {
+            var pp = promoPieces[pi];
+            h += '<div class="chess-promo-btn" onclick="ChessUI.promote(\'' + pp + '\')">' + PIECE_UNICODE[pp][promoPlayer] + '</div>';
+          }
+          h += '</div></div>';
+        }
+
+        area.innerHTML = h;
+        controls.innerHTML = ''; controls.style.display = 'none';
+        if (!state.gameOver) startTimer(state);
+      }
+
+      function selectPiece(sq) {
+        if (!lastState || !lastState.isMyTurn) return;
+        selectedSquare = sq;
+        legalMoves = computeLegalMoves(lastState, sq);
+        render(lastState, sendActionFn, ChessUI._gameData);
+      }
+
+      function computeLegalMoves(state, from) {
+        var piece = state.board[from];
+        if (!piece || piece.player !== state.playerIndex) return [];
+        var moves = [];
+        var r = Math.floor(from / 8), c = from % 8;
+
+        var addSlide = function(dirs) {
+          for (var d = 0; d < dirs.length; d++) {
+            for (var s = 1; s < 8; s++) {
+              var nr = r + dirs[d][0] * s, nc = c + dirs[d][1] * s;
+              if (nr < 0 || nr > 7 || nc < 0 || nc > 7) break;
+              var tgt = state.board[nr * 8 + nc];
+              if (tgt) { if (tgt.player !== piece.player) moves.push(nr * 8 + nc); break; }
+              moves.push(nr * 8 + nc);
+            }
+          }
+        };
+
+        switch (piece.type) {
+          case 'P': {
+            var dir = piece.player === 0 ? -1 : 1;
+            var startRow = piece.player === 0 ? 6 : 1;
+            var nr = r + dir;
+            if (nr >= 0 && nr <= 7 && !state.board[nr * 8 + c]) {
+              moves.push(nr * 8 + c);
+              if (r === startRow && !state.board[(r + 2 * dir) * 8 + c]) moves.push((r + 2 * dir) * 8 + c);
+            }
+            for (var dc = -1; dc <= 1; dc += 2) {
+              var nc = c + dc;
+              if (nc >= 0 && nc <= 7 && nr >= 0 && nr <= 7) {
+                var tgt = state.board[nr * 8 + nc];
+                if (tgt && tgt.player !== piece.player) moves.push(nr * 8 + nc);
+              }
+            }
+            break;
+          }
+          case 'N': {
+            var nMoves = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+            for (var n = 0; n < nMoves.length; n++) {
+              var nr2 = r + nMoves[n][0], nc2 = c + nMoves[n][1];
+              if (nr2 >= 0 && nr2 <= 7 && nc2 >= 0 && nc2 <= 7) {
+                var tgt2 = state.board[nr2 * 8 + nc2];
+                if (!tgt2 || tgt2.player !== piece.player) moves.push(nr2 * 8 + nc2);
+              }
+            }
+            break;
+          }
+          case 'B': addSlide([[-1,-1],[-1,1],[1,-1],[1,1]]); break;
+          case 'R': addSlide([[-1,0],[1,0],[0,-1],[0,1]]); break;
+          case 'Q': addSlide([[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]]); break;
+          case 'K': {
+            var kMoves = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+            for (var km = 0; km < kMoves.length; km++) {
+              var nr3 = r + kMoves[km][0], nc3 = c + kMoves[km][1];
+              if (nr3 >= 0 && nr3 <= 7 && nc3 >= 0 && nc3 <= 7) {
+                var tgt3 = state.board[nr3 * 8 + nc3];
+                if (!tgt3 || tgt3.player !== piece.player) moves.push(nr3 * 8 + nc3);
+              }
+            }
+            if (c === 4) {
+              if (!state.board[r * 8 + 5] && !state.board[r * 8 + 6]) {
+                var kr = state.board[r * 8 + 7];
+                if (kr && kr.type === 'R' && kr.player === piece.player) moves.push(r * 8 + 6);
+              }
+              if (!state.board[r * 8 + 1] && !state.board[r * 8 + 2] && !state.board[r * 8 + 3]) {
+                var qr = state.board[r * 8 + 0];
+                if (qr && qr.type === 'R' && qr.player === piece.player) moves.push(r * 8 + 2);
+              }
+            }
+            break;
+          }
+        }
+        return moves;
+      }
+
+      function moveTo(sq) {
+        if (!lastState || selectedSquare === null) return;
+        var piece = lastState.board[selectedSquare];
+        if (piece && piece.type === 'P') {
+          var toRow = Math.floor(sq / 8);
+          var promoRow = piece.player === 0 ? 0 : 7;
+          if (toRow === promoRow) {
+            promotionPending = { from: selectedSquare, to: sq };
+            render(lastState, sendActionFn, ChessUI._gameData);
+            return;
+          }
+        }
+        if (sendActionFn) sendActionFn({ type: 'move', from: selectedSquare, to: sq });
+        selectedSquare = null; legalMoves = [];
+      }
+
+      function promote(pieceType) {
+        if (promotionPending && sendActionFn) {
+          sendActionFn({ type: 'move', from: promotionPending.from, to: promotionPending.to, promotion: pieceType });
+          promotionPending = null; selectedSquare = null; legalMoves = [];
+        }
+      }
+
+      function quit() { if (confirm('Leave? You forfeit.')) window.location.reload(); }
+      function resign(e) {
+        if (e) { e.stopPropagation(); e.preventDefault(); }
+        menuOpen = false;
+        if (confirm('Resign this game?')) { if (sendActionFn) sendActionFn({ type: 'resign' }); }
+      }
+      function toggleMenu(e) { if (e) e.stopPropagation(); menuOpen = !menuOpen; }
+
+      document.addEventListener('click', function() { menuOpen = false; });
+
+      return {
+        render: render, selectPiece: selectPiece, moveTo: moveTo, promote: promote,
+        quit: quit, resign: resign, toggleMenu: toggleMenu, _gameData: null
+      };
+    })();
+
+    // ════════════════════════════════════════
     // MAIN APP
     // ════════════════════════════════════════
     var App = (function() {
@@ -1208,8 +2049,11 @@
         currentGameData = data;
 
         var topbar = document.querySelector('.game-topbar');
-        if (data.gameType === 'domino') {
+        var immersive = ['domino', 'mancala', 'checkers', 'chess'];
+        if (immersive.indexOf(data.gameType) >= 0) {
           topbar.style.display = 'none';
+          if (data.gameType === 'checkers') CheckersUI._gameData = data;
+          if (data.gameType === 'chess') ChessUI._gameData = data;
         } else {
           topbar.style.display = '';
           document.getElementById('game-type-label').textContent = data.gameType.toUpperCase();
@@ -1227,6 +2071,12 @@
 
         if (state.gameType === 'domino') {
           DominoUI.render(state, sendAction, currentGameData);
+        } else if (state.gameType === 'mancala') {
+          MancalaUI.render(state, sendAction, currentGameData);
+        } else if (state.gameType === 'checkers') {
+          CheckersUI.render(state, sendAction, CheckersUI._gameData || currentGameData);
+        } else if (state.gameType === 'chess') {
+          ChessUI.render(state, sendAction, ChessUI._gameData || currentGameData);
         } else {
           var turnEl = document.getElementById('turn-indicator');
           turnEl.textContent = state.isMyTurn ? 'YOUR TURN' : "OPPONENT'S TURN";

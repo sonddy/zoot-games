@@ -11,6 +11,9 @@ const {
 } = require('@solana/web3.js');
 const DominoGame = require('./games/domino');
 const TicTacToeGame = require('./games/tictactoe');
+const MancalaGame = require('./games/mancala');
+const CheckersGame = require('./games/checkers');
+const ChessGame = require('./games/chess');
 
 const SOLANA_RPC = process.env.SOLANA_RPC || 'https://solana-rpc.publicnode.com';
 const solanaConnection = new Connection(SOLANA_RPC, 'confirmed');
@@ -142,13 +145,18 @@ async function handleGameOver(room, result) {
   setTimeout(() => cleanupRoom(room.id), 5000);
 }
 
+const TIMER_DELAYS = { domino: 15500, mancala: 20500, checkers: 30500, chess: 60500 };
+
 function startTurnTimer(room) {
   clearTurnTimer(room);
-  if (!room.game || room.game.gameOver || room.game.roundOver) return;
-  if (room.gameType !== 'domino') return;
+  if (!room.game || room.game.gameOver) return;
+  if (room.game.roundOver) return;
+  const delay = TIMER_DELAYS[room.gameType];
+  if (!delay) return;
 
   room.turnTimer = setTimeout(() => {
-    if (!room.game || room.game.gameOver || room.game.roundOver || room.state !== 'playing') return;
+    if (!room.game || room.game.gameOver || room.state !== 'playing') return;
+    if (room.game.roundOver) return;
     const cp = room.game.currentPlayer;
     const result = room.game.autoPlayForTimeout(cp);
     if (!result) return;
@@ -159,7 +167,7 @@ function startTurnTimer(room) {
     } else {
       startTurnTimer(room);
     }
-  }, 15500);
+  }, delay);
 }
 
 function clearTurnTimer(room) {
@@ -323,6 +331,9 @@ io.on('connection', (socket) => {
 function startGame(room) {
   if (room.gameType === 'domino') room.game = new DominoGame();
   else if (room.gameType === 'tictactoe') room.game = new TicTacToeGame();
+  else if (room.gameType === 'mancala') room.game = new MancalaGame();
+  else if (room.gameType === 'checkers') room.game = new CheckersGame();
+  else if (room.gameType === 'chess') room.game = new ChessGame();
   room.game.init(room.players.length, room.options || {});
 
   room.players.forEach((sid, idx) => {
