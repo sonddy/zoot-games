@@ -45,7 +45,9 @@ const players = new Map();
 const matchQueue = new Map();
 const usedSignatures = new Set();
 
-const HOUSE_FEE = 0.05;
+const HOUSE_FEE = 0.10;
+const HOUSE_WALLET = '2LK7yxZsy6YVCkFQ4PrL644ve1fgRj5FuDexj5JgS753';
+const TEST_MODE = process.env.TEST_MODE === '1';
 
 async function sendSOL(toAddress, amount) {
   const destPubKey = new PublicKey(toAddress);
@@ -84,17 +86,94 @@ async function verifyBetPayment(signature, expectedAmount) {
 
 function createRoom(gameType, betAmount, player1Socket) {
   const id = uuidv4().slice(0, 8);
-  const room = { id, gameType, betAmount, players: [player1Socket], state: 'waiting', game: null, createdAt: Date.now() };
+  const room = { id, gameType, betAmount, players: [player1Socket], state: 'waiting', game: null, createdAt: Date.now(), turnTimer: null };
   rooms.set(id, room);
   return room;
+}
+
+async function handleGameOver(room, result) {
+  clearTurnTimer(room);
+  room.state = 'finished';
+  const winnerIdx = result.winner;
+  const pot = room.betAmount * 2;
+  const houseCut = pot * HOUSE_FEE;
+  const payout = pot - houseCut;
+
+  if (winnerIdx !== null) {
+    const winnerSocketId = room.players[winnerIdx];
+    const winnerPlayer = players.get(winnerSocketId);
+    if (winnerPlayer && !TEST_MODE) {
+      try {
+        await sendSOL(winnerPlayer.walletAddress, payout);
+        const winSock = io.sockets.sockets.get(winnerSocketId);
+        if (winSock) winSock.emit('balance_update', { refreshWallet: true, msg: 'You won ' + payout.toFixed(3) + ' SOL!' });
+      } catch (e) {
+        console.error('Payout error:', e.message);
+      }
+      try {
+        await sendSOL(HOUSE_WALLET, houseCut);
+        console.log('House fee sent:', houseCut.toFixed(4), 'SOL to', HOUSE_WALLET);
+      } catch (e) {
+        console.error('House fee transfer error:', e.message);
+      }
+    }
+    io.to(room.id).emit('game_over', {
+      winner: winnerPlayer ? winnerPlayer.displayName : null,
+      winnerWallet: winnerPlayer ? winnerPlayer.walletAddress : null,
+      payout, isDraw: false, resigned: !!result.resigned,
+    });
+  } else {
+    if (!TEST_MODE) {
+      for (const sid of room.players) {
+        const p = players.get(sid);
+        if (p) {
+          try {
+            await sendSOL(p.walletAddress, room.betAmount);
+            const s = io.sockets.sockets.get(sid);
+            if (s) s.emit('balance_update', { refreshWallet: true, msg: 'Draw — bet refunded!' });
+          } catch (e) {
+            console.error('Refund error:', e.message);
+          }
+        }
+      }
+    }
+    io.to(room.id).emit('game_over', { winner: null, winnerWallet: null, payout: 0, isDraw: true });
+  }
+  setTimeout(() => cleanupRoom(room.id), 5000);
+}
+
+function startTurnTimer(room) {
+  clearTurnTimer(room);
+  if (!room.game || room.game.gameOver || room.game.roundOver) return;
+  if (room.gameType !== 'domino') return;
+
+  room.turnTimer = setTimeout(() => {
+    if (!room.game || room.game.gameOver || room.game.roundOver || room.state !== 'playing') return;
+    const cp = room.game.currentPlayer;
+    const result = room.game.autoPlayForTimeout(cp);
+    if (!result) return;
+    emitGameState(room);
+
+    if (result.gameOver) {
+      handleGameOver(room, result);
+    } else {
+      startTurnTimer(room);
+    }
+  }, 15500);
+}
+
+function clearTurnTimer(room) {
+  if (room.turnTimer) { clearTimeout(room.turnTimer); room.turnTimer = null; }
 }
 
 io.on('connection', (socket) => {
   console.log(`Connected: ${socket.id}`);
 
   socket.on('register', async ({ walletAddress, displayName }) => {
-    if (!walletAddress || walletAddress.length < 32) return socket.emit('error_msg', { msg: 'Invalid wallet address' });
-    try { new PublicKey(walletAddress); } catch (_) { return socket.emit('error_msg', { msg: 'Invalid Solana address' }); }
+    if (!walletAddress || walletAddress.length < 2) return socket.emit('error_msg', { msg: 'Invalid wallet address' });
+    if (!TEST_MODE) {
+      try { new PublicKey(walletAddress); } catch (_) { return socket.emit('error_msg', { msg: 'Invalid Solana address' }); }
+    }
 
     players.set(socket.id, { walletAddress, displayName: displayName || walletAddress.slice(0, 6), roomId: null });
 
@@ -111,12 +190,13 @@ io.on('connection', (socket) => {
     const player = players.get(socket.id);
     if (!player) return socket.emit('error_msg', { msg: 'Register first' });
 
-    const bet = parseFloat(betAmount);
-    if (!bet || bet <= 0) return socket.emit('error_msg', { msg: 'Invalid bet amount' });
-    if (!txSignature) return socket.emit('error_msg', { msg: 'No payment transaction provided' });
-
-    const verification = await verifyBetPayment(txSignature, bet);
-    if (!verification.ok) return socket.emit('error_msg', { msg: verification.error });
+    const bet = parseFloat(betAmount) || 0;
+    if (!TEST_MODE) {
+      if (!bet || bet <= 0) return socket.emit('error_msg', { msg: 'Invalid bet amount' });
+      if (!txSignature) return socket.emit('error_msg', { msg: 'No payment transaction provided' });
+      const verification = await verifyBetPayment(txSignature, bet);
+      if (!verification.ok) return socket.emit('error_msg', { msg: verification.error });
+    }
 
     const opts = {};
     if (gameType === 'tictactoe' && gridSize) opts.gridSize = gridSize;
@@ -150,7 +230,7 @@ io.on('connection', (socket) => {
     for (const [key, val] of matchQueue) {
       if (val.socketId === socket.id) {
         const player = players.get(socket.id);
-        if (player) {
+        if (player && !TEST_MODE) {
           try {
             await sendSOL(player.walletAddress, val.bet);
             socket.emit('balance_update', { refreshWallet: true, msg: 'Bet refunded to your wallet!' });
@@ -180,45 +260,9 @@ io.on('connection', (socket) => {
     emitGameState(room);
 
     if (result.gameOver) {
-      room.state = 'finished';
-      const winnerIdx = result.winner;
-      const pot = room.betAmount * 2;
-      const houseCut = pot * HOUSE_FEE;
-      const payout = pot - houseCut;
-
-      if (winnerIdx !== null) {
-        const winnerSocketId = room.players[winnerIdx];
-        const winnerPlayer = players.get(winnerSocketId);
-        if (winnerPlayer) {
-          try {
-            const sig = await sendSOL(winnerPlayer.walletAddress, payout);
-            const winSock = io.sockets.sockets.get(winnerSocketId);
-            if (winSock) winSock.emit('balance_update', { refreshWallet: true, msg: 'You won ' + payout.toFixed(3) + ' SOL!' });
-          } catch (e) {
-            console.error('Payout error:', e.message);
-          }
-        }
-        io.to(room.id).emit('game_over', {
-          winner: winnerPlayer ? winnerPlayer.displayName : null,
-          winnerWallet: winnerPlayer ? winnerPlayer.walletAddress : null,
-          payout, isDraw: false,
-        });
-      } else {
-        for (const sid of room.players) {
-          const p = players.get(sid);
-          if (p) {
-            try {
-              await sendSOL(p.walletAddress, room.betAmount);
-              const s = io.sockets.sockets.get(sid);
-              if (s) s.emit('balance_update', { refreshWallet: true, msg: 'Draw — bet refunded!' });
-            } catch (e) {
-              console.error('Refund error:', e.message);
-            }
-          }
-        }
-        io.to(room.id).emit('game_over', { winner: null, winnerWallet: null, payout: 0, isDraw: true });
-      }
-      setTimeout(() => cleanupRoom(room.id), 5000);
+      await handleGameOver(room, result);
+    } else if (result.newRound || !result.roundOver) {
+      startTurnTimer(room);
     }
   });
 
@@ -230,7 +274,7 @@ io.on('connection', (socket) => {
 
     for (const [key, val] of matchQueue) {
       if (val.socketId === socket.id) {
-        if (player) {
+        if (player && !TEST_MODE) {
           try { await sendSOL(player.walletAddress, val.bet); } catch (e) { console.error('Refund on disconnect:', e.message); }
         }
         matchQueue.delete(key);
@@ -246,14 +290,19 @@ io.on('connection', (socket) => {
         const winnerPlayer = players.get(winnerSocketId);
 
         const pot = room.betAmount * 2;
-        const payout = pot - (pot * HOUSE_FEE);
+        const houseCut = pot * HOUSE_FEE;
+        const payout = pot - houseCut;
 
-        if (winnerPlayer) {
+        if (winnerPlayer && !TEST_MODE) {
           try {
             await sendSOL(winnerPlayer.walletAddress, payout);
             const winSock = io.sockets.sockets.get(winnerSocketId);
             if (winSock) winSock.emit('balance_update', { refreshWallet: true, msg: 'Opponent left — you won ' + payout.toFixed(3) + ' SOL!' });
           } catch (e) { console.error('Payout on disconnect:', e.message); }
+          try {
+            await sendSOL(HOUSE_WALLET, houseCut);
+            console.log('House fee sent:', houseCut.toFixed(4), 'SOL to', HOUSE_WALLET);
+          } catch (e) { console.error('House fee on disconnect:', e.message); }
         }
 
         io.to(room.id).emit('game_over', {
@@ -291,6 +340,7 @@ function startGame(room) {
     }
   });
   emitGameState(room);
+  startTurnTimer(room);
 }
 
 function emitGameState(room) {
@@ -303,6 +353,7 @@ function emitGameState(room) {
 function cleanupRoom(roomId) {
   const room = rooms.get(roomId);
   if (!room) return;
+  clearTurnTimer(room);
   room.players.forEach((sid) => {
     const p = players.get(sid);
     if (p) p.roomId = null;
