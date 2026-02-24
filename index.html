@@ -2554,12 +2554,23 @@
 
         btn.disabled = true;
         btn.textContent = 'Joining...';
+        btn.style.background = '#f59e0b';
 
-        var resetBtn = function() { btn.disabled = false; btn.textContent = 'Accept'; };
+        var resetBtn = function(errMsg) {
+          btn.disabled = false;
+          btn.textContent = 'Accept';
+          btn.style.background = '';
+          if (errMsg) {
+            showToast(errMsg, 'error');
+            btn.textContent = 'Retry';
+            btn.style.background = '#ef4444';
+            setTimeout(function() { btn.textContent = 'Accept'; btn.style.background = ''; }, 4000);
+          }
+        };
 
-        var onError = function(d) { resetBtn(); };
-        socket.once('error_msg', onError);
-        socket.once('game_start', function() { socket.off('error_msg', onError); });
+        var onServerError = function(d) { resetBtn(d.msg); };
+        socket.once('error_msg', onServerError);
+        socket.once('game_start', function() { socket.off('error_msg', onServerError); });
 
         if (isTestMode) {
           socket.emit('accept_bet', { betId: betId, txSignature: 'test_accept_' + Date.now() });
@@ -2567,11 +2578,15 @@
         }
 
         try {
-          btn.textContent = 'Confirm in Phantom...';
           var provider = PhantomWallet.getProvider();
-          if (!provider || !provider.publicKey) throw new Error('Phantom wallet not connected');
+          if (!provider || !provider.publicKey) throw new Error('Wallet not connected — reconnect Phantom');
+
+          btn.textContent = 'Confirm in Phantom...';
           var web3 = window.solanaWeb3;
-          solConnection = new web3.Connection(PhantomWallet.getRpcUrl(), 'confirmed');
+          if (!web3) throw new Error('Solana library not loaded — refresh page');
+
+          var rpcUrl = PhantomWallet.getRpcUrl();
+          solConnection = new web3.Connection(rpcUrl, 'confirmed');
 
           var fromPubkey = provider.publicKey;
           var toPubkey = new web3.PublicKey(escrowAddress);
@@ -2581,24 +2596,29 @@
             web3.SystemProgram.transfer({ fromPubkey: fromPubkey, toPubkey: toPubkey, lamports: lamports })
           );
           transaction.feePayer = fromPubkey;
+
+          btn.textContent = 'Getting blockhash...';
           var bh = await solConnection.getLatestBlockhash('confirmed');
           transaction.recentBlockhash = bh.blockhash;
 
+          btn.textContent = 'Sign in Phantom...';
           var signed = await provider.signTransaction(transaction);
-          btn.textContent = 'Sending...';
 
+          btn.textContent = 'Sending tx...';
           var signature = await solConnection.sendRawTransaction(signed.serialize());
-          btn.textContent = 'Confirming...';
 
+          btn.textContent = 'Confirming tx...';
           await solConnection.confirmTransaction(signature, 'confirmed');
 
           btn.textContent = 'Matching...';
+          btn.style.background = 'var(--green)';
           socket.emit('accept_bet', { betId: betId, txSignature: signature });
           refreshBalance();
         } catch (err) {
-          socket.off('error_msg', onError);
-          showToast(err.message || 'Transaction cancelled', 'error');
-          resetBtn();
+          socket.off('error_msg', onServerError);
+          var msg = err.message || 'Transaction failed';
+          if (msg.indexOf('User rejected') >= 0 || msg.indexOf('cancelled') >= 0) msg = 'You cancelled the transaction';
+          resetBtn(msg);
         }
       }
 
