@@ -2549,26 +2549,27 @@
       }
 
       async function acceptBet(betId, betAmount, btn) {
-        if (!socket) return showToast('Not connected to server', 'error');
-        if (!escrowAddress) return showToast('Server not ready, try again', 'error');
+        if (!socket) { showToast('Not connected to server', 'error'); return; }
+        if (!escrowAddress) { showToast('Server not ready, try again', 'error'); return; }
 
         btn.disabled = true;
+        btn.textContent = 'Joining...';
+
+        var resetBtn = function() { btn.disabled = false; btn.textContent = 'Accept'; };
+
+        var onError = function(d) { resetBtn(); };
+        socket.once('error_msg', onError);
+        socket.once('game_start', function() { socket.off('error_msg', onError); });
 
         if (isTestMode) {
-          btn.textContent = 'Joining...';
           socket.emit('accept_bet', { betId: betId, txSignature: 'test_accept_' + Date.now() });
           return;
         }
 
-        if (betAmount > currentBalance) return (function() {
-          showToast('Not enough SOL in your wallet!', 'error');
-          btn.disabled = false;
-        })();
-
-        btn.textContent = 'Confirm in Phantom...';
-
         try {
+          btn.textContent = 'Confirm in Phantom...';
           var provider = PhantomWallet.getProvider();
+          if (!provider || !provider.publicKey) throw new Error('Phantom wallet not connected');
           var web3 = window.solanaWeb3;
           solConnection = new web3.Connection(PhantomWallet.getRpcUrl(), 'confirmed');
 
@@ -2591,13 +2592,13 @@
 
           await solConnection.confirmTransaction(signature, 'confirmed');
 
+          btn.textContent = 'Matching...';
           socket.emit('accept_bet', { betId: betId, txSignature: signature });
-          btn.textContent = 'Matched!';
           refreshBalance();
         } catch (err) {
+          socket.off('error_msg', onError);
           showToast(err.message || 'Transaction cancelled', 'error');
-          btn.disabled = false;
-          btn.textContent = 'Accept';
+          resetBtn();
         }
       }
 
