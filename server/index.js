@@ -256,6 +256,47 @@ io.on('connection', (socket) => {
     broadcastLobby();
   });
 
+  socket.on('accept_bet', async ({ betId, txSignature }) => {
+    const player = players.get(socket.id);
+    if (!player) return socket.emit('error_msg', { msg: 'Register first' });
+
+    const entry = matchQueue.get(betId);
+    if (!entry) return socket.emit('error_msg', { msg: 'This bet is no longer available' });
+
+    if (entry.socketId === socket.id) return socket.emit('error_msg', { msg: 'You cannot accept your own bet' });
+
+    const bet = entry.bet;
+
+    if (!TEST_MODE) {
+      if (!txSignature) return socket.emit('error_msg', { msg: 'No payment transaction provided' });
+      const verification = await verifyBetPayment(txSignature, bet);
+      if (!verification.ok) return socket.emit('error_msg', { msg: verification.error });
+    }
+
+    if (!matchQueue.has(betId)) return socket.emit('error_msg', { msg: 'Bet was taken by someone else' });
+    matchQueue.delete(betId);
+
+    const parts = betId.split('_');
+    const gameType = parts[0];
+    const opts = entry.options || {};
+
+    const room = createRoom(gameType, bet, entry.socketId);
+    room.options = opts;
+    room.players.push(socket.id);
+    room.state = 'playing';
+
+    const waitingPlayer = players.get(entry.socketId);
+    if (waitingPlayer) waitingPlayer.roomId = room.id;
+    player.roomId = room.id;
+
+    const sock1 = io.sockets.sockets.get(entry.socketId);
+    if (sock1) sock1.join(room.id);
+    socket.join(room.id);
+
+    startGame(room);
+    broadcastLobby();
+  });
+
   socket.on('game_action', async (action) => {
     const player = players.get(socket.id);
     if (!player || !player.roomId) return;
@@ -379,9 +420,20 @@ function cleanupRoom(roomId) {
 function broadcastLobby() {
   const waiting = [];
   for (const [key, val] of matchQueue) {
-    const [gameType, bet] = key.split('_');
+    const parts = key.split('_');
+    const gameType = parts[0];
+    const bet = parts[1];
+    const gridSize = parts[2] || null;
     const p = players.get(val.socketId);
-    waiting.push({ gameType, betAmount: parseFloat(bet), username: p?.displayName });
+    waiting.push({
+      id: key,
+      gameType,
+      betAmount: parseFloat(bet),
+      username: p?.displayName || 'Anon',
+      wallet: p?.walletAddress ? p.walletAddress.slice(0, 4) + '…' + p.walletAddress.slice(-4) : '',
+      gridSize: gridSize ? parseInt(gridSize) : null,
+      socketId: val.socketId,
+    });
   }
   const activeGames = [];
   for (const [, room] of rooms) {

@@ -138,7 +138,57 @@
     .bet-input-group input[type="number"]:focus { border-color: var(--accent); }
     .bet-input-group .sol-label { font-size: 0.9rem; color: var(--text2); font-weight: 600; }
 
-    .live-section { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    .pending-bets-section { margin-bottom: 2.5rem; }
+    .pending-bets-section h2 { font-size: 1.3rem; margin-bottom: 1rem; font-weight: 700; display: flex; align-items: center; gap: 0.6rem; }
+    .pending-bets-section h2 .pending-count {
+      background: var(--accent); color: #fff; font-size: 0.75rem; font-weight: 700;
+      padding: 0.15rem 0.55rem; border-radius: 999px; min-width: 20px; text-align: center;
+    }
+    .pending-filter { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .pending-filter-btn {
+      background: var(--surface); border: 2px solid var(--surface2); color: var(--text2);
+      padding: 0.35rem 0.9rem; border-radius: 999px; cursor: pointer; font-size: 0.8rem;
+      font-family: inherit; font-weight: 600; transition: all 0.2s;
+    }
+    .pending-filter-btn:hover { border-color: var(--accent); color: var(--text); }
+    .pending-filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .pending-bets-list { display: flex; flex-direction: column; gap: 0.6rem; max-height: 400px; overflow-y: auto; }
+    .pending-bet-card {
+      background: var(--bg2); border: 1px solid var(--surface2); border-radius: var(--radius);
+      padding: 0.8rem 1rem; display: flex; align-items: center; gap: 1rem;
+      transition: border-color 0.2s, transform 0.15s; flex-wrap: nowrap;
+    }
+    .pending-bet-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .pending-bet-card.own-bet { border-color: var(--gold); opacity: 0.7; }
+    .pending-bet-icon { font-size: 1.8rem; flex-shrink: 0; width: 42px; text-align: center; }
+    .pending-bet-info { flex: 1; min-width: 0; }
+    .pending-bet-game { font-weight: 700; font-size: 0.95rem; margin-bottom: 0.15rem; }
+    .pending-bet-player { font-size: 0.8rem; color: var(--text2); display: flex; align-items: center; gap: 0.4rem; }
+    .pending-bet-player .wallet-tag {
+      background: var(--surface); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.7rem;
+      font-family: 'Courier New', monospace; color: var(--accent2);
+    }
+    .pending-bet-amount {
+      font-size: 1.1rem; font-weight: 800; color: var(--gold); text-align: right;
+      flex-shrink: 0; min-width: 80px;
+    }
+    .pending-bet-amount small { font-size: 0.7rem; font-weight: 600; color: var(--text2); }
+    .pending-bet-accept {
+      background: var(--green); color: #fff; border: none; border-radius: var(--radius-sm);
+      padding: 0.5rem 1.1rem; font-family: inherit; font-size: 0.85rem; font-weight: 700;
+      cursor: pointer; transition: background 0.2s, transform 0.1s; flex-shrink: 0;
+    }
+    .pending-bet-accept:hover { background: #1db954; transform: scale(1.03); }
+    .pending-bet-accept:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .pending-bet-accept.own-label {
+      background: var(--surface2); color: var(--text2); cursor: default; font-weight: 600;
+    }
+    .pending-empty {
+      text-align: center; color: var(--text2); padding: 2rem; font-style: italic;
+      background: var(--surface); border-radius: var(--radius); font-size: 0.9rem;
+    }
+
+    .live-section { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
     .live-col h4 { font-size: 0.95rem; margin-bottom: 0.8rem; color: var(--text2); }
     .activity-list { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; max-height: 200px; overflow-y: auto; }
     .activity-list li { background: var(--surface); padding: 0.5rem 0.8rem; border-radius: var(--radius-sm); font-size: 0.85rem; display: flex; justify-content: space-between; }
@@ -730,7 +780,9 @@
 
     @media (max-width: 700px) {
       .game-cards { grid-template-columns: 1fr; }
-      .live-section { grid-template-columns: 1fr; }
+      .pending-bet-card { flex-wrap: wrap; gap: 0.6rem; }
+      .pending-bet-amount { text-align: left; }
+      .pending-bet-accept { width: 100%; text-align: center; }
       .topbar { flex-wrap: wrap; gap: 0.5rem; }
       .logo h1 { font-size: 2rem; }
       .logo-mark { width: 64px; height: 64px; font-size: 1.8rem; }
@@ -874,11 +926,23 @@
         </div>
       </div>
 
-      <section class="live-section">
-        <div class="live-col">
-          <h4>&#128269; Waiting for Opponents</h4>
-          <ul id="waiting-list" class="activity-list"></ul>
+      <section class="pending-bets-section">
+        <h2>&#128293; Open Challenges <span class="pending-count" id="pending-count">0</span></h2>
+        <div class="pending-filter" id="pending-filter">
+          <button class="pending-filter-btn active" data-filter="all">All</button>
+          <button class="pending-filter-btn" data-filter="domino">&#127073; Domino</button>
+          <button class="pending-filter-btn" data-filter="tictactoe">&#10005;&#9675; Tic Tac Toe</button>
+          <button class="pending-filter-btn" data-filter="mancala">&#127794; Mancala</button>
+          <button class="pending-filter-btn" data-filter="checkers">&#9823; Checkers</button>
+          <button class="pending-filter-btn" data-filter="chess">&#9812; Chess</button>
+          <button class="pending-filter-btn" data-filter="morpion">&#10010; Morpion</button>
         </div>
+        <div class="pending-bets-list" id="pending-bets-list">
+          <div class="pending-empty">No open challenges yet &mdash; create one above!</div>
+        </div>
+      </section>
+
+      <section class="live-section">
         <div class="live-col">
           <h4>&#9876;&#65039; Active Games</h4>
           <ul id="active-list" class="activity-list"></ul>
@@ -2395,20 +2459,122 @@
         }
       }
 
+      var pendingFilter = 'all';
+      var lastLobbyData = null;
+
+      var GAME_ICONS = { domino: '\u{1F031}', tictactoe: '\u2715\u25CB', mancala: '\u{1F332}', checkers: '\u265F', chess: '\u2654', morpion: '\u271A' };
+      var GAME_NAMES = { domino: 'Domino', tictactoe: 'Tic Tac Toe', mancala: 'Mancala', checkers: 'Checkers', chess: 'Chess', morpion: 'Morpion' };
+
       function updateLobby(data) {
+        lastLobbyData = data;
         document.getElementById('online-count').textContent = data.onlineCount + ' online';
-        var waitList = document.getElementById('waiting-list');
-        waitList.innerHTML = data.waiting.length === 0
-          ? '<li class="empty-msg">No one waiting</li>'
-          : data.waiting.map(function(w) { return '<li><span>' + w.username + ' — ' + w.gameType + '</span><span>' + w.betAmount + ' SOL</span></li>'; }).join('');
+
+        renderPendingBets(data.waiting);
+
         var activeList = document.getElementById('active-list');
         activeList.innerHTML = data.activeGames.length === 0
           ? '<li class="empty-msg">No active games</li>'
-          : data.activeGames.map(function(g) { return '<li><span>' + g.players.join(' vs ') + '</span><span>' + g.gameType + ' — ' + g.betAmount + ' SOL</span></li>'; }).join('');
+          : data.activeGames.map(function(g) { return '<li><span>' + g.players.join(' vs ') + '</span><span>' + (GAME_NAMES[g.gameType] || g.gameType) + ' — ' + g.betAmount + ' SOL</span></li>'; }).join('');
+      }
+
+      function renderPendingBets(bets) {
+        var container = document.getElementById('pending-bets-list');
+        var countEl = document.getElementById('pending-count');
+
+        var filtered = pendingFilter === 'all' ? bets : bets.filter(function(b) { return b.gameType === pendingFilter; });
+
+        countEl.textContent = bets.length;
+
+        if (filtered.length === 0) {
+          container.innerHTML = '<div class="pending-empty">' +
+            (bets.length === 0 ? 'No open challenges yet — be the first to create one!' : 'No challenges for this game — try another filter') +
+            '</div>';
+          return;
+        }
+
+        var myWallet = document.getElementById('connected-wallet-addr').textContent;
+        var myShort = myWallet.length > 8 ? myWallet.slice(0, 4) + '…' + myWallet.slice(-4) : '';
+
+        var html = '';
+        for (var i = 0; i < filtered.length; i++) {
+          var b = filtered[i];
+          var isOwn = b.wallet === myShort;
+          var icon = GAME_ICONS[b.gameType] || '🎮';
+          var name = GAME_NAMES[b.gameType] || b.gameType;
+          var gridLabel = b.gridSize ? ' (' + b.gridSize + '×' + b.gridSize + ')' : '';
+
+          html += '<div class="pending-bet-card' + (isOwn ? ' own-bet' : '') + '">';
+          html += '<div class="pending-bet-icon">' + icon + '</div>';
+          html += '<div class="pending-bet-info">';
+          html += '<div class="pending-bet-game">' + name + gridLabel + '</div>';
+          html += '<div class="pending-bet-player">' + b.username + ' <span class="wallet-tag">' + b.wallet + '</span></div>';
+          html += '</div>';
+          html += '<div class="pending-bet-amount">' + b.betAmount + ' <small>SOL</small></div>';
+
+          if (isOwn) {
+            html += '<button class="pending-bet-accept own-label" disabled>Your Bet</button>';
+          } else {
+            html += '<button class="pending-bet-accept" onclick="ZG.acceptBet(\'' + b.id + '\',' + b.betAmount + ',this)">Accept</button>';
+          }
+          html += '</div>';
+        }
+        container.innerHTML = html;
       }
 
       function setupWaitingScreen() {
         document.getElementById('btn-cancel-search').addEventListener('click', function() { socket.emit('cancel_search'); });
+
+        var filterBtns = document.querySelectorAll('.pending-filter-btn');
+        for (var fi = 0; fi < filterBtns.length; fi++) {
+          filterBtns[fi].addEventListener('click', function() {
+            for (var x = 0; x < filterBtns.length; x++) filterBtns[x].classList.remove('active');
+            this.classList.add('active');
+            pendingFilter = this.dataset.filter;
+            if (lastLobbyData) renderPendingBets(lastLobbyData.waiting);
+          });
+        }
+      }
+
+      async function acceptBet(betId, betAmount, btn) {
+        if (!socket) return showToast('Not connected', 'error');
+        if (betAmount > currentBalance) return showToast('Not enough SOL in your wallet!', 'error');
+        if (!escrowAddress) return showToast('Server not ready, try again', 'error');
+
+        btn.disabled = true;
+        btn.textContent = 'Confirm in Phantom...';
+
+        try {
+          var provider = PhantomWallet.getProvider();
+          var web3 = window.solanaWeb3;
+          solConnection = new web3.Connection(PhantomWallet.getRpcUrl(), 'confirmed');
+
+          var fromPubkey = provider.publicKey;
+          var toPubkey = new web3.PublicKey(escrowAddress);
+          var lamports = Math.floor(betAmount * web3.LAMPORTS_PER_SOL);
+
+          var transaction = new web3.Transaction().add(
+            web3.SystemProgram.transfer({ fromPubkey: fromPubkey, toPubkey: toPubkey, lamports: lamports })
+          );
+          transaction.feePayer = fromPubkey;
+          var bh = await solConnection.getLatestBlockhash('confirmed');
+          transaction.recentBlockhash = bh.blockhash;
+
+          var signed = await provider.signTransaction(transaction);
+          btn.textContent = 'Sending...';
+
+          var signature = await solConnection.sendRawTransaction(signed.serialize());
+          btn.textContent = 'Confirming...';
+
+          await solConnection.confirmTransaction(signature, 'confirmed');
+
+          socket.emit('accept_bet', { betId: betId, txSignature: signature });
+          btn.textContent = 'Matched!';
+          refreshBalance();
+        } catch (err) {
+          showToast(err.message || 'Transaction cancelled', 'error');
+          btn.disabled = false;
+          btn.textContent = 'Accept';
+        }
       }
 
       function onGameStart(data) {
@@ -2501,7 +2667,7 @@
       }
 
       document.addEventListener('DOMContentLoaded', init);
-      return { showScreen: showScreen, sendAction: sendAction };
+      return { showScreen: showScreen, sendAction: sendAction, acceptBet: acceptBet };
     })();
 
   </script>

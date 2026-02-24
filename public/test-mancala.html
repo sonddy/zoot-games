@@ -84,9 +84,11 @@
   }
   .mancala-seed {
     width: 8px; height: 8px; border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #c9a96e, #8b6914);
     box-shadow: 0 1px 2px rgba(0,0,0,0.4);
   }
+  .mancala-seed.s-me { background: radial-gradient(circle at 30% 30%, #60d4f0, #1a8fb5); }
+  .mancala-seed.s-opp { background: radial-gradient(circle at 30% 30%, #f07060, #c0392b); }
+  .mancala-seed.s-mix { background: radial-gradient(circle at 30% 30%, #c9a96e, #8b6914); }
   .mancala-pit-count {
     font-size: 0.7rem; font-weight: 700; color: rgba(255,255,255,0.7); margin-top: 2px;
   }
@@ -212,13 +214,13 @@ var MancalaUI = (function() {
     h += '<div class="mancala-store" style="grid-column:1;grid-row:1/3;">';
     h += '<div class="mancala-store-label">' + oppName.charAt(0) + '</div>';
     h += '<div class="mancala-store-count">' + pits[oppStore] + '</div>';
-    h += renderSeeds(pits[oppStore], true);
+    h += renderSeeds(pits[oppStore], true, 's-opp');
     h += '</div>';
 
     for (var i = 0; i < 6; i++) {
       var pi = oppPits[i];
       h += '<div class="mancala-pit disabled" style="grid-column:' + (i + 2) + ';grid-row:1;">';
-      h += renderSeeds(pits[pi], false);
+      h += renderSeeds(pits[pi], false, 's-opp');
       h += '<div class="mancala-pit-count">' + pits[pi] + '</div></div>';
     }
 
@@ -228,14 +230,14 @@ var MancalaUI = (function() {
       var cls = canClick ? '' : ' disabled';
       var click = canClick ? ' onclick="MancalaUI.sow(' + pj + ')"' : '';
       h += '<div class="mancala-pit' + cls + '" style="grid-column:' + (j + 2) + ';grid-row:2;"' + click + '>';
-      h += renderSeeds(pits[pj], false);
+      h += renderSeeds(pits[pj], false, 's-me');
       h += '<div class="mancala-pit-count">' + pits[pj] + '</div></div>';
     }
 
     h += '<div class="mancala-store" style="grid-column:8;grid-row:1/3;">';
     h += '<div class="mancala-store-label">' + myName.charAt(0) + '</div>';
     h += '<div class="mancala-store-count">' + pits[myStore] + '</div>';
-    h += renderSeeds(pits[myStore], true);
+    h += renderSeeds(pits[myStore], true, 's-me');
     h += '</div>';
 
     h += '</div></div>';
@@ -252,12 +254,13 @@ var MancalaUI = (function() {
     if (!state.gameOver) startTimer(state);
   }
 
-  function renderSeeds(count, isStore) {
+  function renderSeeds(count, isStore, colorCls) {
     if (count === 0) return '';
     var max = isStore ? 24 : 10;
     var show = Math.min(count, max);
+    var cls = colorCls || 's-mix';
     var h = '<div class="mancala-seeds">';
-    for (var i = 0; i < show; i++) h += '<div class="mancala-seed"></div>';
+    for (var i = 0; i < show; i++) h += '<div class="mancala-seed ' + cls + '"></div>';
     h += '</div>';
     return h;
   }
