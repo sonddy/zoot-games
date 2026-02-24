@@ -14,6 +14,7 @@ const TicTacToeGame = require('./games/tictactoe');
 const MancalaGame = require('./games/mancala');
 const CheckersGame = require('./games/checkers');
 const ChessGame = require('./games/chess');
+const MorpionGame = require('./games/morpion');
 
 const SOLANA_RPC = process.env.SOLANA_RPC || 'https://solana-rpc.publicnode.com';
 const solanaConnection = new Connection(SOLANA_RPC, 'confirmed');
@@ -145,7 +146,7 @@ async function handleGameOver(room, result) {
   setTimeout(() => cleanupRoom(room.id), 5000);
 }
 
-const TIMER_DELAYS = { domino: 15500, mancala: 20500, checkers: 30500, chess: 60500 };
+const TIMER_DELAYS = { domino: 15500, mancala: 20500, checkers: 30500, chess: 60500, morpion: 30500 };
 
 function startTurnTimer(room) {
   clearTurnTimer(room);
@@ -334,6 +335,7 @@ function startGame(room) {
   else if (room.gameType === 'mancala') room.game = new MancalaGame();
   else if (room.gameType === 'checkers') room.game = new CheckersGame();
   else if (room.gameType === 'chess') room.game = new ChessGame();
+  else if (room.gameType === 'morpion') room.game = new MorpionGame();
   room.game.init(room.players.length, room.options || {});
 
   room.players.forEach((sid, idx) => {
