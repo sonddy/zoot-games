@@ -2527,7 +2527,7 @@
           if (isOwn) {
             html += '<button class="pending-bet-accept own-label" disabled>Your Bet</button>';
           } else {
-            html += '<button class="pending-bet-accept" onclick="ZG.acceptBet(\'' + b.id + '\',' + b.betAmount + ',this)">Accept</button>';
+            html += '<button class="pending-bet-accept" data-bet-id="' + b.id + '" data-bet-amount="' + b.betAmount + '">Accept</button>';
           }
           html += '</div>';
         }
@@ -2546,6 +2546,15 @@
             if (lastLobbyData) renderPendingBets(lastLobbyData.waiting);
           });
         }
+
+        document.getElementById('pending-bets-list').addEventListener('click', function(e) {
+          var btn = e.target.closest('.pending-bet-accept');
+          if (!btn || btn.disabled || btn.classList.contains('own-label')) return;
+          var betId = btn.getAttribute('data-bet-id');
+          var betAmount = parseFloat(btn.getAttribute('data-bet-amount'));
+          if (!betId) return;
+          acceptBet(betId, betAmount, btn);
+        });
       }
 
       async function acceptBet(betId, betAmount, btn) {
