@@ -193,6 +193,45 @@
       padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.7rem; font-weight: 700;
       margin-bottom: 0.8rem; border: 1px solid rgba(0,212,170,0.2);
     }
+    .game-card.coming-soon {
+      opacity: 0.7; pointer-events: none; position: relative;
+    }
+    .game-card.coming-soon::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, var(--gold), #ff9800); opacity: 1;
+    }
+    .game-card.coming-soon::after {
+      content: 'COMING SOON'; position: absolute; top: 12px; right: 12px;
+      background: var(--gold); color: #000; font-size: 0.6rem; font-weight: 800;
+      padding: 0.2rem 0.5rem; border-radius: 4px; letter-spacing: 1px;
+    }
+    .badge-house {
+      display: inline-block; background: rgba(255,193,7,0.1); color: var(--gold);
+      padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.65rem; font-weight: 700;
+      border: 1px solid rgba(255,193,7,0.2); margin-left: 0.3rem;
+    }
+    .badge-zootcoin {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      background: linear-gradient(135deg, rgba(255,193,7,0.12), rgba(255,152,0,0.08));
+      color: var(--gold); padding: 0.2rem 0.6rem; border-radius: 999px;
+      font-size: 0.65rem; font-weight: 700; border: 1px solid rgba(255,193,7,0.2);
+    }
+    .zootcoin-banner {
+      background: linear-gradient(135deg, rgba(255,193,7,0.06), rgba(255,152,0,0.03));
+      border: 1px solid rgba(255,193,7,0.15); border-radius: var(--radius);
+      padding: 1.2rem 1.5rem; margin-bottom: 2rem; display: flex; align-items: center; gap: 1rem;
+    }
+    .zootcoin-banner-icon { font-size: 2rem; flex-shrink: 0; }
+    .zootcoin-banner-text { flex: 1; }
+    .zootcoin-banner-text h3 {
+      font-size: 0.95rem; font-weight: 800; color: var(--gold); margin-bottom: 0.2rem;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .zootcoin-banner-text h3 .soon-tag {
+      font-size: 0.6rem; background: var(--gold); color: #000; padding: 0.1rem 0.4rem;
+      border-radius: 4px; font-weight: 800; letter-spacing: 0.5px;
+    }
+    .zootcoin-banner-text p { font-size: 0.78rem; color: var(--text2); line-height: 1.5; }
     .grid-options { display: flex; gap: 0.4rem; flex-wrap: wrap; }
     .grid-btn {
       background: var(--surface); border: 2px solid var(--surface2); color: var(--text);
@@ -953,7 +992,7 @@
 
       <div class="connect-stats">
         <div class="stat-pill"><span class="stat-value" id="connect-online">--</span><span class="stat-label">Online Now</span></div>
-        <div class="stat-pill"><span class="stat-value">5</span><span class="stat-label">Games</span></div>
+        <div class="stat-pill"><span class="stat-value">6</span><span class="stat-label">Games</span></div>
         <div class="stat-pill"><span class="stat-value">1.8x</span><span class="stat-label">Payout</span></div>
       </div>
 
@@ -997,6 +1036,14 @@
         <span class="wallet-address-label">Connected wallet (click to copy):</span>
         <div class="wallet-address-box" id="connected-wallet-addr" title="Click to copy">Loading...</div>
         <button id="btn-refresh-balance" class="btn" style="padding:0.4rem 1rem;font-size:0.85rem;background:var(--surface2);color:var(--text);margin-top:0.3rem;">&#x21bb; Refresh Balance</button>
+      </div>
+
+      <div class="zootcoin-banner">
+        <div class="zootcoin-banner-icon">&#129689;</div>
+        <div class="zootcoin-banner-text">
+          <h3>ZootCoin <span class="soon-tag">COMING SOON</span></h3>
+          <p>Our native token for playing against the house. Wager ZootCoin on Blackjack and more &mdash; all games will support ZootCoin for house mode. Player vs Player stays on SOL + ZootCoin.</p>
+        </div>
       </div>
 
       <h2>Choose Your Game</h2>
@@ -1094,6 +1141,17 @@
             <span class="sol-label">SOL</span>
           </div>
           <button class="btn btn-primary btn-play">Find Match</button>
+        </div>
+
+        <div class="game-card coming-soon" data-game="blackjack">
+          <div class="game-card-header">
+            <div class="game-card-icon">&#127183;</div>
+            <h3>Blackjack</h3>
+          </div>
+          <span class="badge-house">vs House</span>
+          <span class="badge-zootcoin">&#129689; ZootCoin Only</span>
+          <p>Beat the dealer to 21 &mdash; play against the house and win ZootCoin!</p>
+          <button class="btn btn-primary btn-play" disabled style="opacity:0.4;">Coming Soon</button>
         </div>
       </div>
 
