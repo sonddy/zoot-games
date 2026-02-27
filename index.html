@@ -992,7 +992,6 @@
 
       <div class="connect-stats">
         <div class="stat-pill"><span class="stat-value" id="connect-online">--</span><span class="stat-label">Online Now</span></div>
-        <div class="stat-pill"><span class="stat-value">7</span><span class="stat-label">Games</span></div>
         <div class="stat-pill"><span class="stat-value">1.8x</span><span class="stat-label">Payout</span></div>
       </div>
 
@@ -2710,6 +2709,8 @@
       function updateLobby(data) {
         lastLobbyData = data;
         document.getElementById('online-count').textContent = data.onlineCount + ' online';
+        var connOnline = document.getElementById('connect-online');
+        if (connOnline) connOnline.textContent = data.onlineCount;
 
         renderPendingBets(data.waiting);
 
