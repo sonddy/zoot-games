@@ -958,11 +958,18 @@
     .payout-text { font-size: 1.4rem; font-weight: 800; color: var(--gold); margin: 1rem 0; text-shadow: 0 0 20px rgba(255,193,7,0.2); }
 
     .wallet-panel {
-      background: linear-gradient(135deg, var(--bg2), var(--surface));
+      background: url('/casinoz.jpg') center/cover no-repeat;
       border: 1px solid var(--surface2); border-radius: var(--radius);
       padding: 1.2rem 1.4rem; margin-bottom: 2rem;
       display: grid; grid-template-columns: 1fr auto; gap: 0.5rem 2rem; align-items: start;
+      position: relative; overflow: hidden;
     }
+    .wallet-panel::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(11,15,25,0.55) 0%, rgba(11,15,25,0.7) 100%);
+      z-index: 0;
+    }
+    .wallet-panel > * { position: relative; z-index: 1; }
     .wallet-panel h3 {
       font-size: 0.85rem; margin-bottom: 0.6rem; display: flex; align-items: center; gap: 0.5rem;
       text-transform: uppercase; letter-spacing: 1px; color: var(--text2); grid-column: 1 / -1;
