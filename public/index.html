@@ -727,13 +727,25 @@
       aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
       position: relative; cursor: default;
     }
+    .checkers-sq[data-checkers-select], .checkers-sq[data-checkers-move] { cursor: pointer; }
     .checkers-sq.light { background: #f0d9b5; }
     .checkers-sq.dark { background: #b58863; }
-    .checkers-sq.highlight { background: #7fb069; cursor: pointer; }
-    .checkers-sq.selected { background: #e8c840; }
+    .checkers-sq.highlight {
+      background: #7fb069; cursor: pointer;
+      box-shadow: inset 0 0 12px rgba(0,255,0,0.3);
+    }
+    .checkers-sq.highlight::after {
+      content: ''; position: absolute; width: 40%; height: 40%; border-radius: 50%;
+      background: rgba(255,255,255,0.4); pointer-events: none;
+    }
+    .checkers-sq.selected {
+      background: #e8c840;
+      box-shadow: inset 0 0 12px rgba(255,200,0,0.4);
+    }
     .checkers-piece {
       width: 80%; height: 80%; border-radius: 50%; position: relative;
       box-shadow: 0 3px 6px rgba(0,0,0,0.4); transition: transform 0.15s;
+      pointer-events: none;
     }
     .checkers-piece.p0 {
       background: radial-gradient(circle at 35% 35%, #ff6b6b, #c0392b);
@@ -799,6 +811,7 @@
       aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
       position: relative; cursor: default; font-size: min(5vw, 3rem);
     }
+    .chess-sq[data-chess-select], .chess-sq[data-chess-move] { cursor: pointer; }
     .chess-sq.light { background: #f0d9b5; }
     .chess-sq.dark { background: #b58863; }
     .chess-sq.highlight { cursor: pointer; position: relative; }
@@ -813,8 +826,17 @@
     .chess-sq.last-move { background: rgba(255,255,100,0.3); }
     .chess-sq.in-check { background: radial-gradient(circle, #ff0000 0%, transparent 70%); }
     .chess-piece {
-      user-select: none; cursor: pointer; text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      user-select: none; cursor: pointer; pointer-events: none;
       transition: transform 0.1s; line-height: 1;
+      -webkit-text-stroke: 0.5px rgba(0,0,0,0.3);
+    }
+    .chess-piece.white-piece {
+      color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.5), 0 0 1px rgba(0,0,0,0.8);
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+    }
+    .chess-piece.black-piece {
+      color: #1a1a1a; text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
     }
     .chess-piece:hover { transform: scale(1.15); }
     .chess-turn-pill {
@@ -984,7 +1006,7 @@
     </video>
     <div class="connect-container">
       <div class="logo">
-        <div class="logo-mark">ZG</div>
+        <div class="logo-mark"><img src="/zootcoin.png" alt="ZG" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" /></div>
         <h1><span class="accent">Zoot</span> Games</h1>
         <div class="logo-subtitle">Bet &bull; Play &bull; Win Crypto</div>
       </div>
@@ -1010,7 +1032,7 @@
   <div id="screen-lobby" class="screen">
     <header class="topbar">
       <div class="topbar-left">
-        <span class="logo-sm"><span class="logo-sm-mark">ZG</span><span><span class="accent">Zoot</span> Games</span></span>
+        <span class="logo-sm"><span class="logo-sm-mark"><img src="/zootcoin.png" alt="ZG" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" /></span><span><span class="accent">Zoot</span> Games</span></span>
       </div>
       <div class="topbar-center"><span id="online-count" class="badge badge-live">0 online</span></div>
       <div class="topbar-right">
@@ -2012,12 +2034,12 @@
         var h = '<div class="checkers-screen">';
 
         h += '<div class="checkers-topbar">';
-        h += '<button class="back-btn" onclick="CheckersUI.quit()">&#8592;</button>';
+        h += '<button class="back-btn" data-checkers-action="quit">&#8592;</button>';
         h += '<div class="checkers-player-info"><div class="name">' + oppName + '</div>';
         h += '<div class="pieces-count">Pieces: ' + state.pieces[1 - state.playerIndex] + '</div></div>';
-        h += '<div class="checkers-menu-wrap"><button class="checkers-menu-btn" onclick="CheckersUI.toggleMenu(event)">&#8942;</button>';
+        h += '<div class="checkers-menu-wrap"><button class="checkers-menu-btn" data-checkers-action="menu">&#8942;</button>';
         h += '<div class="domino-dropdown' + (menuOpen ? ' open' : '') + '">';
-        h += '<button class="domino-dropdown-item danger" onclick="CheckersUI.resign(event)">Resign</button>';
+        h += '<button class="domino-dropdown-item danger" data-checkers-action="resign">Resign</button>';
         h += '</div></div></div>';
 
         var remaining = state.turnRemainingMs || 0;
@@ -2040,14 +2062,14 @@
           if (isSelected) cls += ' selected';
           if (isLegal) cls += ' highlight';
 
-          var onclick = '';
+          var dataAttr = '';
           if (isLegal && isMyTurn) {
-            onclick = ' onclick="CheckersUI.moveTo(' + viewIdx + ')"';
+            dataAttr = ' data-checkers-move="' + viewIdx + '"';
           } else if (sq && sq.player === state.playerIndex && isMyTurn) {
-            onclick = ' onclick="CheckersUI.selectPiece(' + viewIdx + ')"';
+            dataAttr = ' data-checkers-select="' + viewIdx + '"';
           }
 
-          h += '<div class="' + cls + '"' + onclick + '>';
+          h += '<div class="' + cls + '"' + dataAttr + '>';
           if (sq) {
             var pcls = 'checkers-piece p' + sq.player;
             if (sq.king) pcls += ' king';
@@ -2069,6 +2091,34 @@
 
         area.innerHTML = h;
         controls.innerHTML = ''; controls.style.display = 'none';
+
+        var boardEl = area.querySelector('.checkers-board');
+        if (boardEl) {
+          boardEl.addEventListener('click', function(e) {
+            var cell = e.target.closest('[data-checkers-move], [data-checkers-select]');
+            if (!cell) return;
+            e.stopPropagation();
+            if (cell.hasAttribute('data-checkers-move')) {
+              moveTo(parseInt(cell.getAttribute('data-checkers-move')));
+            } else if (cell.hasAttribute('data-checkers-select')) {
+              selectPiece(parseInt(cell.getAttribute('data-checkers-select')));
+            }
+          });
+        }
+
+        var screenEl = area.querySelector('.checkers-screen');
+        if (screenEl) {
+          screenEl.addEventListener('click', function(e) {
+            var btn = e.target.closest('[data-checkers-action]');
+            if (!btn) return;
+            e.stopPropagation();
+            var action = btn.getAttribute('data-checkers-action');
+            if (action === 'quit') quit();
+            else if (action === 'menu') toggleMenu(e);
+            else if (action === 'resign') resign(e);
+          });
+        }
+
         if (!state.gameOver) startTimer(state);
       }
 
@@ -2098,7 +2148,7 @@
       }
       function toggleMenu(e) { if (e) e.stopPropagation(); menuOpen = !menuOpen; GameSounds.click(); }
 
-      document.addEventListener('click', function() { menuOpen = false; selectedSquare = null; legalMoves = []; });
+      document.addEventListener('click', function() { menuOpen = false; });
 
       return { render: render, selectPiece: selectPiece, moveTo: moveTo, quit: quit, resign: resign, toggleMenu: toggleMenu, _gameData: null };
     })();
@@ -2159,12 +2209,12 @@
         var h = '<div class="chess-screen">';
 
         h += '<div class="chess-topbar">';
-        h += '<button class="back-btn" onclick="ChessUI.quit()">&#8592;</button>';
+        h += '<button class="back-btn" data-chess-action="quit">&#8592;</button>';
         h += '<div class="chess-player-info"><div class="name">' + oppName + '</div>';
         h += '<div class="material">Material: ' + state.material[1 - state.playerIndex] + '</div></div>';
-        h += '<div class="chess-menu-wrap"><button class="chess-menu-btn" onclick="ChessUI.toggleMenu(event)">&#8942;</button>';
+        h += '<div class="chess-menu-wrap"><button class="chess-menu-btn" data-chess-action="menu">&#8942;</button>';
         h += '<div class="domino-dropdown' + (menuOpen ? ' open' : '') + '">';
-        h += '<button class="domino-dropdown-item danger" onclick="ChessUI.resign(event)">Resign</button>';
+        h += '<button class="domino-dropdown-item danger" data-chess-action="resign">Resign</button>';
         h += '</div></div></div>';
 
         var remaining = state.turnRemainingMs || 0;
@@ -2193,17 +2243,18 @@
           }
           if (viewIdx === kingPos) cls += ' in-check';
 
-          var onclick = '';
+          var dataAttr = '';
           if (isLegal && isMyTurn) {
-            onclick = ' onclick="ChessUI.moveTo(' + viewIdx + ')"';
+            dataAttr = ' data-chess-move="' + viewIdx + '"';
           } else if (sq && sq.player === state.playerIndex && isMyTurn) {
-            onclick = ' onclick="ChessUI.selectPiece(' + viewIdx + ')"';
+            dataAttr = ' data-chess-select="' + viewIdx + '"';
           }
 
-          h += '<div class="' + cls + '"' + onclick + '>';
+          h += '<div class="' + cls + '"' + dataAttr + '>';
           if (sq) {
             var unicode = PIECE_UNICODE[sq.type][sq.player];
-            h += '<span class="chess-piece">' + unicode + '</span>';
+            var pieceColor = sq.player === 0 ? 'white-piece' : 'black-piece';
+            h += '<span class="chess-piece ' + pieceColor + '">' + unicode + '</span>';
           }
           h += '</div>';
         }
@@ -2226,13 +2277,50 @@
           var promoPieces = ['Q', 'R', 'B', 'N'];
           for (var pi = 0; pi < promoPieces.length; pi++) {
             var pp = promoPieces[pi];
-            h += '<div class="chess-promo-btn" onclick="ChessUI.promote(\'' + pp + '\')">' + PIECE_UNICODE[pp][promoPlayer] + '</div>';
+            h += '<div class="chess-promo-btn" data-chess-promote="' + pp + '">' + PIECE_UNICODE[pp][promoPlayer] + '</div>';
           }
           h += '</div></div>';
         }
 
         area.innerHTML = h;
         controls.innerHTML = ''; controls.style.display = 'none';
+
+        var boardEl = area.querySelector('.chess-board');
+        if (boardEl) {
+          boardEl.addEventListener('click', function(e) {
+            var cell = e.target.closest('[data-chess-move], [data-chess-select]');
+            if (!cell) return;
+            e.stopPropagation();
+            if (cell.hasAttribute('data-chess-move')) {
+              moveTo(parseInt(cell.getAttribute('data-chess-move')));
+            } else if (cell.hasAttribute('data-chess-select')) {
+              selectPiece(parseInt(cell.getAttribute('data-chess-select')));
+            }
+          });
+        }
+
+        var promoBox = area.querySelector('.chess-promo-box');
+        if (promoBox) {
+          promoBox.addEventListener('click', function(e) {
+            var btn = e.target.closest('[data-chess-promote]');
+            if (!btn) return;
+            promote(btn.getAttribute('data-chess-promote'));
+          });
+        }
+
+        var screenEl = area.querySelector('.chess-screen');
+        if (screenEl) {
+          screenEl.addEventListener('click', function(e) {
+            var btn = e.target.closest('[data-chess-action]');
+            if (!btn) return;
+            e.stopPropagation();
+            var action = btn.getAttribute('data-chess-action');
+            if (action === 'quit') quit();
+            else if (action === 'menu') toggleMenu(e);
+            else if (action === 'resign') resign(e);
+          });
+        }
+
         if (!state.gameOver) startTimer(state);
       }
 
