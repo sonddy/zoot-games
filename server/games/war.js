@@ -38,10 +38,15 @@ class WarGame {
     const deck = shuffle(createDeck());
     this.hands[0] = deck.slice(0, 26);
     this.hands[1] = deck.slice(26);
+    this.scores = [0, 0];
+    this.currentCards = [null, null];
+    this.warPile = [];
+    this.isWar = false;
+    this.roundNum = 0;
+    this.gameOver = false;
+    this.winner = null;
     this.currentPlayer = 0;
-    this.phase = 'flip';
     this.turnStartTime = Date.now();
-    this.bothFlipped = false;
     this.flipped = [false, false];
   }
 
@@ -54,6 +59,7 @@ class WarGame {
     }
     if (action.type !== 'flip') return { error: 'Invalid action' };
     if (this.flipped[playerIndex]) return { error: 'Already flipped' };
+    if (this.hands[playerIndex].length === 0) return { error: 'No cards left' };
 
     this.flipped[playerIndex] = true;
     this.currentCards[playerIndex] = this.hands[playerIndex].shift();
@@ -62,6 +68,7 @@ class WarGame {
       return this._resolveRound();
     }
 
+    this.currentPlayer = 1 - playerIndex;
     this.turnStartTime = Date.now();
     return { gameOver: false, waitingForOpponent: true };
   }
@@ -98,13 +105,17 @@ class WarGame {
 
     this.flipped = [false, false];
     this.currentCards = [null, null];
+    this.currentPlayer = 0;
     this.turnStartTime = Date.now();
-    return { gameOver: false, ...result };
+    return { gameOver: false, newRound: true, ...result };
   }
 
   autoPlayForTimeout(playerIndex) {
-    if (!this.flipped[playerIndex] && this.hands[playerIndex].length > 0) {
-      return this.handleAction(playerIndex, { type: 'flip' });
+    if (this.gameOver) return null;
+    for (let i = 0; i < 2; i++) {
+      if (!this.flipped[i] && this.hands[i].length > 0) {
+        return this.handleAction(i, { type: 'flip' });
+      }
     }
     return null;
   }

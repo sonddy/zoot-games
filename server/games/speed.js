@@ -48,6 +48,7 @@ class SpeedGame {
 
   handleAction(playerIndex, action) {
     if (this.gameOver) return { error: 'Game is over' };
+    if (playerIndex < 0 || playerIndex > 1) return { error: 'Invalid player' };
     if (action.type === 'resign') {
       this.gameOver = true;
       this.winner = 1 - playerIndex;
@@ -111,9 +112,13 @@ class SpeedGame {
   getStateForPlayer(playerIndex) {
     const elapsed = Date.now() - this.turnStartTime;
     const remaining = Math.max(0, TURN_TIME_MS - elapsed);
+    const playable = this.hands[playerIndex].map((card, i) => {
+      return isAdjacent(card.value, this.piles[0].value) || isAdjacent(card.value, this.piles[1].value);
+    });
     return {
       gameType: 'speed',
       hand: this.hands[playerIndex],
+      playable,
       oppHandCount: this.hands[1 - playerIndex].length,
       piles: this.piles,
       myDrawLeft: this.drawPiles[playerIndex].length,

@@ -77,7 +77,7 @@ function scoreHand(cards) {
   } else if (groups[0].count === 3) {
     rank = HAND_RANKS.THREE_KIND; kickers = [groups[0].value, ...values.filter(v => v !== groups[0].value)];
   } else if (groups[0].count === 2 && groups[1].count === 2) {
-    rank = HAND_RANKS.TWO_PAIR; kickers = [groups[0].value, groups[1].value, groups[2].value];
+    rank = HAND_RANKS.TWO_PAIR; kickers = [groups[0].value, groups[1].value, groups[2] ? groups[2].value : 0];
   } else if (groups[0].count === 2) {
     rank = HAND_RANKS.PAIR; kickers = [groups[0].value, ...values.filter(v => v !== groups[0].value)];
   } else {
@@ -132,6 +132,12 @@ class PokerGame {
     this.phase = 'preflop';
     this.turnStartTime = Date.now();
     this.checked = [false, false];
+    this.folded = [false, false];
+    this.gameOver = false;
+    this.winner = null;
+    this.revealCards = false;
+    this.handName = null;
+    this.lastAction = null;
     this.minRaise = 2;
   }
 
@@ -172,14 +178,20 @@ class PokerGame {
       this.chips[playerIndex] -= callAmt;
       this.bets[playerIndex] += callAmt;
       this.pot += callAmt;
+      if (this.chips[playerIndex] === 0 || this.chips[opp] === 0) {
+        return this._runOutRemainingCards();
+      }
       return this._nextPhase();
     }
 
     if (action.type === 'raise') {
-      const amount = action.amount || this.minRaise;
+      let amount = action.amount || this.minRaise;
+      if (amount < this.minRaise) amount = this.minRaise;
       const diff = this.bets[opp] - this.bets[playerIndex];
       const totalNeeded = diff + amount;
-      if (totalNeeded > this.chips[playerIndex]) return { error: 'Not enough chips' };
+      if (totalNeeded >= this.chips[playerIndex]) {
+        return this.handleAction(playerIndex, { type: 'allin' });
+      }
       this.chips[playerIndex] -= totalNeeded;
       this.bets[playerIndex] += totalNeeded;
       this.pot += totalNeeded;
@@ -193,17 +205,18 @@ class PokerGame {
 
     if (action.type === 'allin') {
       const allAmt = this.chips[playerIndex];
+      if (allAmt <= 0) return { error: 'No chips to go all-in' };
       this.bets[playerIndex] += allAmt;
       this.pot += allAmt;
       this.chips[playerIndex] = 0;
       const diff = this.bets[playerIndex] - this.bets[opp];
-      if (diff > 0) {
+      if (diff > 0 && this.chips[opp] > 0) {
         this.currentPlayer = opp;
         this.turnStartTime = Date.now();
         this.lastAction = { player: playerIndex, type: 'allin' };
         return { gameOver: false };
       }
-      return this._showdown();
+      return this._runOutRemainingCards();
     }
 
     return { error: 'Invalid action' };
@@ -232,6 +245,14 @@ class PokerGame {
     this.currentPlayer = 1 - this.dealer;
     this.turnStartTime = Date.now();
     return { gameOver: false, newPhase: this.phase };
+  }
+
+  _runOutRemainingCards() {
+    while (this.community.length < 5 && this.deck.length > 0) {
+      this.deck.pop();
+      if (this.deck.length > 0) this.community.push(this.deck.pop());
+    }
+    return this._showdown();
   }
 
   _showdown() {

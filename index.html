@@ -214,8 +214,11 @@
     .game-card[data-game="chess"] .btn-play { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
     .game-card[data-game="morpion"] { background-image: url('/game-morpion.jpg'); }
     .game-card[data-game="morpion"] .btn-play { background: linear-gradient(135deg, #00d4aa, #00897b); }
+    .game-card[data-game="war"] { background-image: url('/game-war.jpg'); }
     .game-card[data-game="war"] .btn-play { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+    .game-card[data-game="speed"] { background-image: url('/game-speed.jpg'); }
     .game-card[data-game="speed"] .btn-play { background: linear-gradient(135deg, #f39c12, #e67e22); }
+    .game-card[data-game="poker"] { background-image: url('/game-poker.jpg'); }
     .game-card[data-game="poker"] .btn-play { background: linear-gradient(135deg, #1abc9c, #16a085); }
     .game-card-header { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.8rem; }
     .game-card-icon { font-size: 2.2rem; flex-shrink: 0; }
@@ -2686,6 +2689,7 @@
     // ════════════════════════════════════════
     var WarUI = (function() {
       var sendActionFn = null;
+      var _handler = null;
 
       function cardStr(card) {
         if (!card) return '<div class="war-card facedown">?</div>';
@@ -2699,22 +2703,26 @@
         var controls = document.getElementById('game-controls');
         var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
         var myName = (gameData && gameData.players) ? gameData.players[state.playerIndex].username : 'You';
+        var myScore = state.scores[state.playerIndex];
+        var oppScore = state.scores[1 - state.playerIndex];
 
         var h = '<div style="display:flex;flex-direction:column;align-items:center;padding:1rem;min-height:80vh;justify-content:center;gap:1.5rem;">';
         h += '<div style="text-align:center;color:var(--text2);font-size:0.85rem;">' + oppName + ' &mdash; ' + state.oppCardsLeft + ' cards</div>';
         h += '<div style="display:flex;gap:2rem;align-items:center;justify-content:center;">';
         h += '<div style="text-align:center;">';
-        h += state.oppCard ? cardStr(state.oppCard) : (state.oppFlipped ? '<div class="war-card facedown">&#10003;</div>' : '<div class="war-card facedown">?</div>');
+        h += state.oppCard ? cardStr(state.oppCard) : (state.oppFlipped ? '<div class="war-card facedown" style="border-color:var(--accent);">&#10003;</div>' : '<div class="war-card facedown">?</div>');
+        h += '<div style="color:var(--text2);font-size:0.75rem;margin-top:4px;">' + oppScore + ' pts</div>';
         h += '</div>';
-        if (state.isWar) h += '<div style="font-size:1.5rem;font-weight:800;color:var(--red);animation:pulse 0.5s infinite;">WAR!</div>';
+        if (state.isWar) h += '<div style="font-size:1.5rem;font-weight:800;color:var(--red);animation:pulse 0.5s infinite;">WAR!<div style="font-size:0.7rem;color:var(--gold);">+' + state.warPileSize + ' bonus</div></div>';
         else h += '<div style="font-size:1.2rem;color:var(--text2);">vs</div>';
         h += '<div style="text-align:center;">';
         h += state.myCard ? cardStr(state.myCard) : '<div class="war-card facedown">?</div>';
+        h += '<div style="color:var(--text2);font-size:0.75rem;margin-top:4px;">' + myScore + ' pts</div>';
         h += '</div></div>';
-        h += '<div style="font-size:0.9rem;color:var(--gold);font-weight:700;">Score: ' + state.scores[state.playerIndex] + ' - ' + state.scores[1 - state.playerIndex] + ' &bull; Round ' + state.roundNum + '/' + state.maxRounds + '</div>';
+        h += '<div style="font-size:0.9rem;color:var(--gold);font-weight:700;">Round ' + state.roundNum + '/' + state.maxRounds + '</div>';
         h += '<div style="text-align:center;color:var(--text2);font-size:0.85rem;">' + myName + ' &mdash; ' + state.myCardsLeft + ' cards</div>';
         if (state.canFlip) {
-          h += '<button class="btn btn-primary btn-lg" data-war-flip="true" style="margin-top:1rem;">FLIP CARD</button>';
+          h += '<button class="btn btn-primary btn-lg" data-war-flip="true" style="margin-top:1rem;min-width:160px;">FLIP CARD</button>';
         } else if (!state.gameOver) {
           h += '<div style="color:var(--text2);font-style:italic;margin-top:1rem;">Waiting for opponent to flip...</div>';
         }
@@ -2722,8 +2730,12 @@
         area.innerHTML = h;
         controls.innerHTML = ''; controls.style.display = 'none';
 
-        var flipBtn = area.querySelector('[data-war-flip]');
-        if (flipBtn) flipBtn.addEventListener('click', function() { if (sendActionFn) sendActionFn({ type: 'flip' }); });
+        if (_handler) area.removeEventListener('click', _handler);
+        _handler = function(e) {
+          var btn = e.target.closest('[data-war-flip]');
+          if (btn && sendActionFn) sendActionFn({ type: 'flip' });
+        };
+        area.addEventListener('click', _handler);
       }
 
       return { render: render };
@@ -2735,15 +2747,21 @@
     var SpeedUI = (function() {
       var sendActionFn = null;
       var selectedCard = null;
+      var _handler = null;
 
-      function cardStr(card, idx) {
+      function cardStr(card, idx, isPlayable) {
         var color = (card.suit === '♥' || card.suit === '♦') ? '#e74c3c' : '#fff';
-        return '<div class="speed-hand-card" data-speed-hand="' + idx + '" style="color:' + color + (selectedCard === idx ? ';border-color:var(--gold);box-shadow:0 0 12px var(--gold);' : '') + '"><span class="speed-rank">' + card.rank + '</span><span class="speed-suit">' + card.suit + '</span></div>';
+        var sel = selectedCard === idx;
+        var style = 'color:' + color;
+        if (sel) style += ';border-color:var(--gold);box-shadow:0 0 12px var(--gold);transform:translateY(-8px)';
+        else if (!isPlayable) style += ';opacity:0.5';
+        return '<div class="speed-hand-card" data-speed-hand="' + idx + '" style="' + style + '"><span class="speed-rank">' + card.rank + '</span><span class="speed-suit">' + card.suit + '</span></div>';
       }
 
       function pileStr(card, idx) {
         var color = (card.suit === '♥' || card.suit === '♦') ? '#e74c3c' : '#fff';
-        return '<div class="speed-pile-card" data-speed-pile="' + idx + '" style="color:' + color + '"><span class="speed-rank">' + card.rank + '</span><span class="speed-suit">' + card.suit + '</span></div>';
+        var highlight = selectedCard !== null ? ';border-color:var(--accent);box-shadow:0 0 8px var(--glow)' : '';
+        return '<div class="speed-pile-card" data-speed-pile="' + idx + '" style="color:' + color + highlight + '"><span class="speed-rank">' + card.rank + '</span><span class="speed-suit">' + card.suit + '</span></div>';
       }
 
       function render(state, sendAction, gameData) {
@@ -2751,33 +2769,36 @@
         var area = document.getElementById('game-area');
         var controls = document.getElementById('game-controls');
         var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
+        var playable = state.playable || [];
 
         var h = '<div style="display:flex;flex-direction:column;align-items:center;padding:1rem;min-height:80vh;justify-content:center;gap:1rem;">';
         h += '<div style="color:var(--text2);font-size:0.85rem;">' + oppName + ': ' + state.oppHandCount + ' cards (' + state.oppDrawLeft + ' draw)</div>';
         h += '<div style="display:flex;gap:1.5rem;margin:1rem 0;">';
         h += pileStr(state.piles[0], 0) + pileStr(state.piles[1], 1);
         h += '</div>';
-        h += '<div style="color:var(--text2);font-size:0.75rem;">Tap a card in your hand, then tap a pile</div>';
+        h += '<div style="color:var(--text2);font-size:0.75rem;">' + (selectedCard !== null ? 'Now tap a pile to play your card' : 'Tap a card in your hand, then tap a pile') + '</div>';
         h += '<div style="display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:center;">';
-        for (var i = 0; i < state.hand.length; i++) h += cardStr(state.hand[i], i);
+        for (var i = 0; i < state.hand.length; i++) h += cardStr(state.hand[i], i, playable[i]);
         h += '</div>';
         h += '<div style="color:var(--text2);font-size:0.8rem;margin-top:0.5rem;">Draw pile: ' + state.myDrawLeft + '</div>';
         h += '</div>';
         area.innerHTML = h;
         controls.innerHTML = ''; controls.style.display = 'none';
 
-        area.addEventListener('click', function handler(e) {
+        if (_handler) area.removeEventListener('click', _handler);
+        _handler = function(e) {
           var handCard = e.target.closest('[data-speed-hand]');
           var pileCard = e.target.closest('[data-speed-pile]');
           if (handCard) {
-            selectedCard = parseInt(handCard.dataset.speedHand);
+            var idx = parseInt(handCard.dataset.speedHand);
+            selectedCard = (selectedCard === idx) ? null : idx;
             render(state, sendAction, gameData);
           } else if (pileCard && selectedCard !== null) {
             if (sendActionFn) sendActionFn({ type: 'play', handIndex: selectedCard, pileIndex: parseInt(pileCard.dataset.speedPile) });
             selectedCard = null;
           }
-          area.removeEventListener('click', handler);
-        });
+        };
+        area.addEventListener('click', _handler);
       }
 
       return { render: render };
@@ -2788,6 +2809,8 @@
     // ════════════════════════════════════════
     var PokerUI = (function() {
       var sendActionFn = null;
+      var _handler = null;
+      var raiseAmount = 4;
 
       function cardStr(card) {
         if (!card) return '';
@@ -2828,11 +2851,16 @@
 
         h += '<div style="color:var(--text);font-size:0.9rem;">' + myName + ' &bull; Chips: ' + state.myChips + (state.isDealer ? ' (Dealer)' : '') + '</div>';
 
+        if (state.myBet > 0 || state.oppBet > 0) {
+          h += '<div style="color:var(--text2);font-size:0.8rem;">Bets: You ' + state.myBet + ' / Opp ' + state.oppBet + '</div>';
+        }
+
         if (state.isMyTurn && !state.gameOver) {
           h += '<div style="display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:center;margin-top:0.8rem;">';
           if (state.canCheck) h += '<button class="btn btn-primary" data-poker-action="check">Check</button>';
           if (state.callAmount > 0) h += '<button class="btn btn-primary" data-poker-action="call">Call ' + state.callAmount + '</button>';
           h += '<button class="btn" style="background:var(--gold);color:#000;" data-poker-action="raise">Raise</button>';
+          if (state.myChips > 0) h += '<button class="btn" style="background:var(--red);color:#fff;" data-poker-action="allin">All-In</button>';
           h += '<button class="btn btn-danger" data-poker-action="fold">Fold</button>';
           h += '</div>';
         } else if (!state.gameOver) {
@@ -2842,19 +2870,24 @@
         area.innerHTML = h;
         controls.innerHTML = ''; controls.style.display = 'none';
 
-        area.addEventListener('click', function handler(e) {
+        if (_handler) area.removeEventListener('click', _handler);
+        _handler = function(e) {
           var btn = e.target.closest('[data-poker-action]');
           if (!btn || !sendActionFn) return;
           var act = btn.dataset.pokerAction;
           if (act === 'check') sendActionFn({ type: 'check' });
           else if (act === 'call') sendActionFn({ type: 'call' });
           else if (act === 'fold') sendActionFn({ type: 'fold' });
+          else if (act === 'allin') sendActionFn({ type: 'allin' });
           else if (act === 'raise') {
-            var amt = prompt('Raise amount:', '4');
-            if (amt && parseInt(amt) > 0) sendActionFn({ type: 'raise', amount: parseInt(amt) });
+            var amt = prompt('Raise amount:', String(raiseAmount));
+            if (amt && parseInt(amt) > 0) {
+              raiseAmount = parseInt(amt);
+              sendActionFn({ type: 'raise', amount: raiseAmount });
+            }
           }
-          area.removeEventListener('click', handler);
-        });
+        };
+        area.addEventListener('click', _handler);
       }
 
       return { render: render };
