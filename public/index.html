@@ -169,7 +169,24 @@
       content: ''; display: inline-block; width: 4px; height: 20px;
       background: var(--accent); border-radius: 2px;
     }
+    .game-category-tabs {
+      display: flex; gap: 0.4rem; margin-bottom: 1.2rem; flex-wrap: wrap;
+      border-bottom: 1px solid var(--surface2); padding-bottom: 0.8rem;
+    }
+    .game-category-tab {
+      background: transparent; border: 1px solid var(--surface2); color: var(--text2);
+      padding: 0.4rem 1rem; border-radius: 8px; cursor: pointer; font-size: 0.82rem;
+      font-family: inherit; font-weight: 600; transition: all 0.2s;
+      display: flex; align-items: center; gap: 0.4rem;
+    }
+    .game-category-tab:hover { border-color: var(--accent); color: var(--text); }
+    .game-category-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .game-category-tab .tab-count {
+      background: rgba(255,255,255,0.2); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.7rem;
+    }
+    .game-category-tab.active .tab-count { background: rgba(255,255,255,0.3); }
     .game-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 2.5rem; }
+    .game-cards .game-card[data-hidden="true"] { display: none; }
     .game-card {
       background: linear-gradient(135deg, var(--bg2), var(--surface));
       border: 1px solid var(--surface2); border-radius: var(--radius);
@@ -197,6 +214,9 @@
     .game-card[data-game="chess"] .btn-play { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
     .game-card[data-game="morpion"] { background-image: url('/game-morpion.jpg'); }
     .game-card[data-game="morpion"] .btn-play { background: linear-gradient(135deg, #00d4aa, #00897b); }
+    .game-card[data-game="war"] .btn-play { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+    .game-card[data-game="speed"] .btn-play { background: linear-gradient(135deg, #f39c12, #e67e22); }
+    .game-card[data-game="poker"] .btn-play { background: linear-gradient(135deg, #1abc9c, #16a085); }
     .game-card-header { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.8rem; }
     .game-card-icon { font-size: 2.2rem; flex-shrink: 0; }
     .game-card h3 { font-size: 1.15rem; margin-bottom: 0; }
@@ -1001,6 +1021,29 @@
     .wallet-row label { font-size: 0.85rem; color: var(--text2); min-width: 70px; }
     .status-msg { margin-top: 0.6rem; padding: 0.5rem 0.8rem; border-radius: 8px; font-size: 0.85rem; font-weight: 600; display: none; }
 
+    /* Card game shared styles */
+    .war-card, .poker-card, .speed-hand-card, .speed-pile-card {
+      width: 70px; height: 100px; border-radius: 8px; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; font-weight: 800;
+      background: linear-gradient(135deg, #1a2332, #253545); border: 2px solid #3a4a5a;
+      cursor: pointer; transition: all 0.15s; user-select: none;
+    }
+    .war-card { width: 90px; height: 130px; }
+    .war-card.facedown, .poker-card.facedown {
+      background: linear-gradient(135deg, #2c5282, #2b6cb0);
+      border-color: #3182ce; color: #fff; font-size: 1.5rem;
+    }
+    .poker-card.empty {
+      background: rgba(255,255,255,0.03); border: 2px dashed #3a4a5a;
+    }
+    .war-card-rank, .poker-card-rank, .speed-rank { font-size: 1.4rem; }
+    .war-card-suit, .poker-card-suit, .speed-suit { font-size: 1rem; }
+    .speed-hand-card { cursor: pointer; }
+    .speed-hand-card:hover { transform: translateY(-5px); border-color: var(--accent); }
+    .speed-pile-card { cursor: pointer; width: 80px; height: 110px; }
+    .speed-pile-card:hover { border-color: var(--gold); box-shadow: 0 0 12px var(--glow-gold); }
+    @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} }
+
     @media (max-width: 700px) {
       .game-cards { grid-template-columns: 1fr; }
       .pending-bet-card { flex-wrap: wrap; gap: 0.6rem; }
@@ -1088,8 +1131,14 @@
       </div>
 
       <h2>Choose Your Game</h2>
-      <div class="game-cards">
-        <div class="game-card" data-game="domino">
+      <div class="game-category-tabs" id="game-category-tabs">
+        <button class="game-category-tab active" data-category="all">All <span class="tab-count">10</span></button>
+        <button class="game-category-tab" data-category="card">&#127183; Card Games <span class="tab-count">4</span></button>
+        <button class="game-category-tab" data-category="board">&#9823; Board Games <span class="tab-count">5</span></button>
+        <button class="game-category-tab" data-category="casino">&#127920; Casino <span class="tab-count">1</span></button>
+      </div>
+      <div class="game-cards" id="game-cards-grid">
+        <div class="game-card" data-game="domino" data-category="board">
           <div class="game-card-header">
             <div class="game-card-icon">&#127073;</div>
             <h3>Domino</h3>
@@ -1104,7 +1153,7 @@
           <button class="btn btn-primary btn-play">Find Match</button>
         </div>
 
-        <div class="game-card" data-game="tictactoe">
+        <div class="game-card" data-game="tictactoe" data-category="board">
           <div class="game-card-header">
             <div class="game-card-icon">&#10005;&#9675;</div>
             <h3>Tic Tac Toe</h3>
@@ -1127,7 +1176,7 @@
           <button class="btn btn-primary btn-play">Find Match</button>
         </div>
 
-        <div class="game-card" data-game="mancala">
+        <div class="game-card" data-game="mancala" data-category="board">
           <div class="game-card-header">
             <div class="game-card-icon">&#127794;</div>
             <h3>Mancala</h3>
@@ -1142,7 +1191,7 @@
           <button class="btn btn-primary btn-play">Find Match</button>
         </div>
 
-        <div class="game-card" data-game="checkers">
+        <div class="game-card" data-game="checkers" data-category="board">
           <div class="game-card-header">
             <div class="game-card-icon">&#9823;</div>
             <h3>Checkers</h3>
@@ -1157,7 +1206,7 @@
           <button class="btn btn-primary btn-play">Find Match</button>
         </div>
 
-        <div class="game-card" data-game="chess">
+        <div class="game-card" data-game="chess" data-category="board">
           <div class="game-card-header">
             <div class="game-card-icon">&#9812;</div>
             <h3>Chess</h3>
@@ -1172,7 +1221,7 @@
           <button class="btn btn-primary btn-play">Find Match</button>
         </div>
 
-        <div class="game-card" data-game="morpion">
+        <div class="game-card" data-game="morpion" data-category="board">
           <div class="game-card-icon">&#10010;</div>
           <h3>Morpion</h3>
           <p>Connect 5 in a row on a 15&times;15 grid &mdash; think ahead to win!</p>
@@ -1184,7 +1233,52 @@
           <button class="btn btn-primary btn-play">Find Match</button>
         </div>
 
-        <div class="game-card coming-soon" data-game="blackjack">
+        <div class="game-card" data-game="war" data-category="card">
+          <div class="game-card-header">
+            <div class="game-card-icon">&#9876;</div>
+            <h3>War</h3>
+          </div>
+          <span class="multiplier-badge">1.8x Payout</span>
+          <p>Flip cards head-to-head &mdash; highest card wins the round!</p>
+          <div class="bet-input-group">
+            <label>Bet:</label>
+            <input type="number" class="bet-amount-input" placeholder="0.5" min="0.001" step="0.001" value="0.5" />
+            <span class="sol-label">SOL</span>
+          </div>
+          <button class="btn btn-primary btn-play">Find Match</button>
+        </div>
+
+        <div class="game-card" data-game="speed" data-category="card">
+          <div class="game-card-header">
+            <div class="game-card-icon">&#9889;</div>
+            <h3>Speed</h3>
+          </div>
+          <span class="multiplier-badge">1.8x Payout</span>
+          <p>Race to empty your hand &mdash; play cards adjacent in rank, fastest wins!</p>
+          <div class="bet-input-group">
+            <label>Bet:</label>
+            <input type="number" class="bet-amount-input" placeholder="0.5" min="0.001" step="0.001" value="0.5" />
+            <span class="sol-label">SOL</span>
+          </div>
+          <button class="btn btn-primary btn-play">Find Match</button>
+        </div>
+
+        <div class="game-card" data-game="poker" data-category="card">
+          <div class="game-card-header">
+            <div class="game-card-icon">&#127183;</div>
+            <h3>Poker</h3>
+          </div>
+          <span class="multiplier-badge">1.8x Payout</span>
+          <p>Texas Hold'em heads-up &mdash; bluff, raise, and outplay your opponent!</p>
+          <div class="bet-input-group">
+            <label>Bet:</label>
+            <input type="number" class="bet-amount-input" placeholder="0.5" min="0.001" step="0.001" value="0.5" />
+            <span class="sol-label">SOL</span>
+          </div>
+          <button class="btn btn-primary btn-play">Find Match</button>
+        </div>
+
+        <div class="game-card coming-soon" data-game="blackjack" data-category="casino">
           <div class="game-card-header">
             <div class="game-card-icon">&#127183;</div>
             <h3>Blackjack</h3>
@@ -1206,6 +1300,9 @@
           <button class="pending-filter-btn" data-filter="checkers">&#9823; Checkers</button>
           <button class="pending-filter-btn" data-filter="chess">&#9812; Chess</button>
           <button class="pending-filter-btn" data-filter="morpion">&#10010; Morpion</button>
+          <button class="pending-filter-btn" data-filter="war">&#9876; War</button>
+          <button class="pending-filter-btn" data-filter="speed">&#9889; Speed</button>
+          <button class="pending-filter-btn" data-filter="poker">&#127183; Poker</button>
         </div>
         <div class="pending-bets-list" id="pending-bets-list">
           <div class="pending-empty">No open challenges yet &mdash; create one above!</div>
@@ -2585,6 +2682,185 @@
     })();
 
     // ════════════════════════════════════════
+    // WAR UI
+    // ════════════════════════════════════════
+    var WarUI = (function() {
+      var sendActionFn = null;
+
+      function cardStr(card) {
+        if (!card) return '<div class="war-card facedown">?</div>';
+        var color = (card.suit === '♥' || card.suit === '♦') ? '#e74c3c' : '#fff';
+        return '<div class="war-card" style="color:' + color + '"><div class="war-card-rank">' + card.rank + '</div><div class="war-card-suit">' + card.suit + '</div></div>';
+      }
+
+      function render(state, sendAction, gameData) {
+        sendActionFn = sendAction;
+        var area = document.getElementById('game-area');
+        var controls = document.getElementById('game-controls');
+        var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
+        var myName = (gameData && gameData.players) ? gameData.players[state.playerIndex].username : 'You';
+
+        var h = '<div style="display:flex;flex-direction:column;align-items:center;padding:1rem;min-height:80vh;justify-content:center;gap:1.5rem;">';
+        h += '<div style="text-align:center;color:var(--text2);font-size:0.85rem;">' + oppName + ' &mdash; ' + state.oppCardsLeft + ' cards</div>';
+        h += '<div style="display:flex;gap:2rem;align-items:center;justify-content:center;">';
+        h += '<div style="text-align:center;">';
+        h += state.oppCard ? cardStr(state.oppCard) : (state.oppFlipped ? '<div class="war-card facedown">&#10003;</div>' : '<div class="war-card facedown">?</div>');
+        h += '</div>';
+        if (state.isWar) h += '<div style="font-size:1.5rem;font-weight:800;color:var(--red);animation:pulse 0.5s infinite;">WAR!</div>';
+        else h += '<div style="font-size:1.2rem;color:var(--text2);">vs</div>';
+        h += '<div style="text-align:center;">';
+        h += state.myCard ? cardStr(state.myCard) : '<div class="war-card facedown">?</div>';
+        h += '</div></div>';
+        h += '<div style="font-size:0.9rem;color:var(--gold);font-weight:700;">Score: ' + state.scores[state.playerIndex] + ' - ' + state.scores[1 - state.playerIndex] + ' &bull; Round ' + state.roundNum + '/' + state.maxRounds + '</div>';
+        h += '<div style="text-align:center;color:var(--text2);font-size:0.85rem;">' + myName + ' &mdash; ' + state.myCardsLeft + ' cards</div>';
+        if (state.canFlip) {
+          h += '<button class="btn btn-primary btn-lg" data-war-flip="true" style="margin-top:1rem;">FLIP CARD</button>';
+        } else if (!state.gameOver) {
+          h += '<div style="color:var(--text2);font-style:italic;margin-top:1rem;">Waiting for opponent to flip...</div>';
+        }
+        h += '</div>';
+        area.innerHTML = h;
+        controls.innerHTML = ''; controls.style.display = 'none';
+
+        var flipBtn = area.querySelector('[data-war-flip]');
+        if (flipBtn) flipBtn.addEventListener('click', function() { if (sendActionFn) sendActionFn({ type: 'flip' }); });
+      }
+
+      return { render: render };
+    })();
+
+    // ════════════════════════════════════════
+    // SPEED UI
+    // ════════════════════════════════════════
+    var SpeedUI = (function() {
+      var sendActionFn = null;
+      var selectedCard = null;
+
+      function cardStr(card, idx) {
+        var color = (card.suit === '♥' || card.suit === '♦') ? '#e74c3c' : '#fff';
+        return '<div class="speed-hand-card" data-speed-hand="' + idx + '" style="color:' + color + (selectedCard === idx ? ';border-color:var(--gold);box-shadow:0 0 12px var(--gold);' : '') + '"><span class="speed-rank">' + card.rank + '</span><span class="speed-suit">' + card.suit + '</span></div>';
+      }
+
+      function pileStr(card, idx) {
+        var color = (card.suit === '♥' || card.suit === '♦') ? '#e74c3c' : '#fff';
+        return '<div class="speed-pile-card" data-speed-pile="' + idx + '" style="color:' + color + '"><span class="speed-rank">' + card.rank + '</span><span class="speed-suit">' + card.suit + '</span></div>';
+      }
+
+      function render(state, sendAction, gameData) {
+        sendActionFn = sendAction;
+        var area = document.getElementById('game-area');
+        var controls = document.getElementById('game-controls');
+        var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
+
+        var h = '<div style="display:flex;flex-direction:column;align-items:center;padding:1rem;min-height:80vh;justify-content:center;gap:1rem;">';
+        h += '<div style="color:var(--text2);font-size:0.85rem;">' + oppName + ': ' + state.oppHandCount + ' cards (' + state.oppDrawLeft + ' draw)</div>';
+        h += '<div style="display:flex;gap:1.5rem;margin:1rem 0;">';
+        h += pileStr(state.piles[0], 0) + pileStr(state.piles[1], 1);
+        h += '</div>';
+        h += '<div style="color:var(--text2);font-size:0.75rem;">Tap a card in your hand, then tap a pile</div>';
+        h += '<div style="display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:center;">';
+        for (var i = 0; i < state.hand.length; i++) h += cardStr(state.hand[i], i);
+        h += '</div>';
+        h += '<div style="color:var(--text2);font-size:0.8rem;margin-top:0.5rem;">Draw pile: ' + state.myDrawLeft + '</div>';
+        h += '</div>';
+        area.innerHTML = h;
+        controls.innerHTML = ''; controls.style.display = 'none';
+
+        area.addEventListener('click', function handler(e) {
+          var handCard = e.target.closest('[data-speed-hand]');
+          var pileCard = e.target.closest('[data-speed-pile]');
+          if (handCard) {
+            selectedCard = parseInt(handCard.dataset.speedHand);
+            render(state, sendAction, gameData);
+          } else if (pileCard && selectedCard !== null) {
+            if (sendActionFn) sendActionFn({ type: 'play', handIndex: selectedCard, pileIndex: parseInt(pileCard.dataset.speedPile) });
+            selectedCard = null;
+          }
+          area.removeEventListener('click', handler);
+        });
+      }
+
+      return { render: render };
+    })();
+
+    // ════════════════════════════════════════
+    // POKER UI
+    // ════════════════════════════════════════
+    var PokerUI = (function() {
+      var sendActionFn = null;
+
+      function cardStr(card) {
+        if (!card) return '';
+        var color = (card.suit === '♥' || card.suit === '♦') ? '#e74c3c' : '#fff';
+        return '<div class="poker-card" style="color:' + color + '"><div class="poker-card-rank">' + card.rank + '</div><div class="poker-card-suit">' + card.suit + '</div></div>';
+      }
+
+      function render(state, sendAction, gameData) {
+        sendActionFn = sendAction;
+        var area = document.getElementById('game-area');
+        var controls = document.getElementById('game-controls');
+        var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
+        var myName = (gameData && gameData.players) ? gameData.players[state.playerIndex].username : 'You';
+
+        var h = '<div style="display:flex;flex-direction:column;align-items:center;padding:1rem;min-height:80vh;justify-content:center;gap:1rem;">';
+        h += '<div style="color:var(--text2);font-size:0.85rem;">' + oppName + ' &bull; Chips: ' + state.oppChips + '</div>';
+        if (state.oppHoleCards) {
+          h += '<div style="display:flex;gap:0.5rem;">';
+          for (var o = 0; o < state.oppHoleCards.length; o++) h += cardStr(state.oppHoleCards[o]);
+          h += '</div>';
+          if (state.handName) h += '<div style="color:var(--accent);font-weight:700;font-size:0.85rem;">' + state.handName[1 - state.playerIndex] + '</div>';
+        } else {
+          h += '<div style="display:flex;gap:0.5rem;"><div class="poker-card facedown">?</div><div class="poker-card facedown">?</div></div>';
+        }
+
+        h += '<div style="color:var(--gold);font-weight:800;font-size:1.2rem;margin:0.5rem 0;">Pot: ' + state.pot + '</div>';
+
+        h += '<div style="display:flex;gap:0.5rem;margin:0.5rem 0;">';
+        for (var c = 0; c < state.community.length; c++) h += cardStr(state.community[c]);
+        for (var e = state.community.length; e < 5; e++) h += '<div class="poker-card empty"></div>';
+        h += '</div>';
+        h += '<div style="color:var(--text2);font-size:0.75rem;text-transform:uppercase;letter-spacing:1px;">' + state.phase + '</div>';
+
+        h += '<div style="display:flex;gap:0.5rem;margin:0.5rem 0;">';
+        for (var m = 0; m < state.holeCards.length; m++) h += cardStr(state.holeCards[m]);
+        h += '</div>';
+        if (state.handName) h += '<div style="color:var(--accent);font-weight:700;font-size:0.85rem;">' + state.handName[state.playerIndex] + '</div>';
+
+        h += '<div style="color:var(--text);font-size:0.9rem;">' + myName + ' &bull; Chips: ' + state.myChips + (state.isDealer ? ' (Dealer)' : '') + '</div>';
+
+        if (state.isMyTurn && !state.gameOver) {
+          h += '<div style="display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:center;margin-top:0.8rem;">';
+          if (state.canCheck) h += '<button class="btn btn-primary" data-poker-action="check">Check</button>';
+          if (state.callAmount > 0) h += '<button class="btn btn-primary" data-poker-action="call">Call ' + state.callAmount + '</button>';
+          h += '<button class="btn" style="background:var(--gold);color:#000;" data-poker-action="raise">Raise</button>';
+          h += '<button class="btn btn-danger" data-poker-action="fold">Fold</button>';
+          h += '</div>';
+        } else if (!state.gameOver) {
+          h += '<div style="color:var(--text2);font-style:italic;margin-top:0.8rem;">Waiting for opponent...</div>';
+        }
+        h += '</div>';
+        area.innerHTML = h;
+        controls.innerHTML = ''; controls.style.display = 'none';
+
+        area.addEventListener('click', function handler(e) {
+          var btn = e.target.closest('[data-poker-action]');
+          if (!btn || !sendActionFn) return;
+          var act = btn.dataset.pokerAction;
+          if (act === 'check') sendActionFn({ type: 'check' });
+          else if (act === 'call') sendActionFn({ type: 'call' });
+          else if (act === 'fold') sendActionFn({ type: 'fold' });
+          else if (act === 'raise') {
+            var amt = prompt('Raise amount:', '4');
+            if (amt && parseInt(amt) > 0) sendActionFn({ type: 'raise', amount: parseInt(amt) });
+          }
+          area.removeEventListener('click', handler);
+        });
+      }
+
+      return { render: render };
+    })();
+
+    // ════════════════════════════════════════
     // MAIN APP
     // ════════════════════════════════════════
     var App = (function() {
@@ -2642,6 +2918,7 @@
       function init() {
         setupConnectScreen();
         setupLobbyScreen();
+        setupCategoryTabs();
         setupWaitingScreen();
         setupGameOverlay();
       }
@@ -2811,8 +3088,8 @@
       var pendingFilter = 'all';
       var lastLobbyData = null;
 
-      var GAME_ICONS = { domino: '\u{1F031}', tictactoe: '\u2715\u25CB', mancala: '\u{1F332}', checkers: '\u265F', chess: '\u2654', morpion: '\u271A' };
-      var GAME_NAMES = { domino: 'Domino', tictactoe: 'Tic Tac Toe', mancala: 'Mancala', checkers: 'Checkers', chess: 'Chess', morpion: 'Morpion' };
+      var GAME_ICONS = { domino: '\u{1F031}', tictactoe: '\u2715\u25CB', mancala: '\u{1F332}', checkers: '\u265F', chess: '\u2654', morpion: '\u271A', war: '\u2694', speed: '\u26A1', poker: '\u{1F0CF}' };
+      var GAME_NAMES = { domino: 'Domino', tictactoe: 'Tic Tac Toe', mancala: 'Mancala', checkers: 'Checkers', chess: 'Chess', morpion: 'Morpion', war: 'War', speed: 'Speed', poker: 'Poker' };
 
       function updateLobby(data) {
         lastLobbyData = data;
@@ -2870,6 +3147,27 @@
           html += '</div>';
         }
         container.innerHTML = html;
+      }
+
+      function setupCategoryTabs() {
+        var tabs = document.querySelectorAll('.game-category-tab');
+        var cards = document.querySelectorAll('#game-cards-grid .game-card');
+        for (var t = 0; t < tabs.length; t++) {
+          tabs[t].addEventListener('click', function() {
+            for (var x = 0; x < tabs.length; x++) tabs[x].classList.remove('active');
+            this.classList.add('active');
+            var cat = this.dataset.category;
+            for (var c = 0; c < cards.length; c++) {
+              if (cat === 'all' || cards[c].dataset.category === cat) {
+                cards[c].setAttribute('data-hidden', 'false');
+                cards[c].style.display = '';
+              } else {
+                cards[c].setAttribute('data-hidden', 'true');
+                cards[c].style.display = 'none';
+              }
+            }
+          });
+        }
       }
 
       function setupWaitingScreen() {
@@ -3008,6 +3306,12 @@
           ChessUI.render(state, sendAction, ChessUI._gameData || currentGameData);
         } else if (state.gameType === 'morpion') {
           MorpionUI.render(state, sendAction, currentGameData);
+        } else if (state.gameType === 'war') {
+          WarUI.render(state, sendAction, currentGameData);
+        } else if (state.gameType === 'speed') {
+          SpeedUI.render(state, sendAction, currentGameData);
+        } else if (state.gameType === 'poker') {
+          PokerUI.render(state, sendAction, currentGameData);
         } else {
           var turnEl = document.getElementById('turn-indicator');
           turnEl.textContent = state.isMyTurn ? 'YOUR TURN' : "OPPONENT'S TURN";
