@@ -1054,8 +1054,8 @@
     .speed-pile-card { cursor: pointer; width: 80px; height: 110px; }
     .speed-pile-card:hover { border-color: var(--gold); box-shadow: 0 0 12px var(--glow-gold); }
     /* Reversi board */
-    .reversi-board { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; max-width: 360px; margin: 0 auto; }
-    .reversi-cell { aspect-ratio: 1; background: #2d7a4a; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; transition: all 0.15s; }
+    .reversi-board { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; width: 100%; max-width: 360px; margin: 0 auto; }
+    .reversi-cell { aspect-ratio: 1; background: #2d7a4a; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; transition: all 0.15s; min-width: 0; }
     .reversi-cell:hover { background: #3a9a5e; }
     .reversi-cell.valid-move::after { content: ''; width: 30%; height: 30%; border-radius: 50%; background: rgba(255,255,255,0.3); }
     .reversi-piece { width: 80%; height: 80%; border-radius: 50%; transition: all 0.2s; }
@@ -1063,7 +1063,7 @@
     .reversi-piece.p1 { background: radial-gradient(circle at 35% 35%, #fff, #ccc); box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
 
     /* Connect 4 board */
-    .c4-board { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; max-width: 380px; margin: 0 auto; background: #1a3a8a; padding: 8px; border-radius: 12px; }
+    .c4-board { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; width: 100%; max-width: 380px; margin: 0 auto; background: #1a3a8a; padding: 8px; border-radius: 12px; }
     .c4-cell { aspect-ratio: 1; background: #0a1a4a; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.15s; }
     .c4-cell:hover { background: #1a2a5a; }
     .c4-piece { width: 85%; height: 85%; border-radius: 50%; transition: all 0.2s; }
@@ -3031,8 +3031,8 @@
 
         var h = '<div style="display:flex;flex-direction:column;align-items:center;padding:1rem;gap:0.8rem;">';
         h += '<div style="display:flex;justify-content:space-between;width:100%;max-width:360px;padding:0 4px;">';
-        h += '<div style="color:' + (state.playerIndex === 0 ? '#333' : '#fff') + ';font-weight:700;font-size:0.85rem;display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:' + (state.playerIndex === 0 ? '#000' : '#fff') + ';border:1px solid #555;"></span>' + myName + ': ' + state.myCount + '</div>';
-        h += '<div style="color:' + (state.playerIndex === 1 ? '#333' : '#fff') + ';font-weight:700;font-size:0.85rem;display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:' + (state.playerIndex === 1 ? '#000' : '#fff') + ';border:1px solid #555;"></span>' + oppName + ': ' + state.oppCount + '</div>';
+        h += '<div style="color:var(--text);font-weight:700;font-size:0.85rem;display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:' + (state.playerIndex === 0 ? '#111' : '#fff') + ';border:2px solid #888;"></span>' + myName + ': ' + state.myCount + '</div>';
+        h += '<div style="color:var(--text);font-weight:700;font-size:0.85rem;display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:' + (state.playerIndex === 0 ? '#fff' : '#111') + ';border:2px solid #888;"></span>' + oppName + ': ' + state.oppCount + '</div>';
         h += '</div>';
         h += '<div class="reversi-board">';
         for (var r = 0; r < 8; r++) {
