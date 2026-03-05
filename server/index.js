@@ -26,6 +26,12 @@ const RPSGame = require('./games/rps');
 const CoinFlipGame = require('./games/coinflip');
 const DiceDuelGame = require('./games/diceduel');
 const HiLoGame = require('./games/hilo');
+const DotsBoxesGame = require('./games/dotsboxes');
+const NimGame = require('./games/nim');
+const HexGame = require('./games/hex');
+const ReactionGame = require('./games/reaction');
+const MemoryGame = require('./games/memory');
+const MathDuelGame = require('./games/mathduel');
 
 const SOLANA_RPC = process.env.SOLANA_RPC || 'https://solana-rpc.publicnode.com';
 const solanaConnection = new Connection(SOLANA_RPC, 'confirmed');
@@ -157,7 +163,7 @@ async function handleGameOver(room, result) {
   setTimeout(() => cleanupRoom(room.id), 5000);
 }
 
-const TIMER_DELAYS = { domino: 15500, mancala: 20500, checkers: 30500, chess: 60500, morpion: 30500, war: 15500, speed: 20500, poker: 30500, reversi: 30500, connect4: 20500, battleship: 25500, backgammon: 30500, rps: 10500, coinflip: 10500, diceduel: 10500, hilo: 15500 };
+const TIMER_DELAYS = { domino: 15500, mancala: 20500, checkers: 30500, chess: 60500, morpion: 30500, war: 15500, speed: 20500, poker: 30500, reversi: 30500, connect4: 20500, battleship: 25500, backgammon: 30500, rps: 10500, coinflip: 10500, diceduel: 10500, hilo: 15500, dotsboxes: 20500, nim: 20500, hex: 30500, reaction: 15500, memory: 20500, mathduel: 15500 };
 
 function startTurnTimer(room) {
   clearTurnTimer(room);
@@ -400,6 +406,12 @@ function startGame(room) {
   else if (room.gameType === 'coinflip') room.game = new CoinFlipGame();
   else if (room.gameType === 'diceduel') room.game = new DiceDuelGame();
   else if (room.gameType === 'hilo') room.game = new HiLoGame();
+  else if (room.gameType === 'dotsboxes') room.game = new DotsBoxesGame();
+  else if (room.gameType === 'nim') room.game = new NimGame();
+  else if (room.gameType === 'hex') room.game = new HexGame();
+  else if (room.gameType === 'reaction') room.game = new ReactionGame();
+  else if (room.gameType === 'memory') room.game = new MemoryGame();
+  else if (room.gameType === 'mathduel') room.game = new MathDuelGame();
   room.game.init(room.players.length, room.options || {});
 
   room.players.forEach((sid, idx) => {
