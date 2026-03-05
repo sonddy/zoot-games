@@ -228,6 +228,10 @@
     .game-card[data-game="battleship"] .btn-play { background: linear-gradient(135deg, #7f8c8d, #566573); }
     .game-card[data-game="backgammon"] { background-image: url('/game-backgammon.jpg'); }
     .game-card[data-game="backgammon"] .btn-play { background: linear-gradient(135deg, #d35400, #a04000); }
+    .game-card[data-game="rps"] .btn-play { background: linear-gradient(135deg, #e67e22, #d35400); }
+    .game-card[data-game="coinflip"] .btn-play { background: linear-gradient(135deg, #f1c40f, #d4ac0d); }
+    .game-card[data-game="diceduel"] .btn-play { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+    .game-card[data-game="hilo"] .btn-play { background: linear-gradient(135deg, #8e44ad, #6c3483); }
     .game-card-header { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.8rem; }
     .game-card-icon { font-size: 2.2rem; flex-shrink: 0; }
     .game-card h3 { font-size: 1.15rem; margin-bottom: 0; }
@@ -1190,7 +1194,8 @@
 
       <h2>Choose Your Game</h2>
       <div class="game-category-tabs" id="game-category-tabs">
-        <button class="game-category-tab active" data-category="all">All <span class="tab-count">14</span></button>
+        <button class="game-category-tab active" data-category="all">All <span class="tab-count">18</span></button>
+        <button class="game-category-tab" data-category="quick">&#9889; Quick <span class="tab-count">4</span></button>
         <button class="game-category-tab" data-category="card">&#127183; Card Games <span class="tab-count">4</span></button>
         <button class="game-category-tab" data-category="board">&#9823; Board Games <span class="tab-count">8</span></button>
         <button class="game-category-tab" data-category="strategy">&#127919; Strategy <span class="tab-count">2</span></button>
@@ -1397,6 +1402,66 @@
           <button class="btn btn-primary btn-play">Find Match</button>
         </div>
 
+        <div class="game-card" data-game="rps" data-category="quick">
+          <div class="game-card-header">
+            <div class="game-card-icon">&#9994;&#9996;</div>
+            <h3>Rock Paper Scissors</h3>
+          </div>
+          <span class="multiplier-badge">1.8x Payout</span>
+          <p>Best of 3 &mdash; pick rock, paper, or scissors. Quick and intense!</p>
+          <div class="bet-input-group">
+            <label>Bet:</label>
+            <input type="number" class="bet-amount-input" placeholder="0.5" min="0.001" step="0.001" value="0.5" />
+            <span class="sol-label">SOL</span>
+          </div>
+          <button class="btn btn-primary btn-play">Find Match</button>
+        </div>
+
+        <div class="game-card" data-game="coinflip" data-category="quick">
+          <div class="game-card-header">
+            <div class="game-card-icon">&#129689;</div>
+            <h3>Coin Flip</h3>
+          </div>
+          <span class="multiplier-badge">1.8x Payout</span>
+          <p>Heads or tails &mdash; call the flip and win instantly!</p>
+          <div class="bet-input-group">
+            <label>Bet:</label>
+            <input type="number" class="bet-amount-input" placeholder="0.5" min="0.001" step="0.001" value="0.5" />
+            <span class="sol-label">SOL</span>
+          </div>
+          <button class="btn btn-primary btn-play">Find Match</button>
+        </div>
+
+        <div class="game-card" data-game="diceduel" data-category="quick">
+          <div class="game-card-header">
+            <div class="game-card-icon">&#127922;&#127922;</div>
+            <h3>Dice Duel</h3>
+          </div>
+          <span class="multiplier-badge">1.8x Payout</span>
+          <p>Roll two dice &mdash; best of 3 rounds. Highest total wins!</p>
+          <div class="bet-input-group">
+            <label>Bet:</label>
+            <input type="number" class="bet-amount-input" placeholder="0.5" min="0.001" step="0.001" value="0.5" />
+            <span class="sol-label">SOL</span>
+          </div>
+          <button class="btn btn-primary btn-play">Find Match</button>
+        </div>
+
+        <div class="game-card" data-game="hilo" data-category="quick">
+          <div class="game-card-header">
+            <div class="game-card-icon">&#128195;&#8593;&#8595;</div>
+            <h3>Hi-Lo</h3>
+          </div>
+          <span class="multiplier-badge">1.8x Payout</span>
+          <p>Guess if the next card is higher or lower &mdash; take turns!</p>
+          <div class="bet-input-group">
+            <label>Bet:</label>
+            <input type="number" class="bet-amount-input" placeholder="0.5" min="0.001" step="0.001" value="0.5" />
+            <span class="sol-label">SOL</span>
+          </div>
+          <button class="btn btn-primary btn-play">Find Match</button>
+        </div>
+
         <div class="game-card coming-soon" data-game="blackjack" data-category="casino">
           <div class="game-card-header">
             <div class="game-card-icon">&#127183;</div>
@@ -1426,6 +1491,10 @@
           <button class="pending-filter-btn" data-filter="connect4">&#128308; Connect 4</button>
           <button class="pending-filter-btn" data-filter="battleship">&#128674; Battleship</button>
           <button class="pending-filter-btn" data-filter="backgammon">&#127922; Backgammon</button>
+          <button class="pending-filter-btn" data-filter="rps">&#9994; RPS</button>
+          <button class="pending-filter-btn" data-filter="coinflip">&#129689; Coin Flip</button>
+          <button class="pending-filter-btn" data-filter="diceduel">&#127922; Dice Duel</button>
+          <button class="pending-filter-btn" data-filter="hilo">&#128195; Hi-Lo</button>
         </div>
         <div class="pending-bets-list" id="pending-bets-list">
           <div class="pending-empty">No open challenges yet &mdash; create one above!</div>
@@ -3371,6 +3440,237 @@
     })();
 
     // ════════════════════════════════════════
+    // ROCK PAPER SCISSORS UI
+    // ════════════════════════════════════════
+    var RPSUI = (function() {
+      var _handler = null;
+      var EMOJIS = { rock: '🪨', paper: '📄', scissors: '✂️' };
+
+      function render(state, sendAction, gameData) {
+        var area = document.getElementById('game-area');
+        var controls = document.getElementById('game-controls');
+        var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
+        var myName = (gameData && gameData.players) ? gameData.players[state.playerIndex].username : 'You';
+        var myScore = state.scores[state.playerIndex];
+        var oppScore = state.scores[1 - state.playerIndex];
+
+        var h = '<div style="display:flex;flex-direction:column;align-items:center;padding:1.5rem;min-height:70vh;justify-content:center;gap:1.5rem;">';
+        h += '<div style="color:var(--gold);font-weight:800;font-size:1.1rem;">Best of ' + state.maxRounds + ' &bull; Round ' + (state.round + 1) + '</div>';
+        h += '<div style="display:flex;gap:3rem;align-items:center;">';
+        h += '<div style="text-align:center;"><div style="color:var(--text2);font-size:0.85rem;">' + myName + '</div><div style="font-size:2.5rem;font-weight:800;color:var(--accent);">' + myScore + '</div></div>';
+        h += '<div style="color:var(--text2);font-size:1rem;">vs</div>';
+        h += '<div style="text-align:center;"><div style="color:var(--text2);font-size:0.85rem;">' + oppName + '</div><div style="font-size:2.5rem;font-weight:800;color:var(--red);">' + oppScore + '</div></div>';
+        h += '</div>';
+
+        if (state.revealRound && state.roundResults.length > 0) {
+          var last = state.roundResults[state.roundResults.length - 1];
+          var myC = last.choices[state.playerIndex];
+          var oppC = last.choices[1 - state.playerIndex];
+          h += '<div style="display:flex;gap:2rem;align-items:center;font-size:3rem;">';
+          h += '<div style="text-align:center;"><div>' + EMOJIS[myC] + '</div><div style="font-size:0.8rem;color:var(--text2);">' + myC + '</div></div>';
+          h += '<div style="font-size:1.2rem;color:var(--text2);">vs</div>';
+          h += '<div style="text-align:center;"><div>' + EMOJIS[oppC] + '</div><div style="font-size:0.8rem;color:var(--text2);">' + oppC + '</div></div>';
+          h += '</div>';
+          var rw = last.winner;
+          if (rw === null) h += '<div style="color:var(--gold);font-weight:700;">Tie!</div>';
+          else if (rw === state.playerIndex) h += '<div style="color:var(--accent);font-weight:700;">You won this round!</div>';
+          else h += '<div style="color:var(--red);font-weight:700;">Opponent won this round!</div>';
+        } else if (state.canChoose) {
+          h += '<div style="color:var(--accent);font-weight:700;margin-bottom:0.5rem;">Choose your weapon!</div>';
+          h += '<div style="display:flex;gap:1rem;">';
+          h += '<button class="btn btn-primary" data-rps-choice="rock" style="font-size:1.5rem;padding:1rem 1.5rem;">🪨<br><span style="font-size:0.7rem;">Rock</span></button>';
+          h += '<button class="btn btn-primary" data-rps-choice="paper" style="font-size:1.5rem;padding:1rem 1.5rem;">📄<br><span style="font-size:0.7rem;">Paper</span></button>';
+          h += '<button class="btn btn-primary" data-rps-choice="scissors" style="font-size:1.5rem;padding:1rem 1.5rem;">✂️<br><span style="font-size:0.7rem;">Scissors</span></button>';
+          h += '</div>';
+        } else if (state.myChoice && !state.oppChoice) {
+          h += '<div style="font-size:3rem;">' + EMOJIS[state.myChoice] + '</div>';
+          h += '<div style="color:var(--text2);font-style:italic;">Waiting for opponent...</div>';
+        }
+
+        h += '</div>';
+        area.innerHTML = h;
+        controls.innerHTML = ''; controls.style.display = 'none';
+
+        if (_handler) area.removeEventListener('click', _handler);
+        _handler = function(e) {
+          var btn = e.target.closest('[data-rps-choice]');
+          if (btn) sendAction({ type: 'choose', choice: btn.dataset.rpsChoice });
+        };
+        area.addEventListener('click', _handler);
+      }
+
+      return { render: render };
+    })();
+
+    // ════════════════════════════════════════
+    // COIN FLIP UI
+    // ════════════════════════════════════════
+    var CoinFlipUI = (function() {
+      var _handler = null;
+
+      function render(state, sendAction, gameData) {
+        var area = document.getElementById('game-area');
+        var controls = document.getElementById('game-controls');
+        var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
+        var myName = (gameData && gameData.players) ? gameData.players[state.playerIndex].username : 'You';
+
+        var h = '<div style="display:flex;flex-direction:column;align-items:center;padding:2rem;min-height:70vh;justify-content:center;gap:1.5rem;">';
+
+        if (state.phase === 'result') {
+          var coinEmoji = state.result === 'heads' ? '🪙' : '🔵';
+          h += '<div style="font-size:6rem;animation:pulse 0.5s 3;">' + coinEmoji + '</div>';
+          h += '<div style="font-size:1.5rem;font-weight:800;color:var(--gold);text-transform:uppercase;">' + state.result + '!</div>';
+          h += '<div style="color:var(--text2);font-size:0.9rem;">You picked: <b>' + (state.myChoice || '—') + '</b> &bull; Opponent got: <b>' + (state.oppChoice || '—') + '</b></div>';
+        } else if (state.isMyTurn) {
+          h += '<div style="font-size:5rem;">🪙</div>';
+          h += '<div style="color:var(--accent);font-weight:700;font-size:1.1rem;">Call the coin!</div>';
+          h += '<div style="display:flex;gap:1.5rem;margin-top:1rem;">';
+          h += '<button class="btn btn-primary btn-lg" data-coin-pick="heads" style="padding:1rem 2.5rem;font-size:1.1rem;">🪙 Heads</button>';
+          h += '<button class="btn btn-primary btn-lg" data-coin-pick="tails" style="padding:1rem 2.5rem;font-size:1.1rem;">🔵 Tails</button>';
+          h += '</div>';
+        } else if (!state.gameOver) {
+          h += '<div style="font-size:5rem;">🪙</div>';
+          h += '<div style="color:var(--text2);font-style:italic;">Opponent is calling the coin...</div>';
+        }
+
+        h += '</div>';
+        area.innerHTML = h;
+        controls.innerHTML = ''; controls.style.display = 'none';
+
+        if (_handler) area.removeEventListener('click', _handler);
+        _handler = function(e) {
+          var btn = e.target.closest('[data-coin-pick]');
+          if (btn) sendAction({ type: 'pick', side: btn.dataset.coinPick });
+        };
+        area.addEventListener('click', _handler);
+      }
+
+      return { render: render };
+    })();
+
+    // ════════════════════════════════════════
+    // DICE DUEL UI
+    // ════════════════════════════════════════
+    var DiceDuelUI = (function() {
+      var _handler = null;
+      var DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+
+      function render(state, sendAction, gameData) {
+        var area = document.getElementById('game-area');
+        var controls = document.getElementById('game-controls');
+        var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
+        var myName = (gameData && gameData.players) ? gameData.players[state.playerIndex].username : 'You';
+        var myScore = state.scores[state.playerIndex];
+        var oppScore = state.scores[1 - state.playerIndex];
+
+        var h = '<div style="display:flex;flex-direction:column;align-items:center;padding:1.5rem;min-height:70vh;justify-content:center;gap:1.5rem;">';
+        h += '<div style="color:var(--gold);font-weight:800;font-size:1.1rem;">Best of ' + state.maxRounds + ' &bull; Round ' + (state.round + 1) + '</div>';
+        h += '<div style="display:flex;gap:3rem;align-items:center;">';
+        h += '<div style="text-align:center;"><div style="color:var(--text2);font-size:0.85rem;">' + myName + '</div><div style="font-size:2.5rem;font-weight:800;color:var(--accent);">' + myScore + '</div></div>';
+        h += '<div style="color:var(--text2);">vs</div>';
+        h += '<div style="text-align:center;"><div style="color:var(--text2);font-size:0.85rem;">' + oppName + '</div><div style="font-size:2.5rem;font-weight:800;color:var(--red);">' + oppScore + '</div></div>';
+        h += '</div>';
+
+        if (state.myDice && state.oppDice) {
+          var mySum = state.myDice[0] + state.myDice[1];
+          var oppSum = state.oppDice[0] + state.oppDice[1];
+          h += '<div style="display:flex;gap:3rem;align-items:center;">';
+          h += '<div style="text-align:center;"><div style="font-size:2.5rem;">' + DICE_FACES[state.myDice[0]] + ' ' + DICE_FACES[state.myDice[1]] + '</div><div style="color:var(--accent);font-weight:700;">= ' + mySum + '</div></div>';
+          h += '<div style="color:var(--text2);">vs</div>';
+          h += '<div style="text-align:center;"><div style="font-size:2.5rem;">' + DICE_FACES[state.oppDice[0]] + ' ' + DICE_FACES[state.oppDice[1]] + '</div><div style="color:var(--red);font-weight:700;">= ' + oppSum + '</div></div>';
+          h += '</div>';
+          if (mySum > oppSum) h += '<div style="color:var(--accent);font-weight:700;">You won this round!</div>';
+          else if (oppSum > mySum) h += '<div style="color:var(--red);font-weight:700;">Opponent won this round!</div>';
+          else h += '<div style="color:var(--gold);font-weight:700;">Tie!</div>';
+        } else if (state.myDice) {
+          h += '<div style="font-size:3rem;">' + DICE_FACES[state.myDice[0]] + ' ' + DICE_FACES[state.myDice[1]] + '</div>';
+          h += '<div style="color:var(--text2);font-style:italic;">Waiting for opponent to roll...</div>';
+        } else if (state.canRoll) {
+          h += '<div style="font-size:3rem;">🎲 🎲</div>';
+          h += '<button class="btn btn-primary btn-lg" data-dice-roll="true" style="padding:1rem 2.5rem;font-size:1.1rem;margin-top:1rem;">🎲 Roll Dice!</button>';
+        } else if (state.oppRolled) {
+          h += '<div style="font-size:3rem;">🎲 🎲</div>';
+          h += '<div style="color:var(--gold);font-weight:700;">Opponent rolled! Your turn to roll!</div>';
+          h += '<button class="btn btn-primary btn-lg" data-dice-roll="true" style="padding:1rem 2.5rem;font-size:1.1rem;margin-top:1rem;">🎲 Roll Dice!</button>';
+        }
+
+        h += '</div>';
+        area.innerHTML = h;
+        controls.innerHTML = ''; controls.style.display = 'none';
+
+        if (_handler) area.removeEventListener('click', _handler);
+        _handler = function(e) {
+          var btn = e.target.closest('[data-dice-roll]');
+          if (btn) sendAction({ type: 'roll' });
+        };
+        area.addEventListener('click', _handler);
+      }
+
+      return { render: render };
+    })();
+
+    // ════════════════════════════════════════
+    // HI-LO UI
+    // ════════════════════════════════════════
+    var HiLoUI = (function() {
+      var _handler = null;
+
+      function cardStr(card) {
+        if (!card) return '';
+        var color = (card.suit === '♥' || card.suit === '♦') ? '#e74c3c' : '#fff';
+        return '<div class="war-card" style="color:' + color + '"><div class="war-card-rank">' + card.rank + '</div><div class="war-card-suit">' + card.suit + '</div></div>';
+      }
+
+      function render(state, sendAction, gameData) {
+        var area = document.getElementById('game-area');
+        var controls = document.getElementById('game-controls');
+        var oppName = (gameData && gameData.players) ? gameData.players[1 - state.playerIndex].username : 'Opponent';
+        var myName = (gameData && gameData.players) ? gameData.players[state.playerIndex].username : 'You';
+        var myScore = state.scores[state.playerIndex];
+        var oppScore = state.scores[1 - state.playerIndex];
+
+        var h = '<div style="display:flex;flex-direction:column;align-items:center;padding:1.5rem;min-height:70vh;justify-content:center;gap:1.2rem;">';
+        h += '<div style="color:var(--gold);font-weight:800;font-size:1rem;">Round ' + (state.round + 1) + '/' + state.maxRounds + '</div>';
+        h += '<div style="display:flex;gap:2rem;align-items:center;">';
+        h += '<div style="text-align:center;color:var(--text);font-size:0.85rem;">' + myName + ': <b style="color:var(--accent);">' + myScore + '</b></div>';
+        h += '<div style="text-align:center;color:var(--text);font-size:0.85rem;">' + oppName + ': <b style="color:var(--red);">' + oppScore + '</b></div>';
+        h += '</div>';
+
+        if (state.lastGuess) {
+          var lg = state.lastGuess;
+          var who = lg.player === state.playerIndex ? 'You' : oppName;
+          h += '<div style="color:var(--text2);font-size:0.8rem;">' + who + ' guessed <b>' + lg.guess + '</b> — ' + (lg.correct ? '<span style="color:var(--accent);">Correct!</span>' : '<span style="color:var(--red);">Wrong!</span>') + '</div>';
+          if (lg.revealed) h += '<div style="margin:0.3rem 0;">' + cardStr(lg.revealed) + '</div>';
+        }
+
+        h += '<div style="margin:0.5rem 0;">' + cardStr(state.currentCard) + '</div>';
+        h += '<div style="color:var(--text2);font-size:0.85rem;">Is the next card higher or lower?</div>';
+
+        if (state.isMyTurn && !state.gameOver) {
+          h += '<div style="display:flex;gap:1rem;margin-top:0.8rem;">';
+          h += '<button class="btn btn-primary btn-lg" data-hilo-guess="higher" style="padding:0.8rem 2rem;font-size:1rem;">⬆️ Higher</button>';
+          h += '<button class="btn btn-primary btn-lg" data-hilo-guess="lower" style="padding:0.8rem 2rem;font-size:1rem;">⬇️ Lower</button>';
+          h += '</div>';
+        } else if (!state.gameOver) {
+          h += '<div style="color:var(--text2);font-style:italic;margin-top:0.8rem;">Opponent\'s turn to guess...</div>';
+        }
+
+        h += '</div>';
+        area.innerHTML = h;
+        controls.innerHTML = ''; controls.style.display = 'none';
+
+        if (_handler) area.removeEventListener('click', _handler);
+        _handler = function(e) {
+          var btn = e.target.closest('[data-hilo-guess]');
+          if (btn) sendAction({ type: 'guess', guess: btn.dataset.hiloGuess });
+        };
+        area.addEventListener('click', _handler);
+      }
+
+      return { render: render };
+    })();
+
+    // ════════════════════════════════════════
     // MAIN APP
     // ════════════════════════════════════════
     var App = (function() {
@@ -3598,8 +3898,8 @@
       var pendingFilter = 'all';
       var lastLobbyData = null;
 
-      var GAME_ICONS = { domino: '\u{1F031}', tictactoe: '\u2715\u25CB', mancala: '\u{1F332}', checkers: '\u265F', chess: '\u2654', morpion: '\u271A', war: '\u2694', speed: '\u26A1', poker: '\u{1F0CF}', reversi: '\u26AA\u26AB', connect4: '\u{1F534}\u{1F7E1}', battleship: '\u{1F6A2}', backgammon: '\u{1F3B2}' };
-      var GAME_NAMES = { domino: 'Domino', tictactoe: 'Tic Tac Toe', mancala: 'Mancala', checkers: 'Checkers', chess: 'Chess', morpion: 'Morpion', war: 'War', speed: 'Speed', poker: 'Poker', reversi: 'Reversi', connect4: 'Connect 4', battleship: 'Battleship', backgammon: 'Backgammon' };
+      var GAME_ICONS = { domino: '\u{1F031}', tictactoe: '\u2715\u25CB', mancala: '\u{1F332}', checkers: '\u265F', chess: '\u2654', morpion: '\u271A', war: '\u2694', speed: '\u26A1', poker: '\u{1F0CF}', reversi: '\u26AA\u26AB', connect4: '\u{1F534}\u{1F7E1}', battleship: '\u{1F6A2}', backgammon: '\u{1F3B2}', rps: '\u270A\u270C', coinflip: '\u{1FA99}', diceduel: '\u{1F3B2}', hilo: '\u{1F4C3}' };
+      var GAME_NAMES = { domino: 'Domino', tictactoe: 'Tic Tac Toe', mancala: 'Mancala', checkers: 'Checkers', chess: 'Chess', morpion: 'Morpion', war: 'War', speed: 'Speed', poker: 'Poker', reversi: 'Reversi', connect4: 'Connect 4', battleship: 'Battleship', backgammon: 'Backgammon', rps: 'RPS', coinflip: 'Coin Flip', diceduel: 'Dice Duel', hilo: 'Hi-Lo' };
 
       function updateLobby(data) {
         lastLobbyData = data;
@@ -3830,6 +4130,14 @@
           BattleshipUI.render(state, sendAction, currentGameData);
         } else if (state.gameType === 'backgammon') {
           BackgammonUI.render(state, sendAction, currentGameData);
+        } else if (state.gameType === 'rps') {
+          RPSUI.render(state, sendAction, currentGameData);
+        } else if (state.gameType === 'coinflip') {
+          CoinFlipUI.render(state, sendAction, currentGameData);
+        } else if (state.gameType === 'diceduel') {
+          DiceDuelUI.render(state, sendAction, currentGameData);
+        } else if (state.gameType === 'hilo') {
+          HiLoUI.render(state, sendAction, currentGameData);
         } else {
           var turnEl = document.getElementById('turn-indicator');
           turnEl.textContent = state.isMyTurn ? 'YOUR TURN' : "OPPONENT'S TURN";
