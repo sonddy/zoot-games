@@ -1136,7 +1136,26 @@
       .wallet-panel { grid-template-columns: 1fr; }
       .pending-bets-section { padding: 1rem; }
     }
+    .bear-3d-container {
+      position: fixed;
+      top: 60px;
+      right: 10px;
+      width: 180px;
+      height: 200px;
+      z-index: 90;
+      pointer-events: auto;
+    }
+    .bear-3d-container model-viewer {
+      width: 100%;
+      height: 100%;
+      --poster-color: transparent;
+      background: transparent;
+    }
+    @media (max-width: 768px) {
+      .bear-3d-container { width: 120px; height: 140px; top: 55px; right: 5px; }
+    }
   </style>
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
 </head>
 <body>
 
@@ -1181,6 +1200,19 @@
         <span id="wallet-display" class="wallet-badge"></span>
       </div>
     </header>
+    <div class="bear-3d-container" id="bear-3d">
+      <model-viewer
+        src="/tuxedo-bear.glb"
+        auto-rotate
+        auto-rotate-delay="0"
+        rotation-per-second="30deg"
+        camera-orbit="0deg 75deg 2.5m"
+        field-of-view="30deg"
+        interaction-prompt="none"
+        autoplay
+        style="background:transparent;"
+      ></model-viewer>
+    </div>
     <main class="lobby-main">
       <div class="wallet-panel">
         <h3>&#128176; Your Wallet</h3>
@@ -4227,6 +4259,8 @@
         var all = ['connect','lobby','waiting','game'];
         for (var i = 0; i < all.length; i++) document.getElementById('screen-' + all[i]).classList.remove('active');
         document.getElementById('screen-' + name).classList.add('active');
+        var bear = document.getElementById('bear-3d');
+        if (bear) bear.style.display = (name === 'lobby') ? 'block' : 'none';
       }
 
       function updateBalanceUI(bal) {
