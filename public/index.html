@@ -1136,23 +1136,26 @@
       .wallet-panel { grid-template-columns: 1fr; }
       .pending-bets-section { padding: 1rem; }
     }
-    .bear-3d-container {
+    .bear-3d-right, .bear-3d-left {
       position: fixed;
       top: 60px;
-      right: 10px;
       width: 180px;
       height: 200px;
       z-index: 90;
       pointer-events: auto;
     }
-    .bear-3d-container model-viewer {
+    .bear-3d-right { right: 10px; }
+    .bear-3d-left { left: 10px; }
+    .bear-3d-right model-viewer, .bear-3d-left model-viewer {
       width: 100%;
       height: 100%;
       --poster-color: transparent;
       background: transparent;
     }
     @media (max-width: 768px) {
-      .bear-3d-container { width: 120px; height: 140px; top: 55px; right: 5px; }
+      .bear-3d-right, .bear-3d-left { width: 120px; height: 140px; top: 55px; }
+      .bear-3d-right { right: 5px; }
+      .bear-3d-left { left: 5px; }
     }
   </style>
   <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
@@ -1200,12 +1203,19 @@
         <span id="wallet-display" class="wallet-badge"></span>
       </div>
     </header>
-    <div class="bear-3d-container" id="bear-3d">
+    <div class="bear-3d-right" id="bear-3d-right">
       <model-viewer
         src="/tuxedo-bear.glb"
-        auto-rotate
-        auto-rotate-delay="0"
-        rotation-per-second="30deg"
+        camera-orbit="0deg 75deg 2.5m"
+        field-of-view="30deg"
+        interaction-prompt="none"
+        autoplay
+        style="background:transparent;"
+      ></model-viewer>
+    </div>
+    <div class="bear-3d-left" id="bear-3d-left">
+      <model-viewer
+        src="/tuxedo-bear.glb"
         camera-orbit="0deg 75deg 2.5m"
         field-of-view="30deg"
         interaction-prompt="none"
@@ -4259,8 +4269,10 @@
         var all = ['connect','lobby','waiting','game'];
         for (var i = 0; i < all.length; i++) document.getElementById('screen-' + all[i]).classList.remove('active');
         document.getElementById('screen-' + name).classList.add('active');
-        var bear = document.getElementById('bear-3d');
-        if (bear) bear.style.display = (name === 'lobby') ? 'block' : 'none';
+        var bearR = document.getElementById('bear-3d-right');
+        var bearL = document.getElementById('bear-3d-left');
+        if (bearR) bearR.style.display = (name === 'lobby') ? 'block' : 'none';
+        if (bearL) bearL.style.display = (name === 'lobby') ? 'block' : 'none';
       }
 
       function updateBalanceUI(bal) {
