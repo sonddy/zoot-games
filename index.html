@@ -5309,7 +5309,7 @@
       }
 
       document.addEventListener('DOMContentLoaded', init);
-      return { showScreen: showScreen, sendAction: sendAction, acceptBet: acceptBet, showToast: showToast };
+      return { showScreen: showScreen, sendAction: sendAction, acceptBet: acceptBet, showToast: showToast, getEscrow: function() { return escrowAddress; }, isTest: function() { return isTestMode; }, getBalance: function() { return currentBalance; }, refreshBalance: refreshBalance };
     })();
 
   </script>
@@ -5617,7 +5617,7 @@
         return h;
       }
 
-      function handleCreateBet(btn) {
+      async function handleCreateBet(btn) {
         var card = btn.closest('.event-card');
         var amountInput = card.querySelector('.sports-bet-amount');
         var amount = parseFloat(amountInput.value);
@@ -5626,12 +5626,73 @@
           return;
         }
 
+        var escrowAddress = App.getEscrow();
+        if (!escrowAddress) { App.showToast('Server not ready, try again', 'error'); return; }
+
         var walletAddr = typeof PhantomWallet !== 'undefined' ? PhantomWallet.getPublicKey() : null;
         if (!walletAddr) {
           App.showToast('Connect your wallet first!', 'error');
           return;
         }
 
+        if (amount > App.getBalance()) {
+          App.showToast('Not enough SOL in your wallet!', 'error');
+          return;
+        }
+
+        var originalText = btn.textContent;
+        btn.disabled = true;
+
+        if (App.isTest()) {
+          createBetEntry(btn, card, amount, walletAddr, 'test_sports_' + Date.now());
+          return;
+        }
+
+        btn.textContent = 'Confirm in Phantom...';
+
+        try {
+          var provider = PhantomWallet.getProvider();
+          if (!provider || !provider.publicKey) throw new Error('Wallet not connected \u2014 reconnect Phantom');
+          var web3 = window.solanaWeb3;
+          if (!web3) throw new Error('Solana library not loaded \u2014 refresh page');
+
+          var rpcUrl = PhantomWallet.getRpcUrl();
+          var connection = new web3.Connection(rpcUrl, 'confirmed');
+
+          var fromPubkey = provider.publicKey;
+          var toPubkey = new web3.PublicKey(escrowAddress);
+          var lamports = Math.floor(amount * web3.LAMPORTS_PER_SOL);
+
+          var transaction = new web3.Transaction().add(
+            web3.SystemProgram.transfer({ fromPubkey: fromPubkey, toPubkey: toPubkey, lamports: lamports })
+          );
+          transaction.feePayer = fromPubkey;
+
+          btn.textContent = 'Getting blockhash...';
+          var bh = await connection.getLatestBlockhash('confirmed');
+          transaction.recentBlockhash = bh.blockhash;
+
+          btn.textContent = 'Sign in Phantom...';
+          var signed = await provider.signTransaction(transaction);
+
+          btn.textContent = 'Sending bet...';
+          var signature = await connection.sendRawTransaction(signed.serialize());
+
+          btn.textContent = 'Confirming tx...';
+          await connection.confirmTransaction(signature, 'confirmed');
+
+          createBetEntry(btn, card, amount, walletAddr, signature);
+          App.refreshBalance();
+        } catch (err) {
+          var msg = err.message || 'Transaction cancelled';
+          if (msg.indexOf('User rejected') >= 0 || msg.indexOf('cancelled') >= 0) msg = 'You cancelled the transaction';
+          App.showToast(msg, 'error');
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
+      }
+
+      function createBetEntry(btn, card, amount, walletAddr, txSignature) {
         var bet = {
           id: 'sb_' + (betIdCounter++),
           eventId: btn.dataset.eventId,
@@ -5642,51 +5703,130 @@
           teamName: btn.dataset.team,
           amount: amount,
           creatorWallet: walletAddr,
-          creatorName: typeof PhantomWallet !== 'undefined' ? PhantomWallet.shortenAddress(walletAddr) : 'Unknown',
+          creatorName: PhantomWallet.shortenAddress(walletAddr),
+          txSignature: txSignature,
           createdAt: Date.now(),
           status: 'open'
         };
 
         sportsBets.push(bet);
         renderPendingBets();
-        App.showToast('Sports bet created! Waiting for opponent to accept...', 'info');
 
-        btn.textContent = '\u2713 Bet Placed';
-        btn.style.opacity = '0.6';
-        btn.disabled = true;
+        btn.textContent = '\u2713 Bet Placed!';
+        btn.style.background = 'var(--green)';
+        App.showToast('Sports bet of ' + amount + ' SOL placed! Waiting for opponent...', 'info');
+
         setTimeout(function() {
-          btn.textContent = btn.dataset.pick === 'draw' ? 'Draw' : (btn.dataset.pick === 'home' ? card.querySelector('.event-team.home .event-team-name').textContent : card.querySelector('.event-team.away .event-team-name').textContent);
-          btn.style.opacity = '';
+          btn.textContent = btn.dataset.pick === 'draw' ? 'Draw' : (btn.dataset.pick === 'home' ? (card.querySelector('.event-team.home .event-team-name') || {}).textContent || 'Home' : (card.querySelector('.event-team.away .event-team-name') || {}).textContent || 'Away');
+          btn.style.background = '';
           btn.disabled = false;
-        }, 2000);
+        }, 3000);
       }
 
-      function handleAcceptBet(btn) {
+      async function handleAcceptBet(btn) {
         var betId = btn.dataset.betId;
+        var escrowAddress = App.getEscrow();
+        if (!escrowAddress) { App.showToast('Server not ready, try again', 'error'); return; }
+
         var walletAddr = typeof PhantomWallet !== 'undefined' ? PhantomWallet.getPublicKey() : null;
         if (!walletAddr) {
           App.showToast('Connect your wallet first!', 'error');
           return;
         }
 
+        var targetBet = null;
         for (var i = 0; i < sportsBets.length; i++) {
-          if (sportsBets[i].id === betId) {
-            if (sportsBets[i].creatorWallet === walletAddr) {
-              App.showToast('You cannot accept your own bet!', 'error');
-              return;
-            }
-            sportsBets[i].status = 'matched';
-            sportsBets[i].acceptorWallet = walletAddr;
-            sportsBets[i].acceptorName = typeof PhantomWallet !== 'undefined' ? PhantomWallet.shortenAddress(walletAddr) : 'Unknown';
-
-            var oppositePick = sportsBets[i].pick === 'home' ? 'away' : (sportsBets[i].pick === 'away' ? 'home' : 'not-draw');
-            sportsBets[i].acceptorPick = oppositePick;
-
-            App.showToast('Bet accepted! The winner will be determined when the game finishes.', 'info');
-            renderPendingBets();
-            return;
-          }
+          if (sportsBets[i].id === betId) { targetBet = sportsBets[i]; break; }
         }
+        if (!targetBet) { App.showToast('Bet not found', 'error'); return; }
+
+        if (targetBet.creatorWallet === walletAddr) {
+          App.showToast('You cannot accept your own bet!', 'error');
+          return;
+        }
+
+        if (targetBet.amount > App.getBalance()) {
+          App.showToast('Not enough SOL in your wallet!', 'error');
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Joining...';
+        btn.style.background = '#ffc107';
+
+        var resetBtn = function(errMsg) {
+          btn.disabled = false;
+          btn.textContent = 'Accept';
+          btn.style.background = '';
+          if (errMsg) {
+            App.showToast(errMsg, 'error');
+            btn.textContent = 'Retry';
+            btn.style.background = '#ff3d57';
+            setTimeout(function() { btn.textContent = 'Accept'; btn.style.background = ''; }, 4000);
+          }
+        };
+
+        if (App.isTest()) {
+          matchBet(targetBet, walletAddr, 'test_accept_sports_' + Date.now());
+          btn.textContent = '\u2713 Matched!';
+          btn.style.background = 'var(--green)';
+          return;
+        }
+
+        try {
+          var provider = PhantomWallet.getProvider();
+          if (!provider || !provider.publicKey) throw new Error('Wallet not connected \u2014 reconnect Phantom');
+
+          btn.textContent = 'Confirm in Phantom...';
+          var web3 = window.solanaWeb3;
+          if (!web3) throw new Error('Solana library not loaded \u2014 refresh page');
+
+          var rpcUrl = PhantomWallet.getRpcUrl();
+          var connection = new web3.Connection(rpcUrl, 'confirmed');
+
+          var fromPubkey = provider.publicKey;
+          var toPubkey = new web3.PublicKey(escrowAddress);
+          var lamports = Math.floor(targetBet.amount * web3.LAMPORTS_PER_SOL);
+
+          var transaction = new web3.Transaction().add(
+            web3.SystemProgram.transfer({ fromPubkey: fromPubkey, toPubkey: toPubkey, lamports: lamports })
+          );
+          transaction.feePayer = fromPubkey;
+
+          btn.textContent = 'Getting blockhash...';
+          var bh = await connection.getLatestBlockhash('confirmed');
+          transaction.recentBlockhash = bh.blockhash;
+
+          btn.textContent = 'Sign in Phantom...';
+          var signed = await provider.signTransaction(transaction);
+
+          btn.textContent = 'Sending tx...';
+          var signature = await connection.sendRawTransaction(signed.serialize());
+
+          btn.textContent = 'Confirming tx...';
+          await connection.confirmTransaction(signature, 'confirmed');
+
+          matchBet(targetBet, walletAddr, signature);
+
+          btn.textContent = '\u2713 Matched!';
+          btn.style.background = 'var(--green)';
+          App.showToast('Bet accepted! Winner determined when the game finishes.', 'info');
+          App.refreshBalance();
+        } catch (err) {
+          var msg = err.message || 'Transaction failed';
+          if (msg.indexOf('User rejected') >= 0 || msg.indexOf('cancelled') >= 0) msg = 'You cancelled the transaction';
+          resetBtn(msg);
+        }
+      }
+
+      function matchBet(bet, walletAddr, txSignature) {
+        bet.status = 'matched';
+        bet.acceptorWallet = walletAddr;
+        bet.acceptorName = PhantomWallet.shortenAddress(walletAddr);
+        bet.acceptTxSignature = txSignature;
+        var oppositePick = bet.pick === 'home' ? 'away' : (bet.pick === 'away' ? 'home' : 'not-draw');
+        bet.acceptorPick = oppositePick;
+        renderPendingBets();
       }
 
       function renderPendingBets() {
