@@ -15,6 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    button, a, input, select, textarea { touch-action: manipulation; }
 
     :root {
       --bg: #0b0f19;
@@ -131,6 +132,7 @@
       backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     }
     .topbar-left, .topbar-center, .topbar-right { display: flex; align-items: center; gap: 0.7rem; }
+    .topbar-right { flex-shrink: 0; }
     .logo-sm { font-weight: 800; font-size: 1.1rem; display: flex; align-items: center; gap: 0.4rem; }
     .logo-sm-mark {
       display: inline-flex; align-items: center; justify-content: center;
@@ -1221,27 +1223,28 @@
     .menu-dropdown-wrap { position: relative; }
     .menu-toggle {
       background: linear-gradient(135deg, var(--accent), #00897b); color: #fff; border: none;
-      border-radius: var(--radius-sm); padding: 0.4rem 0.9rem; font-family: inherit;
-      font-weight: 700; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;
-      transition: all 0.2s;
+      border-radius: var(--radius-sm); padding: 0.45rem 0.7rem; font-family: inherit;
+      font-weight: 700; font-size: 1rem; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;
+      transition: all 0.2s; min-width: 42px; justify-content: center;
     }
     .menu-toggle:hover { background: linear-gradient(135deg, var(--accent2), var(--accent)); transform: translateY(-1px); }
-    .menu-toggle .menu-arrow { font-size: 0.6rem; transition: transform 0.2s; }
+    .menu-toggle .menu-arrow { font-size: 0.55rem; transition: transform 0.2s; }
     .menu-toggle.open .menu-arrow { transform: rotate(180deg); }
     .menu-dropdown {
-      display: none; position: absolute; top: calc(100% + 6px); left: 0; min-width: 200px;
-      background: var(--surface); border: 1px solid var(--surface2); border-radius: var(--radius);
-      box-shadow: 0 12px 40px rgba(0,0,0,0.5); z-index: 200; overflow: hidden;
-      animation: menuSlide 0.2s ease;
+      display: none; position: absolute; top: calc(100% + 8px); right: 0; min-width: 210px;
+      background: rgba(21,31,50,0.98); border: 1px solid var(--surface2); border-radius: var(--radius);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.6); z-index: 200; overflow: hidden;
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     }
-    .menu-dropdown.show { display: block; }
+    .menu-dropdown.show { display: block; animation: menuSlide 0.2s ease; }
     @keyframes menuSlide { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
     .menu-dropdown-item {
-      display: flex; align-items: center; gap: 0.7rem; padding: 0.8rem 1.1rem;
+      display: flex; align-items: center; gap: 0.7rem; padding: 0.85rem 1.1rem;
       color: var(--text); font-size: 0.9rem; font-weight: 600; cursor: pointer;
       transition: all 0.15s; border: none; background: none; width: 100%; text-align: left; font-family: inherit;
     }
     .menu-dropdown-item:hover { background: rgba(0,212,170,0.08); color: var(--accent2); }
+    .menu-dropdown-item:active { background: rgba(0,212,170,0.15); }
     .menu-dropdown-item .menu-item-icon { font-size: 1.2rem; width: 28px; text-align: center; }
     .menu-dropdown-item .menu-item-badge {
       margin-left: auto; background: var(--accent); color: #fff; font-size: 0.65rem;
@@ -1408,28 +1411,107 @@
     .sports-empty { color: var(--text2); font-size: 0.85rem; text-align: center; padding: 1.5rem; }
     .event-no-data { text-align: center; padding: 2rem; color: var(--text2); font-size: 0.9rem; }
 
-    @media (max-width: 700px) {
-      .game-cards { grid-template-columns: 1fr; }
-      .pending-bet-card { flex-wrap: wrap; gap: 0.6rem; }
+    /* ═══ TABLET ═══ */
+    @media (max-width: 900px) {
+      .game-cards { grid-template-columns: repeat(2, 1fr); gap: 0.8rem; }
+      .lobby-main, .sports-main { padding: 1.2rem 1rem; }
+      .wallet-panel { grid-template-columns: 1fr; gap: 0.8rem; }
+      .balance-display { font-size: 1.8rem; }
+    }
+
+    /* ═══ MOBILE ═══ */
+    @media (max-width: 600px) {
+      /* --- Topbar --- */
+      .topbar { padding: 0.5rem 0.7rem; gap: 0.4rem; flex-wrap: nowrap; }
+      .topbar-left, .topbar-center, .topbar-right { gap: 0.4rem; }
+      .topbar-center { display: none; }
+      .logo-sm { font-size: 0.9rem; gap: 0.3rem; }
+      .logo-sm-mark { width: 26px; height: 26px; }
+      .badge { font-size: 0.7rem; padding: 0.2rem 0.5rem; }
+      .wallet-badge { font-size: 0.65rem; max-width: 70px; overflow: hidden; text-overflow: ellipsis; }
+      .menu-toggle { padding: 0.35rem 0.55rem; font-size: 0.9rem; min-width: 36px; }
+      .menu-dropdown { min-width: 180px; right: 0; }
+
+      /* --- Lobby --- */
+      .lobby-main { padding: 1rem 0.7rem; }
+      .lobby-main > h2 { font-size: 0.85rem; margin-bottom: 0.8rem; }
+      .game-category-tabs { gap: 0.25rem; margin-bottom: 0.8rem; padding-bottom: 0.6rem; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+      .game-category-tabs::-webkit-scrollbar { display: none; }
+      .game-category-tab { padding: 0.3rem 0.7rem; font-size: 0.72rem; white-space: nowrap; flex-shrink: 0; }
+      .game-cards { grid-template-columns: 1fr; gap: 0.7rem; margin-bottom: 1.5rem; }
+      .game-card { padding: 1rem 1rem 0.9rem; }
+      .game-card-icon { font-size: 1.8rem; }
+      .game-card h3 { font-size: 1rem; }
+      .game-card p { font-size: 0.75rem; margin-bottom: 0.7rem; }
+
+      /* --- Wallet Panel --- */
+      .wallet-panel { grid-template-columns: 1fr; padding: 0.9rem; gap: 0.6rem; }
+      .balance-display { font-size: 1.6rem; }
+      .wallet-actions { flex-direction: column; gap: 0.4rem; }
+      .wallet-actions input[type="number"] { width: 100%; }
+      .btn-deposit, .btn-withdraw { width: 100%; text-align: center; padding: 0.6rem; }
+
+      /* --- Pending Bets --- */
+      .pending-bets-section { padding: 0.8rem; margin-bottom: 1.5rem; }
+      .pending-bets-section h2 { font-size: 0.8rem; }
+      .pending-filter-tabs { gap: 0.2rem; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 0.4rem; }
+      .pending-filter-tabs::-webkit-scrollbar { display: none; }
+      .pending-filter-btn { padding: 0.25rem 0.55rem; font-size: 0.68rem; white-space: nowrap; flex-shrink: 0; }
+      .pending-bet-card { flex-wrap: wrap; gap: 0.5rem; padding: 0.6rem 0.4rem; }
       .pending-bet-amount { text-align: left; }
-      .pending-bet-accept { width: 100%; text-align: center; }
-      .topbar { flex-wrap: wrap; gap: 0.5rem; }
-      .logo h1 { font-size: 2rem; }
-      .logo-mark { width: 64px; height: 64px; font-size: 1.8rem; }
-      .connect-stats { gap: 0.6rem; }
-      .stat-pill { padding: 0.5rem 0.8rem; min-width: 65px; }
-      .stat-value { font-size: 1rem; }
-      .wallet-panel { grid-template-columns: 1fr; }
-      .pending-bets-section { padding: 1rem; }
-      .event-matchup { flex-direction: column; gap: 0.5rem; }
+      .pending-bet-accept { width: 100%; }
+      .pending-bet-accept button { width: 100%; text-align: center; padding: 0.5rem; }
+
+      /* --- Connect Screen --- */
+      .logo h1 { font-size: 1.6rem; }
+      .logo-mark { width: 56px; height: 56px; font-size: 1.5rem; }
+      .connect-stats { gap: 0.5rem; flex-wrap: wrap; }
+      .stat-pill { padding: 0.4rem 0.6rem; min-width: 60px; }
+      .stat-value { font-size: 0.9rem; }
+      .connect-form .btn-phantom { font-size: 0.85rem; padding: 0.7rem 1.2rem; }
+
+      /* --- Sports Betting --- */
+      .sports-main { padding: 1rem 0.7rem; }
+      .sports-header { margin-bottom: 1rem; }
+      .sports-header h2 { font-size: 1rem; }
+      .sport-tabs { gap: 0.25rem; margin-bottom: 1rem; padding-bottom: 0.6rem; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+      .sport-tabs::-webkit-scrollbar { display: none; }
+      .sport-tab { padding: 0.3rem 0.65rem; font-size: 0.72rem; white-space: nowrap; flex-shrink: 0; }
+
+      /* --- Event Cards --- */
+      .event-card { padding: 0.8rem 0.9rem; }
+      .event-matchup { flex-direction: column; gap: 0.5rem; align-items: stretch; }
+      .event-team { justify-content: flex-start; }
       .event-team.away { flex-direction: row; text-align: left; }
-      .event-bet-row { flex-wrap: wrap; }
-      .btn-bet-team { min-width: 60px; }
-      .sport-tabs { gap: 0.3rem; }
-      .sport-tab { padding: 0.35rem 0.7rem; font-size: 0.75rem; }
-      .menu-dropdown { min-width: 180px; }
-      .sports-bet-card { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
-      .sports-pending-section { padding: 1rem; }
+      .event-team-logo { width: 28px; height: 28px; }
+      .event-team-name { font-size: 0.8rem; }
+      .event-score-center { flex-direction: row; gap: 0.5rem; min-width: auto; }
+      .event-score { font-size: 1.2rem; }
+      .event-bet-row { flex-wrap: wrap; gap: 0.4rem; }
+      .event-bet-row input[type="number"] { width: 65px; padding: 0.3rem 0.4rem; font-size: 0.8rem; }
+      .btn-bet-team { flex: 1; min-width: 0; padding: 0.4rem 0.4rem; font-size: 0.7rem; }
+
+      /* --- Sports Pending Bets --- */
+      .sports-pending-section { padding: 0.8rem; }
+      .sports-bet-card { flex-direction: column; align-items: stretch; gap: 0.5rem; padding: 0.7rem 0.8rem; }
+      .sports-bet-card .sbc-event { min-width: 0; }
+      .sports-bet-card .btn-accept-sports { width: 100%; text-align: center; padding: 0.5rem; }
+
+      /* --- Live Section --- */
+      .live-section { padding: 0.8rem; }
+
+      /* --- Bear 3D (hide on mobile) --- */
+      .bear-3d-right, .bear-3d-left { display: none; }
+    }
+
+    /* ═══ VERY SMALL PHONES ═══ */
+    @media (max-width: 380px) {
+      .topbar-left .logo-sm span:last-child { display: none; }
+      .game-card { padding: 0.8rem; }
+      .game-card h3 { font-size: 0.9rem; }
+      .event-bet-row { flex-direction: column; }
+      .btn-bet-team { width: 100%; }
+      .wallet-badge { display: none; }
     }
     .bear-3d-right, .bear-3d-left {
       position: fixed;
@@ -1491,9 +1573,14 @@
     <header class="topbar">
       <div class="topbar-left">
         <span class="logo-sm"><span class="logo-sm-mark"><img src="/zootcoin.png" alt="ZG" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" /></span><span><span class="accent">Zoot</span> Games</span></span>
-        <div class="menu-dropdown-wrap" id="menu-dropdown-wrap">
-          <button class="menu-toggle" id="menu-toggle">&#9776; Menu <span class="menu-arrow">&#9660;</span></button>
-          <div class="menu-dropdown" id="menu-dropdown">
+      </div>
+      <div class="topbar-center"><span id="online-count" class="badge badge-live">0 online</span></div>
+      <div class="topbar-right">
+        <span id="topbar-balance" class="badge" style="color:var(--gold);font-weight:700;border-color:rgba(255,193,7,0.2);">0 SOL</span>
+        <span id="wallet-display" class="wallet-badge"></span>
+        <div class="menu-dropdown-wrap">
+          <button class="menu-toggle">&#9776; <span class="menu-arrow">&#9660;</span></button>
+          <div class="menu-dropdown">
             <button class="menu-dropdown-item active" data-menu="games">
               <span class="menu-item-icon">&#127918;</span> Games <span class="menu-item-badge">24</span>
             </button>
@@ -1503,11 +1590,6 @@
             </button>
           </div>
         </div>
-      </div>
-      <div class="topbar-center"><span id="online-count" class="badge badge-live">0 online</span></div>
-      <div class="topbar-right">
-        <span id="topbar-balance" class="badge" style="color:var(--gold);font-weight:700;border-color:rgba(255,193,7,0.2);">0 SOL</span>
-        <span id="wallet-display" class="wallet-badge"></span>
       </div>
     </header>
     <div class="bear-3d-right" id="bear-3d-right">
@@ -1977,9 +2059,14 @@
     <header class="topbar">
       <div class="topbar-left">
         <span class="logo-sm"><span class="logo-sm-mark"><img src="/zootcoin.png" alt="ZG" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" /></span><span><span class="accent">Zoot</span> Games</span></span>
-        <div class="menu-dropdown-wrap" id="menu-dropdown-wrap-sports">
-          <button class="menu-toggle" id="menu-toggle-sports">&#9776; Menu <span class="menu-arrow">&#9660;</span></button>
-          <div class="menu-dropdown" id="menu-dropdown-sports">
+      </div>
+      <div class="topbar-center"><span id="online-count-sports" class="badge badge-live">0 online</span></div>
+      <div class="topbar-right">
+        <span id="topbar-balance-sports" class="badge" style="color:var(--gold);font-weight:700;border-color:rgba(255,193,7,0.2);">0 SOL</span>
+        <span id="wallet-display-sports" class="wallet-badge"></span>
+        <div class="menu-dropdown-wrap">
+          <button class="menu-toggle">&#9776; <span class="menu-arrow">&#9660;</span></button>
+          <div class="menu-dropdown">
             <button class="menu-dropdown-item" data-menu="games">
               <span class="menu-item-icon">&#127918;</span> Games <span class="menu-item-badge">24</span>
             </button>
@@ -1989,11 +2076,6 @@
             </button>
           </div>
         </div>
-      </div>
-      <div class="topbar-center"><span id="online-count-sports" class="badge badge-live">0 online</span></div>
-      <div class="topbar-right">
-        <span id="topbar-balance-sports" class="badge" style="color:var(--gold);font-weight:700;border-color:rgba(255,193,7,0.2);">0 SOL</span>
-        <span id="wallet-display-sports" class="wallet-badge"></span>
       </div>
     </header>
     <main class="sports-main">
