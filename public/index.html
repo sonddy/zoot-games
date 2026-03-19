@@ -1412,6 +1412,69 @@
     .sports-empty { color: var(--text2); font-size: 0.85rem; text-align: center; padding: 1.5rem; }
     .event-no-data { text-align: center; padding: 2rem; color: var(--text2); font-size: 0.9rem; }
 
+    /* ═══ REFRESH BUTTON ═══ */
+    .btn-refresh-sports {
+      background: transparent; border: 1.5px solid var(--surface2); color: var(--text2);
+      border-radius: 8px; padding: 0.35rem 0.8rem; font-family: inherit; font-weight: 600;
+      font-size: 0.78rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem;
+      transition: all 0.25s; margin-left: auto;
+    }
+    .btn-refresh-sports:hover { border-color: #ff6b35; color: #ff6b35; background: rgba(255,107,53,0.06); }
+    .btn-refresh-sports .refresh-icon { display: inline-block; font-size: 0.95rem; transition: transform 0.4s ease; }
+    .btn-refresh-sports.spinning .refresh-icon { animation: spinRefresh 0.8s linear infinite; }
+    @keyframes spinRefresh { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .refresh-timer { font-size: 0.65rem; color: var(--text2); opacity: 0.7; }
+
+    /* ═══ LIVE SCORE TRACKER ON BETS ═══ */
+    .sbc-live-tracker {
+      display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.7rem;
+      background: rgba(15,22,35,0.6); border: 1px solid var(--surface2);
+      border-radius: 8px; width: 100%; margin-top: 0.3rem;
+    }
+    .sbc-score-display {
+      display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 1rem;
+    }
+    .sbc-score-home, .sbc-score-away { min-width: 20px; text-align: center; }
+    .sbc-score-sep { color: var(--text2); font-size: 0.8rem; }
+    .sbc-game-clock {
+      font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.45rem;
+      border-radius: 4px; white-space: nowrap;
+    }
+    .sbc-game-clock.live { background: var(--red); color: #fff; animation: livePulse 2s ease-in-out infinite; }
+    .sbc-game-clock.upcoming { background: rgba(0,212,170,0.12); color: var(--accent); }
+    .sbc-game-clock.final { background: rgba(122,139,165,0.15); color: var(--text2); }
+    .sbc-bet-status {
+      margin-left: auto; font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.6rem;
+      border-radius: 999px; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .sbc-bet-status.winning {
+      background: linear-gradient(135deg, rgba(0,212,170,0.15), rgba(46,204,113,0.15));
+      color: var(--accent); border: 1px solid rgba(0,212,170,0.3);
+      animation: statusPulseWin 2s ease-in-out infinite;
+    }
+    .sbc-bet-status.losing {
+      background: linear-gradient(135deg, rgba(231,76,60,0.15), rgba(192,57,43,0.15));
+      color: var(--red); border: 1px solid rgba(231,76,60,0.3);
+    }
+    .sbc-bet-status.tied {
+      background: linear-gradient(135deg, rgba(241,196,15,0.12), rgba(243,156,18,0.12));
+      color: var(--gold); border: 1px solid rgba(241,196,15,0.25);
+    }
+    .sbc-bet-status.pending-result {
+      background: rgba(122,139,165,0.1); color: var(--text2); border: 1px solid var(--surface2);
+    }
+    @keyframes statusPulseWin {
+      0%,100% { box-shadow: 0 0 0 0 rgba(0,212,170,0); }
+      50% { box-shadow: 0 0 12px 2px rgba(0,212,170,0.25); }
+    }
+    .sbc-teams-mini {
+      display: flex; align-items: center; gap: 0.3rem; font-size: 0.72rem; color: var(--text2);
+    }
+    .sbc-teams-mini .team-abbr { font-weight: 700; }
+    .sbc-teams-mini .team-abbr.picked { color: var(--accent); }
+    .sbc-teams-mini .team-abbr.leading { color: var(--accent); }
+    .sbc-teams-mini .team-abbr.trailing { color: var(--red); opacity: 0.7; }
+
     /* ═══ TABLET ═══ */
     @media (max-width: 900px) {
       .game-cards { grid-template-columns: repeat(2, 1fr); gap: 0.8rem; }
@@ -1497,6 +1560,9 @@
       .sports-bet-card { flex-direction: column; align-items: stretch; gap: 0.5rem; padding: 0.7rem 0.8rem; }
       .sports-bet-card .sbc-event { min-width: 0; }
       .sports-bet-card .btn-accept-sports { width: 100%; text-align: center; padding: 0.5rem; }
+      .sbc-live-tracker { flex-wrap: wrap; gap: 0.4rem; padding: 0.4rem 0.5rem; }
+      .sbc-bet-status { font-size: 0.65rem; }
+      .btn-refresh-sports { padding: 0.3rem 0.6rem; font-size: 0.72rem; }
 
       /* --- Live Section --- */
       .live-section { padding: 0.8rem; }
@@ -2183,7 +2249,11 @@
       <div class="sports-header">
         <h2>&#9917; Sports Betting</h2>
         <span class="live-badge">LIVE EVENTS</span>
+        <button class="btn-refresh-sports" id="btn-refresh-sports" title="Refresh live scores">
+          <span class="refresh-icon">&#8635;</span> Refresh
+        </button>
       </div>
+      <div id="last-refresh-time" class="refresh-timer"></div>
 
       <div class="sport-tabs" id="sport-tabs">
         <button class="sport-tab active" data-sport="all">All Sports</button>
@@ -5537,11 +5607,14 @@
       var serverSportsBets = [];
       var loadingInProgress = false;
       var refreshTimer = null;
+      var lastRefreshTs = 0;
+      var countdownTimer = null;
 
       function init() {
         setupSportTabs();
         setupEventListeners();
         setupSocketListeners();
+        setupRefreshButton();
       }
 
       function setupSportTabs() {
@@ -5571,6 +5644,73 @@
             if (acceptBtn) handleAcceptBet(acceptBtn);
           });
         }
+      }
+
+      function setupRefreshButton() {
+        var btn = document.getElementById('btn-refresh-sports');
+        if (btn) {
+          btn.addEventListener('click', function() {
+            if (loadingInProgress) return;
+            btn.classList.add('spinning');
+            loadEvents().then(function() {
+              setTimeout(function() { btn.classList.remove('spinning'); }, 500);
+            });
+          });
+        }
+      }
+
+      function updateRefreshTimestamp() {
+        lastRefreshTs = Date.now();
+        var el = document.getElementById('last-refresh-time');
+        if (el) el.textContent = 'Last updated: just now';
+        if (countdownTimer) clearInterval(countdownTimer);
+        countdownTimer = setInterval(function() {
+          var secs = Math.floor((Date.now() - lastRefreshTs) / 1000);
+          var el2 = document.getElementById('last-refresh-time');
+          if (!el2) return;
+          if (secs < 5) el2.textContent = 'Last updated: just now';
+          else if (secs < 60) el2.textContent = 'Last updated: ' + secs + 's ago';
+          else el2.textContent = 'Last updated: ' + Math.floor(secs / 60) + 'm ago';
+        }, 5000);
+      }
+
+      function findEventForBet(bet) {
+        var all = getAllEvents();
+        for (var i = 0; i < all.length; i++) {
+          if (all[i].id === bet.eventId) return all[i];
+          if (all[i].name === bet.matchName) return all[i];
+        }
+        return null;
+      }
+
+      function getBetStatus(bet, ev) {
+        if (!ev) return { status: 'pending-result', label: 'Awaiting', icon: '\u23F3' };
+        if (ev.state === 'upcoming') return { status: 'pending-result', label: 'Not Started', icon: '\u23F3' };
+        var homeScore = parseInt(ev.homeScore) || 0;
+        var awayScore = parseInt(ev.awayScore) || 0;
+        var pick = bet.pick;
+        var isWinning = false, isLosing = false, isTied = false;
+
+        if (homeScore === awayScore) {
+          if (pick === 'draw') isWinning = true;
+          else isTied = true;
+        } else if (homeScore > awayScore) {
+          if (pick === 'home') isWinning = true;
+          else isLosing = true;
+        } else {
+          if (pick === 'away') isWinning = true;
+          else isLosing = true;
+        }
+
+        if (ev.state === 'final') {
+          if (isWinning) return { status: 'winning', label: '\uD83C\uDFC6 Won!', icon: '\uD83C\uDFC6' };
+          if (isLosing) return { status: 'losing', label: 'Lost', icon: '\u274C' };
+          return { status: 'tied', label: 'Draw', icon: '\uD83E\uDD1D' };
+        }
+
+        if (isWinning) return { status: 'winning', label: '\u2B06 Winning', icon: '\uD83D\uDD25' };
+        if (isLosing) return { status: 'losing', label: '\u2B07 Losing', icon: '\uD83D\uDE30' };
+        return { status: 'tied', label: '\u2194 Tied', icon: '\u26A0' };
       }
 
       async function fetchSportEvents(sportKey) {
@@ -5668,11 +5808,13 @@
         loadingInProgress = false;
         renderEvents();
         updateTabCounts();
+        renderPendingBets();
+        updateRefreshTimestamp();
 
         if (refreshTimer) clearInterval(refreshTimer);
         refreshTimer = setInterval(function() {
           if (document.getElementById('screen-sports').classList.contains('active')) loadEvents();
-        }, 60000);
+        }, 30000);
       }
 
       function getAllEvents() {
@@ -6022,13 +6164,15 @@
           return;
         }
 
-        var walletAddr = typeof PhantomWallet !== 'undefined' ? PhantomWallet.getPublicKey() : null;
         var sock = App.getSocket();
         var mySocketId = sock ? sock.id : null;
         var html = '';
         for (var i = 0; i < serverSportsBets.length; i++) {
           var b = serverSportsBets[i];
           var isOwn = b.creatorSocketId === mySocketId;
+          var ev = findEventForBet(b);
+          var betInfo = getBetStatus(b, ev);
+
           html += '<div class="sports-bet-card">';
           html += '<div class="sbc-event"><div class="sbc-event-name">' + b.matchName + '</div>';
           html += '<div class="sbc-event-league">' + b.league + '</div></div>';
@@ -6036,11 +6180,52 @@
           html += '<span class="sbc-amount">' + b.betAmount + ' SOL</span>';
           html += '<span class="multiplier-badge" style="font-size:0.6rem;">1.8x</span>';
           html += '<span class="sbc-user">by ' + b.creatorName + '</span>';
+
           if (isOwn) {
             html += '<button class="btn-accept-sports" disabled style="opacity:0.5;cursor:default;">Your Bet</button>';
           } else {
             html += '<button class="btn-accept-sports" data-bet-id="' + b.id + '" data-bet-amount="' + b.betAmount + '">Accept</button>';
           }
+
+          if (ev && ev.state !== 'upcoming') {
+            var homeScore = ev.homeScore || '0';
+            var awayScore = ev.awayScore || '0';
+            var hScoreNum = parseInt(homeScore) || 0;
+            var aScoreNum = parseInt(awayScore) || 0;
+            var homeClass = hScoreNum > aScoreNum ? 'leading' : (hScoreNum < aScoreNum ? 'trailing' : '');
+            var awayClass = aScoreNum > hScoreNum ? 'leading' : (aScoreNum < hScoreNum ? 'trailing' : '');
+            var pickedHome = b.pick === 'home' ? ' picked' : '';
+            var pickedAway = b.pick === 'away' ? ' picked' : '';
+
+            var clockText = ev.statusDetail || '';
+            if (ev.state === 'live' && ev.statusClock) {
+              clockText = ev.statusClock + (ev.statusPeriod ? ' P' + ev.statusPeriod : '');
+            }
+
+            html += '<div class="sbc-live-tracker">';
+            html += '<div class="sbc-teams-mini">';
+            html += '<span class="team-abbr ' + homeClass + pickedHome + '">' + ev.homeAbbr + '</span>';
+            html += '</div>';
+            html += '<div class="sbc-score-display">';
+            html += '<span class="sbc-score-home" style="color:' + (hScoreNum >= aScoreNum ? 'var(--text)' : 'var(--text2)') + '">' + homeScore + '</span>';
+            html += '<span class="sbc-score-sep">-</span>';
+            html += '<span class="sbc-score-away" style="color:' + (aScoreNum >= hScoreNum ? 'var(--text)' : 'var(--text2)') + '">' + awayScore + '</span>';
+            html += '</div>';
+            html += '<div class="sbc-teams-mini">';
+            html += '<span class="team-abbr ' + awayClass + pickedAway + '">' + ev.awayAbbr + '</span>';
+            html += '</div>';
+            html += '<span class="sbc-game-clock ' + ev.state + '">' + clockText + '</span>';
+            html += '<span class="sbc-bet-status ' + betInfo.status + '">' + betInfo.label + '</span>';
+            html += '</div>';
+          } else if (ev && ev.state === 'upcoming') {
+            var startD = new Date(ev.startTime);
+            var startStr = startD.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            html += '<div class="sbc-live-tracker">';
+            html += '<span class="sbc-game-clock upcoming">Starts at ' + startStr + '</span>';
+            html += '<span class="sbc-bet-status pending-result">\u23F3 Awaiting Kickoff</span>';
+            html += '</div>';
+          }
+
           html += '</div>';
         }
         container.innerHTML = html;
