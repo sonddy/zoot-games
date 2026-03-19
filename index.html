@@ -1251,7 +1251,15 @@
     .menu-dropdown-divider { height: 1px; background: var(--surface2); margin: 0; }
 
     /* ═══ SPORTS BETTING SCREEN ═══ */
-    #screen-sports { flex-direction: column; }
+    #screen-sports {
+      flex-direction: column; position: relative;
+      background: url('/sports-bg.jpg') center center / cover no-repeat fixed;
+    }
+    #screen-sports::before {
+      content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background: linear-gradient(180deg, rgba(11,15,25,0.85) 0%, rgba(11,15,25,0.7) 40%, rgba(11,15,25,0.9) 100%);
+    }
+    #screen-sports > * { position: relative; z-index: 1; }
     .sports-main { max-width: 1060px; margin: 0 auto; padding: 2rem 1.5rem; width: 100%; }
     .sports-header {
       display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;
