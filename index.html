@@ -6,6 +6,7 @@
   <title>ZG — Zoot Games | Play & Earn Crypto</title>
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#00d4aa" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="ZG" />
@@ -1534,6 +1535,95 @@
       .bear-3d-right { right: -10px; }
       .bear-3d-left { left: -10px; }
     }
+
+    /* ═══ HOW IT WORKS BUTTON ═══ */
+    .btn-how-it-works {
+      background: transparent; border: 1.5px solid rgba(0,212,170,0.4); color: var(--accent);
+      border-radius: 999px; padding: 0.5rem 1.3rem; font-family: inherit; font-weight: 700;
+      font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;
+      transition: all 0.25s; margin-top: 0.8rem;
+    }
+    .btn-how-it-works:hover { background: rgba(0,212,170,0.1); border-color: var(--accent); transform: translateY(-1px); }
+    .btn-how-it-works .hiw-icon { font-size: 1rem; }
+
+    /* ═══ HOW IT WORKS MODAL ═══ */
+    .hiw-overlay {
+      display: none; position: fixed; inset: 0; z-index: 9999;
+      background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      align-items: center; justify-content: center; padding: 1rem;
+    }
+    .hiw-overlay.open { display: flex; animation: fadeIn 0.25s ease; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .hiw-modal {
+      background: linear-gradient(160deg, #111827, #0b0f19); border: 1px solid var(--surface2);
+      border-radius: 20px; max-width: 640px; width: 100%; max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6); position: relative;
+      scrollbar-width: thin; scrollbar-color: var(--surface2) transparent;
+    }
+    .hiw-modal::-webkit-scrollbar { width: 6px; }
+    .hiw-modal::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 3px; }
+    .hiw-close {
+      position: sticky; top: 0; float: right; margin: 1rem 1rem 0 0;
+      width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--surface2);
+      background: var(--bg); color: var(--text); font-size: 1.2rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; z-index: 1; transition: all 0.2s;
+    }
+    .hiw-close:hover { background: var(--red); border-color: var(--red); color: #fff; }
+    .hiw-content { padding: 2rem 2rem 2.5rem; }
+    .hiw-content h2 {
+      font-size: 1.5rem; font-weight: 800; margin-bottom: 0.4rem;
+      display: flex; align-items: center; gap: 0.6rem;
+    }
+    .hiw-content .hiw-subtitle { color: var(--text2); font-size: 0.85rem; margin-bottom: 2rem; }
+    .hiw-step {
+      display: flex; gap: 1rem; margin-bottom: 1.6rem; align-items: flex-start;
+    }
+    .hiw-step-num {
+      width: 38px; height: 38px; border-radius: 12px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 0.9rem; color: #fff;
+    }
+    .hiw-step-num.s1 { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+    .hiw-step-num.s2 { background: linear-gradient(135deg, #00d4aa, #00897b); }
+    .hiw-step-num.s3 { background: linear-gradient(135deg, #f59e0b, #d97706); }
+    .hiw-step-num.s4 { background: linear-gradient(135deg, #ef4444, #dc2626); }
+    .hiw-step-num.s5 { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+    .hiw-step-num.s6 { background: linear-gradient(135deg, #ff6b35, #e74c3c); }
+    .hiw-step-body h3 { font-size: 1rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .hiw-step-body p { font-size: 0.85rem; color: var(--text2); line-height: 1.6; }
+    .hiw-divider {
+      height: 1px; background: linear-gradient(90deg, transparent, var(--surface2), transparent);
+      margin: 1.8rem 0;
+    }
+    .hiw-section-title {
+      font-size: 1.1rem; font-weight: 800; margin-bottom: 1.2rem;
+      display: flex; align-items: center; gap: 0.5rem; color: var(--text);
+    }
+    .hiw-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-bottom: 1.5rem;
+    }
+    .hiw-card {
+      background: var(--surface); border: 1px solid var(--surface2); border-radius: 12px;
+      padding: 1rem; text-align: center;
+    }
+    .hiw-card-icon { font-size: 1.6rem; margin-bottom: 0.4rem; }
+    .hiw-card-title { font-weight: 700; font-size: 0.85rem; margin-bottom: 0.2rem; }
+    .hiw-card-desc { font-size: 0.75rem; color: var(--text2); line-height: 1.4; }
+    .hiw-footer {
+      text-align: center; padding-top: 0.5rem;
+    }
+    .hiw-footer p { font-size: 0.8rem; color: var(--text2); line-height: 1.6; }
+    .hiw-footer .accent-text { color: var(--accent); font-weight: 700; }
+
+    @media (max-width: 600px) {
+      .hiw-content { padding: 1.2rem 1rem 1.5rem; }
+      .hiw-content h2 { font-size: 1.2rem; }
+      .hiw-grid { grid-template-columns: 1fr; }
+      .hiw-step { gap: 0.7rem; }
+      .hiw-step-num { width: 32px; height: 32px; font-size: 0.8rem; border-radius: 10px; }
+      .hiw-step-body h3 { font-size: 0.9rem; }
+      .hiw-step-body p { font-size: 0.8rem; }
+    }
   </style>
   <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
 </head>
@@ -1564,6 +1654,9 @@
         </button>
         <p class="small-text">Secured by Solana blockchain &mdash; instant payouts</p>
         <p id="connect-error" style="color:var(--red);font-size:0.85rem;display:none;"></p>
+        <button class="btn-how-it-works" onclick="document.getElementById('hiw-overlay').classList.add('open')">
+          <span class="hiw-icon">&#9432;</span> How It Works
+        </button>
       </div>
     </div>
   </div>
@@ -1587,6 +1680,10 @@
             <div class="menu-dropdown-divider"></div>
             <button class="menu-dropdown-item" data-menu="sports">
               <span class="menu-item-icon">&#9917;</span> Sports Betting <span class="menu-item-badge" style="background:#ff6b35;">LIVE</span>
+            </button>
+            <div class="menu-dropdown-divider"></div>
+            <button class="menu-dropdown-item" data-menu="howItWorks">
+              <span class="menu-item-icon">&#9432;</span> How It Works
             </button>
           </div>
         </div>
@@ -2073,6 +2170,10 @@
             <div class="menu-dropdown-divider"></div>
             <button class="menu-dropdown-item active" data-menu="sports">
               <span class="menu-item-icon">&#9917;</span> Sports Betting <span class="menu-item-badge" style="background:#ff6b35;">LIVE</span>
+            </button>
+            <div class="menu-dropdown-divider"></div>
+            <button class="menu-dropdown-item" data-menu="howItWorks">
+              <span class="menu-item-icon">&#9432;</span> How It Works
             </button>
           </div>
         </div>
@@ -5395,6 +5496,7 @@
             }
             if (target === 'games') showScreen('lobby');
             else if (target === 'sports') showScreen('sports');
+            else if (target === 'howItWorks') document.getElementById('hiw-overlay').classList.add('open');
           });
         }
       }
@@ -5947,6 +6049,119 @@
       return { init: init, loadEvents: loadEvents, updatePendingBets: updatePendingBets };
     })();
   </script>
+  <!-- HOW IT WORKS MODAL -->
+  <div class="hiw-overlay" id="hiw-overlay" onclick="if(event.target===this)this.classList.remove('open')">
+    <div class="hiw-modal">
+      <button class="hiw-close" onclick="document.getElementById('hiw-overlay').classList.remove('open')">&times;</button>
+      <div class="hiw-content">
+        <h2>&#128161; How Zoot Games Works</h2>
+        <p class="hiw-subtitle">Everything you need to know to start playing and earning</p>
+
+        <div class="hiw-step">
+          <div class="hiw-step-num s1">1</div>
+          <div class="hiw-step-body">
+            <h3>Connect Your Phantom Wallet</h3>
+            <p>Click "Connect &amp; Start Betting" on the home screen. Your Phantom wallet will ask you to approve the connection. This links your Solana wallet to the platform &mdash; we never access your private keys.</p>
+          </div>
+        </div>
+
+        <div class="hiw-step">
+          <div class="hiw-step-num s2">2</div>
+          <div class="hiw-step-body">
+            <h3>Deposit SOL to Your Balance</h3>
+            <p>In the lobby, use the wallet panel to deposit SOL into your Zoot Games balance. Your funds are held in a secure escrow smart contract on Solana. You can withdraw anytime.</p>
+          </div>
+        </div>
+
+        <div class="hiw-step">
+          <div class="hiw-step-num s3">3</div>
+          <div class="hiw-step-body">
+            <h3>Pick a Game &amp; Create a Bet</h3>
+            <p>Choose from 24 games: Domino, Chess, Checkers, Tic Tac Toe, Mancala, Connect Four, Rock Paper Scissors, Coin Flip, Dice, Battleship, Memory, Nim, Hex, Math Duel, Reaction Time, and many more. Set your wager amount in SOL and create a challenge.</p>
+          </div>
+        </div>
+
+        <div class="hiw-step">
+          <div class="hiw-step-num s4">4</div>
+          <div class="hiw-step-body">
+            <h3>Play Against a Real Opponent</h3>
+            <p>Another player sees your open challenge and accepts it by matching your wager. The game starts instantly &mdash; both players have their SOL locked in escrow until the game ends. No bots, only real players.</p>
+          </div>
+        </div>
+
+        <div class="hiw-step">
+          <div class="hiw-step-num s5">5</div>
+          <div class="hiw-step-body">
+            <h3>Win &amp; Get Paid Instantly</h3>
+            <p>The winner receives <strong>1.8x their wager</strong> directly to their balance. If you bet 1 SOL and win, you get 1.8 SOL back. Payouts are instant and can be withdrawn to your wallet at any time.</p>
+          </div>
+        </div>
+
+        <div class="hiw-divider"></div>
+
+        <div class="hiw-section-title">&#9917; Sports Betting</div>
+
+        <div class="hiw-step">
+          <div class="hiw-step-num s6">1</div>
+          <div class="hiw-step-body">
+            <h3>Bet on Live Sports Events</h3>
+            <p>Switch to the Sports section from the menu. Browse live events across Soccer, Football, NBA, Baseball, Hockey, MMA, and more. Pick a team (or draw), set your SOL amount, and place your bet through Phantom Wallet.</p>
+          </div>
+        </div>
+
+        <div class="hiw-step">
+          <div class="hiw-step-num s6">2</div>
+          <div class="hiw-step-body">
+            <h3>Another Player Takes the Other Side</h3>
+            <p>Your bet appears in the "Open Sports Bets" section. Another player who disagrees with your pick accepts it by wagering the same amount. Once matched, both sides are locked in.</p>
+          </div>
+        </div>
+
+        <div class="hiw-step">
+          <div class="hiw-step-num s6">3</div>
+          <div class="hiw-step-body">
+            <h3>Event Ends &mdash; Winner Takes the Pot</h3>
+            <p>When the sports event finishes, the player who picked the winning team receives <strong>1.8x payout</strong>. Same instant payout system as games.</p>
+          </div>
+        </div>
+
+        <div class="hiw-divider"></div>
+
+        <div class="hiw-section-title">&#128272; Security &amp; Trust</div>
+
+        <div class="hiw-grid">
+          <div class="hiw-card">
+            <div class="hiw-card-icon">&#9939;</div>
+            <div class="hiw-card-title">Solana Blockchain</div>
+            <div class="hiw-card-desc">All transactions are verified on-chain. Transparent and tamper-proof.</div>
+          </div>
+          <div class="hiw-card">
+            <div class="hiw-card-icon">&#128274;</div>
+            <div class="hiw-card-title">Escrow System</div>
+            <div class="hiw-card-desc">Funds are locked in escrow during games. No one can touch them until the game ends.</div>
+          </div>
+          <div class="hiw-card">
+            <div class="hiw-card-icon">&#9889;</div>
+            <div class="hiw-card-title">Instant Payouts</div>
+            <div class="hiw-card-desc">Winners receive SOL immediately. Withdraw to your wallet anytime.</div>
+          </div>
+          <div class="hiw-card">
+            <div class="hiw-card-icon">&#128101;</div>
+            <div class="hiw-card-title">Peer-to-Peer</div>
+            <div class="hiw-card-desc">You play against real people, not the house. Fair games, real competition.</div>
+          </div>
+        </div>
+
+        <div class="hiw-divider"></div>
+
+        <div class="hiw-footer">
+          <p><span class="accent-text">1.8x payout</span> on all games and sports bets</p>
+          <p>Got questions? Join the community or just start playing!</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function() {

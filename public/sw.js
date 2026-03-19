@@ -1,9 +1,11 @@
-var CACHE_NAME = 'zg-v1';
+var CACHE_NAME = 'zg-v2';
 var ASSETS = [
   '/',
   '/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png'
+  '/icons/icon-192.svg',
+  '/icons/icon-512.svg',
+  '/zootcoin.png',
+  '/sports-bg.jpg'
 ];
 
 self.addEventListener('install', function(e) {
@@ -28,12 +30,18 @@ self.addEventListener('activate', function(e) {
 });
 
 self.addEventListener('fetch', function(e) {
-  // Don't cache socket.io or API calls
   if (e.request.url.indexOf('/socket.io') !== -1) return;
   if (e.request.url.indexOf('cdn.socket.io') !== -1) return;
+  if (e.request.method !== 'GET') return;
 
   e.respondWith(
-    fetch(e.request).catch(function() {
+    fetch(e.request).then(function(response) {
+      var clone = response.clone();
+      caches.open(CACHE_NAME).then(function(cache) {
+        cache.put(e.request, clone);
+      });
+      return response;
+    }).catch(function() {
       return caches.match(e.request);
     })
   );

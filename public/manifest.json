@@ -1,12 +1,13 @@
 {
   "name": "ZG — Zoot Games",
   "short_name": "ZG",
-  "description": "Play Domino, Tic Tac Toe & more — bet crypto and win!",
+  "description": "Play Domino, Tic Tac Toe, Chess, Checkers & more — bet Solana crypto and win!",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0a0e17",
-  "theme_color": "#8b5cf6",
+  "background_color": "#0b0f19",
+  "theme_color": "#00d4aa",
   "orientation": "any",
+  "categories": ["games", "entertainment"],
   "icons": [
     {
       "src": "/icons/icon-192.svg",
