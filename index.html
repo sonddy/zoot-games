@@ -1217,6 +1217,189 @@
     }
     .reaction-circle:active { transform: scale(0.9); }
 
+    /* ═══ MENU DROPDOWN ═══ */
+    .menu-dropdown-wrap { position: relative; }
+    .menu-toggle {
+      background: linear-gradient(135deg, var(--accent), #00897b); color: #fff; border: none;
+      border-radius: var(--radius-sm); padding: 0.4rem 0.9rem; font-family: inherit;
+      font-weight: 700; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;
+      transition: all 0.2s;
+    }
+    .menu-toggle:hover { background: linear-gradient(135deg, var(--accent2), var(--accent)); transform: translateY(-1px); }
+    .menu-toggle .menu-arrow { font-size: 0.6rem; transition: transform 0.2s; }
+    .menu-toggle.open .menu-arrow { transform: rotate(180deg); }
+    .menu-dropdown {
+      display: none; position: absolute; top: calc(100% + 6px); left: 0; min-width: 200px;
+      background: var(--surface); border: 1px solid var(--surface2); border-radius: var(--radius);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5); z-index: 200; overflow: hidden;
+      animation: menuSlide 0.2s ease;
+    }
+    .menu-dropdown.show { display: block; }
+    @keyframes menuSlide { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+    .menu-dropdown-item {
+      display: flex; align-items: center; gap: 0.7rem; padding: 0.8rem 1.1rem;
+      color: var(--text); font-size: 0.9rem; font-weight: 600; cursor: pointer;
+      transition: all 0.15s; border: none; background: none; width: 100%; text-align: left; font-family: inherit;
+    }
+    .menu-dropdown-item:hover { background: rgba(0,212,170,0.08); color: var(--accent2); }
+    .menu-dropdown-item .menu-item-icon { font-size: 1.2rem; width: 28px; text-align: center; }
+    .menu-dropdown-item .menu-item-badge {
+      margin-left: auto; background: var(--accent); color: #fff; font-size: 0.65rem;
+      padding: 0.15rem 0.45rem; border-radius: 999px; font-weight: 700;
+    }
+    .menu-dropdown-item.active { background: rgba(0,212,170,0.12); color: var(--accent); }
+    .menu-dropdown-divider { height: 1px; background: var(--surface2); margin: 0; }
+
+    /* ═══ SPORTS BETTING SCREEN ═══ */
+    #screen-sports { flex-direction: column; }
+    .sports-main { max-width: 1060px; margin: 0 auto; padding: 2rem 1.5rem; width: 100%; }
+    .sports-header {
+      display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;
+    }
+    .sports-header h2 {
+      font-size: 1.3rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem;
+      text-transform: uppercase; letter-spacing: 1px; color: var(--text);
+    }
+    .sports-header h2::before {
+      content: ''; display: inline-block; width: 4px; height: 24px;
+      background: linear-gradient(180deg, #ff6b35, #e74c3c); border-radius: 2px;
+    }
+    .sports-header .live-badge {
+      background: var(--red); color: #fff; font-size: 0.65rem; font-weight: 800;
+      padding: 0.2rem 0.6rem; border-radius: 999px; letter-spacing: 1px;
+      animation: livePulse 2s ease-in-out infinite;
+    }
+    .sport-tabs {
+      display: flex; gap: 0.4rem; margin-bottom: 1.5rem; flex-wrap: wrap;
+      border-bottom: 1px solid var(--surface2); padding-bottom: 0.8rem; overflow-x: auto;
+    }
+    .sport-tab {
+      background: transparent; border: 1px solid var(--surface2); color: var(--text2);
+      padding: 0.45rem 1rem; border-radius: 8px; cursor: pointer; font-size: 0.82rem;
+      font-family: inherit; font-weight: 600; transition: all 0.2s;
+      display: flex; align-items: center; gap: 0.4rem; white-space: nowrap;
+    }
+    .sport-tab:hover { border-color: #ff6b35; color: var(--text); }
+    .sport-tab.active { background: linear-gradient(135deg, #ff6b35, #e74c3c); border-color: transparent; color: #fff; }
+    .sport-tab .tab-count {
+      background: rgba(255,255,255,0.2); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.7rem;
+    }
+    .events-loading {
+      text-align: center; padding: 3rem 1rem; color: var(--text2); font-size: 0.9rem;
+    }
+    .events-loading .spinner-sm {
+      width: 32px; height: 32px; border: 3px solid var(--surface2); border-top-color: #ff6b35;
+      border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .events-grid { display: flex; flex-direction: column; gap: 0.8rem; margin-bottom: 2rem; }
+    .event-card {
+      background: linear-gradient(135deg, var(--bg2), var(--surface));
+      border: 1px solid var(--surface2); border-radius: var(--radius);
+      padding: 1rem 1.3rem; transition: all 0.2s; position: relative;
+    }
+    .event-card:hover { border-color: #ff6b35; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+    .event-card-top {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem;
+    }
+    .event-league {
+      font-size: 0.7rem; color: #ff6b35; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.5px; display: flex; align-items: center; gap: 0.4rem;
+    }
+    .event-league .league-icon { font-size: 0.9rem; }
+    .event-status {
+      font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 999px;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .event-status.live { background: var(--red); color: #fff; animation: livePulse 2s ease-in-out infinite; }
+    .event-status.upcoming { background: rgba(0,212,170,0.15); color: var(--accent); }
+    .event-status.final { background: rgba(122,139,165,0.2); color: var(--text2); }
+    .event-matchup {
+      display: flex; align-items: center; justify-content: space-between; gap: 0.8rem;
+      margin-bottom: 0.6rem;
+    }
+    .event-team {
+      display: flex; align-items: center; gap: 0.6rem; flex: 1;
+    }
+    .event-team.away { flex-direction: row-reverse; text-align: right; }
+    .event-team-logo {
+      width: 36px; height: 36px; border-radius: 8px; object-fit: contain;
+      background: rgba(255,255,255,0.05); padding: 3px;
+    }
+    .event-team-name { font-weight: 700; font-size: 0.9rem; }
+    .event-team-record { font-size: 0.7rem; color: var(--text2); }
+    .event-score-center {
+      display: flex; flex-direction: column; align-items: center; gap: 0.15rem; min-width: 80px;
+    }
+    .event-score {
+      font-size: 1.5rem; font-weight: 900; color: var(--text);
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .event-score .score-sep { color: var(--text2); font-size: 1rem; }
+    .event-time { font-size: 0.7rem; color: var(--text2); font-weight: 600; }
+    .event-time.live-time { color: var(--red); }
+    .event-bet-row {
+      display: flex; align-items: center; gap: 0.5rem; margin-top: 0.6rem;
+      padding-top: 0.6rem; border-top: 1px solid rgba(30,45,68,0.4);
+    }
+    .event-bet-row label { font-size: 0.75rem; color: var(--text2); font-weight: 600; white-space: nowrap; }
+    .event-bet-row input[type="number"] {
+      background: var(--bg); border: 2px solid var(--surface2); border-radius: 6px;
+      padding: 0.35rem 0.5rem; color: var(--gold); font-family: inherit; font-size: 0.85rem;
+      font-weight: 700; outline: none; width: 80px; transition: border-color 0.2s;
+    }
+    .event-bet-row input[type="number"]:focus { border-color: var(--gold); }
+    .event-bet-row .sol-label { font-size: 0.75rem; color: var(--gold); font-weight: 700; }
+    .btn-bet-team {
+      flex: 1; border: none; border-radius: 6px; padding: 0.4rem 0.6rem; font-family: inherit;
+      font-weight: 700; font-size: 0.75rem; cursor: pointer; transition: all 0.2s;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .btn-bet-team.home-bet { background: linear-gradient(135deg, #ff6b35, #e74c3c); color: #fff; }
+    .btn-bet-team.away-bet { background: linear-gradient(135deg, #3498db, #2980b9); color: #fff; }
+    .btn-bet-team.draw-bet { background: linear-gradient(135deg, #f39c12, #e67e22); color: #fff; }
+    .btn-bet-team:hover { transform: translateY(-1px); opacity: 0.9; }
+
+    .sports-pending-section {
+      background: linear-gradient(135deg, var(--bg2), rgba(21,31,50,0.6));
+      border: 1px solid var(--surface2); border-radius: var(--radius);
+      padding: 1.3rem 1.5rem; margin-bottom: 2rem;
+    }
+    .sports-pending-section h3 {
+      font-size: 0.9rem; margin-bottom: 1rem; font-weight: 700;
+      display: flex; align-items: center; gap: 0.6rem;
+      text-transform: uppercase; letter-spacing: 1px; color: var(--text2);
+    }
+    .sports-pending-section h3::before {
+      content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      background: #ff6b35; box-shadow: 0 0 8px #ff6b35;
+    }
+    .sports-bet-card {
+      display: flex; align-items: center; gap: 1rem; padding: 0.8rem 1rem;
+      background: var(--surface); border: 1px solid var(--surface2); border-radius: var(--radius-sm);
+      margin-bottom: 0.5rem; flex-wrap: wrap;
+    }
+    .sports-bet-card .sbc-event { flex: 1; min-width: 160px; }
+    .sports-bet-card .sbc-event-name { font-weight: 700; font-size: 0.85rem; }
+    .sports-bet-card .sbc-event-league { font-size: 0.7rem; color: var(--text2); }
+    .sports-bet-card .sbc-pick {
+      padding: 0.25rem 0.6rem; border-radius: 999px; font-size: 0.7rem; font-weight: 700;
+    }
+    .sports-bet-card .sbc-pick.home { background: rgba(255,107,53,0.15); color: #ff6b35; }
+    .sports-bet-card .sbc-pick.away { background: rgba(52,152,219,0.15); color: #3498db; }
+    .sports-bet-card .sbc-pick.draw { background: rgba(243,156,18,0.15); color: #f39c12; }
+    .sports-bet-card .sbc-amount { color: var(--gold); font-weight: 800; font-size: 0.95rem; }
+    .sports-bet-card .sbc-user { font-size: 0.75rem; color: var(--text2); }
+    .sports-bet-card .btn-accept-sports {
+      background: linear-gradient(135deg, #ff6b35, #e74c3c); color: #fff; border: none;
+      border-radius: 6px; padding: 0.4rem 0.9rem; font-family: inherit;
+      font-weight: 700; font-size: 0.8rem; cursor: pointer; transition: all 0.2s;
+    }
+    .sports-bet-card .btn-accept-sports:hover { transform: translateY(-1px); opacity: 0.9; }
+    .sports-empty { color: var(--text2); font-size: 0.85rem; text-align: center; padding: 1.5rem; }
+    .event-no-data { text-align: center; padding: 2rem; color: var(--text2); font-size: 0.9rem; }
+
     @media (max-width: 700px) {
       .game-cards { grid-template-columns: 1fr; }
       .pending-bet-card { flex-wrap: wrap; gap: 0.6rem; }
@@ -1230,6 +1413,15 @@
       .stat-value { font-size: 1rem; }
       .wallet-panel { grid-template-columns: 1fr; }
       .pending-bets-section { padding: 1rem; }
+      .event-matchup { flex-direction: column; gap: 0.5rem; }
+      .event-team.away { flex-direction: row; text-align: left; }
+      .event-bet-row { flex-wrap: wrap; }
+      .btn-bet-team { min-width: 60px; }
+      .sport-tabs { gap: 0.3rem; }
+      .sport-tab { padding: 0.35rem 0.7rem; font-size: 0.75rem; }
+      .menu-dropdown { min-width: 180px; }
+      .sports-bet-card { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+      .sports-pending-section { padding: 1rem; }
     }
     .bear-3d-right, .bear-3d-left {
       position: fixed;
@@ -1291,6 +1483,18 @@
     <header class="topbar">
       <div class="topbar-left">
         <span class="logo-sm"><span class="logo-sm-mark"><img src="/zootcoin.png" alt="ZG" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" /></span><span><span class="accent">Zoot</span> Games</span></span>
+        <div class="menu-dropdown-wrap" id="menu-dropdown-wrap">
+          <button class="menu-toggle" id="menu-toggle">&#9776; Menu <span class="menu-arrow">&#9660;</span></button>
+          <div class="menu-dropdown" id="menu-dropdown">
+            <button class="menu-dropdown-item active" data-menu="games">
+              <span class="menu-item-icon">&#127918;</span> Games <span class="menu-item-badge">24</span>
+            </button>
+            <div class="menu-dropdown-divider"></div>
+            <button class="menu-dropdown-item" data-menu="sports">
+              <span class="menu-item-icon">&#9917;</span> Sports Betting <span class="menu-item-badge" style="background:#ff6b35;">LIVE</span>
+            </button>
+          </div>
+        </div>
       </div>
       <div class="topbar-center"><span id="online-count" class="badge badge-live">0 online</span></div>
       <div class="topbar-right">
@@ -1755,6 +1959,62 @@
         <div class="live-col">
           <h4>&#9876;&#65039; Active Games</h4>
           <ul id="active-list" class="activity-list"></ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- SPORTS BETTING SCREEN -->
+  <div id="screen-sports" class="screen">
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="logo-sm"><span class="logo-sm-mark"><img src="/zootcoin.png" alt="ZG" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" /></span><span><span class="accent">Zoot</span> Games</span></span>
+        <div class="menu-dropdown-wrap" id="menu-dropdown-wrap-sports">
+          <button class="menu-toggle" id="menu-toggle-sports">&#9776; Menu <span class="menu-arrow">&#9660;</span></button>
+          <div class="menu-dropdown" id="menu-dropdown-sports">
+            <button class="menu-dropdown-item" data-menu="games">
+              <span class="menu-item-icon">&#127918;</span> Games <span class="menu-item-badge">24</span>
+            </button>
+            <div class="menu-dropdown-divider"></div>
+            <button class="menu-dropdown-item active" data-menu="sports">
+              <span class="menu-item-icon">&#9917;</span> Sports Betting <span class="menu-item-badge" style="background:#ff6b35;">LIVE</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="topbar-center"><span id="online-count-sports" class="badge badge-live">0 online</span></div>
+      <div class="topbar-right">
+        <span id="topbar-balance-sports" class="badge" style="color:var(--gold);font-weight:700;border-color:rgba(255,193,7,0.2);">0 SOL</span>
+        <span id="wallet-display-sports" class="wallet-badge"></span>
+      </div>
+    </header>
+    <main class="sports-main">
+      <div class="sports-header">
+        <h2>&#9917; Sports Betting</h2>
+        <span class="live-badge">LIVE EVENTS</span>
+      </div>
+
+      <div class="sport-tabs" id="sport-tabs">
+        <button class="sport-tab active" data-sport="all">All Sports</button>
+        <button class="sport-tab" data-sport="soccer">&#9917; Soccer</button>
+        <button class="sport-tab" data-sport="football">&#127944; Football (NFL)</button>
+        <button class="sport-tab" data-sport="basketball">&#127936; Basketball (NBA)</button>
+        <button class="sport-tab" data-sport="baseball">&#9918; Baseball (MLB)</button>
+        <button class="sport-tab" data-sport="hockey">&#127954; Hockey (NHL)</button>
+        <button class="sport-tab" data-sport="mma">&#129354; MMA (UFC)</button>
+      </div>
+
+      <div id="sports-events-container">
+        <div class="events-loading">
+          <div class="spinner-sm"></div>
+          Loading live events...
+        </div>
+      </div>
+
+      <section class="sports-pending-section">
+        <h3>&#128293; Open Sports Bets <span id="sports-pending-count" style="background:var(--red);color:#fff;font-size:0.7rem;font-weight:700;padding:0.12rem 0.5rem;border-radius:999px;min-width:20px;text-align:center;margin-left:auto;">0</span></h3>
+        <div id="sports-pending-list">
+          <div class="sports-empty">No open sports bets yet &mdash; pick an event above to create one!</div>
         </div>
       </section>
     </main>
@@ -4471,19 +4731,22 @@
       var isTestMode = false;
 
       function showScreen(name) {
-        var all = ['connect','lobby','waiting','game'];
+        var all = ['connect','lobby','waiting','game','sports'];
         for (var i = 0; i < all.length; i++) document.getElementById('screen-' + all[i]).classList.remove('active');
         document.getElementById('screen-' + name).classList.add('active');
         var bearR = document.getElementById('bear-3d-right');
         var bearL = document.getElementById('bear-3d-left');
         if (bearR) bearR.style.display = (name === 'lobby') ? 'block' : 'none';
         if (bearL) bearL.style.display = (name === 'lobby') ? 'block' : 'none';
+        if (name === 'sports') SportsBetting.loadEvents();
       }
 
       function updateBalanceUI(bal) {
         currentBalance = bal;
         document.getElementById('balance-amount').textContent = bal.toFixed(3);
         document.getElementById('topbar-balance').textContent = bal.toFixed(3) + ' SOL';
+        var sportsBalance = document.getElementById('topbar-balance-sports');
+        if (sportsBalance) sportsBalance.textContent = bal.toFixed(3) + ' SOL';
       }
 
       async function refreshBalance() {
@@ -4521,6 +4784,8 @@
         setupCategoryTabs();
         setupWaitingScreen();
         setupGameOverlay();
+        setupMenuDropdowns();
+        SportsBetting.init();
       }
 
       function connectToServer() {
@@ -4538,6 +4803,8 @@
           isTestMode = !!data.testMode;
           document.getElementById('connected-wallet-addr').textContent = data.walletAddress;
           document.getElementById('wallet-display').textContent = PhantomWallet.shortenAddress(data.walletAddress);
+          var wdSports = document.getElementById('wallet-display-sports');
+          if (wdSports) wdSports.textContent = PhantomWallet.shortenAddress(data.walletAddress);
           showScreen('lobby');
           refreshBalance();
         });
@@ -4694,6 +4961,8 @@
       function updateLobby(data) {
         lastLobbyData = data;
         document.getElementById('online-count').textContent = data.onlineCount + ' online';
+        var onlineSports = document.getElementById('online-count-sports');
+        if (onlineSports) onlineSports.textContent = data.onlineCount + ' online';
         var connOnline = document.getElementById('connect-online');
         if (connOnline) connOnline.textContent = data.onlineCount;
 
@@ -4992,10 +5261,470 @@
         setTimeout(function() { t.remove(); }, 3400);
       }
 
+      function setupMenuDropdowns() {
+        var toggles = document.querySelectorAll('.menu-toggle');
+        var dropdowns = document.querySelectorAll('.menu-dropdown');
+
+        for (var t = 0; t < toggles.length; t++) {
+          toggles[t].addEventListener('click', function(e) {
+            e.stopPropagation();
+            var wrap = this.closest('.menu-dropdown-wrap');
+            var dd = wrap.querySelector('.menu-dropdown');
+            var isOpen = dd.classList.contains('show');
+            for (var d = 0; d < dropdowns.length; d++) {
+              dropdowns[d].classList.remove('show');
+              dropdowns[d].closest('.menu-dropdown-wrap').querySelector('.menu-toggle').classList.remove('open');
+            }
+            if (!isOpen) {
+              dd.classList.add('show');
+              this.classList.add('open');
+            }
+          });
+        }
+
+        document.addEventListener('click', function() {
+          for (var d = 0; d < dropdowns.length; d++) {
+            dropdowns[d].classList.remove('show');
+            dropdowns[d].closest('.menu-dropdown-wrap').querySelector('.menu-toggle').classList.remove('open');
+          }
+        });
+
+        var menuItems = document.querySelectorAll('.menu-dropdown-item');
+        for (var m = 0; m < menuItems.length; m++) {
+          menuItems[m].addEventListener('click', function() {
+            var target = this.dataset.menu;
+            for (var d = 0; d < dropdowns.length; d++) {
+              dropdowns[d].classList.remove('show');
+              dropdowns[d].closest('.menu-dropdown-wrap').querySelector('.menu-toggle').classList.remove('open');
+            }
+            var allMenuItems = document.querySelectorAll('.menu-dropdown-item');
+            for (var a = 0; a < allMenuItems.length; a++) {
+              allMenuItems[a].classList.remove('active');
+              if (allMenuItems[a].dataset.menu === target) allMenuItems[a].classList.add('active');
+            }
+            if (target === 'games') showScreen('lobby');
+            else if (target === 'sports') showScreen('sports');
+          });
+        }
+      }
+
       document.addEventListener('DOMContentLoaded', init);
-      return { showScreen: showScreen, sendAction: sendAction, acceptBet: acceptBet };
+      return { showScreen: showScreen, sendAction: sendAction, acceptBet: acceptBet, showToast: showToast };
     })();
 
+  </script>
+  <script>
+    // ════════════════════════════════════════
+    // SPORTS BETTING MODULE
+    // ════════════════════════════════════════
+    var SportsBetting = (function() {
+      var SPORTS = {
+        soccer:     { sport: 'soccer',     league: 'eng.1',  name: 'Premier League',  icon: '\u26BD' },
+        soccer_la:  { sport: 'soccer',     league: 'esp.1',  name: 'La Liga',         icon: '\u26BD' },
+        soccer_ucl: { sport: 'soccer',     league: 'uefa.champions', name: 'Champions League', icon: '\u26BD' },
+        soccer_mls: { sport: 'soccer',     league: 'usa.1',  name: 'MLS',             icon: '\u26BD' },
+        football:   { sport: 'football',   league: 'nfl',    name: 'NFL',             icon: '\uD83C\uDFC8' },
+        basketball: { sport: 'basketball', league: 'nba',    name: 'NBA',             icon: '\uD83C\uDFC0' },
+        baseball:   { sport: 'baseball',   league: 'mlb',    name: 'MLB',             icon: '\u26BE' },
+        hockey:     { sport: 'hockey',     league: 'nhl',    name: 'NHL',             icon: '\uD83C\uDFD2' },
+        mma:        { sport: 'mma',        league: 'ufc',    name: 'UFC',             icon: '\uD83E\u94CA' }
+      };
+
+      var SPORT_GROUPS = {
+        soccer:     ['soccer', 'soccer_la', 'soccer_ucl', 'soccer_mls'],
+        football:   ['football'],
+        basketball: ['basketball'],
+        baseball:   ['baseball'],
+        hockey:     ['hockey'],
+        mma:        ['mma']
+      };
+
+      var eventsCache = {};
+      var currentSportFilter = 'all';
+      var sportsBets = [];
+      var betIdCounter = 1;
+      var loadingInProgress = false;
+      var refreshTimer = null;
+
+      function init() {
+        setupSportTabs();
+        setupEventListeners();
+      }
+
+      function setupSportTabs() {
+        var tabs = document.querySelectorAll('.sport-tab');
+        for (var i = 0; i < tabs.length; i++) {
+          tabs[i].addEventListener('click', function() {
+            for (var j = 0; j < tabs.length; j++) tabs[j].classList.remove('active');
+            this.classList.add('active');
+            currentSportFilter = this.dataset.sport;
+            renderEvents();
+          });
+        }
+      }
+
+      function setupEventListeners() {
+        var container = document.getElementById('sports-events-container');
+        if (container) {
+          container.addEventListener('click', function(e) {
+            var betBtn = e.target.closest('.btn-bet-team');
+            if (betBtn) handleCreateBet(betBtn);
+          });
+        }
+        var pendingList = document.getElementById('sports-pending-list');
+        if (pendingList) {
+          pendingList.addEventListener('click', function(e) {
+            var acceptBtn = e.target.closest('.btn-accept-sports');
+            if (acceptBtn) handleAcceptBet(acceptBtn);
+          });
+        }
+      }
+
+      async function fetchSportEvents(sportKey) {
+        var config = SPORTS[sportKey];
+        if (!config) return [];
+        var url = 'https://site.api.espn.com/apis/site/v2/sports/' + config.sport + '/' + config.league + '/scoreboard';
+        try {
+          var resp = await fetch(url);
+          if (!resp.ok) return [];
+          var json = await resp.json();
+          return parseEvents(json, sportKey);
+        } catch(e) {
+          console.warn('Failed to fetch ' + sportKey + ':', e.message);
+          return [];
+        }
+      }
+
+      function parseEvents(json, sportKey) {
+        var events = [];
+        if (!json || !json.events) return events;
+        var config = SPORTS[sportKey];
+
+        for (var i = 0; i < json.events.length; i++) {
+          var ev = json.events[i];
+          var comp = ev.competitions && ev.competitions[0];
+          if (!comp) continue;
+
+          var homeTeam = null, awayTeam = null;
+          if (comp.competitors) {
+            for (var c = 0; c < comp.competitors.length; c++) {
+              if (comp.competitors[c].homeAway === 'home') homeTeam = comp.competitors[c];
+              else awayTeam = comp.competitors[c];
+            }
+          }
+          if (!homeTeam || !awayTeam) continue;
+
+          var statusType = comp.status ? comp.status.type.name : (ev.status ? ev.status.type.name : 'STATUS_SCHEDULED');
+          var statusDetail = comp.status ? comp.status.type.shortDetail : (ev.status ? ev.status.type.shortDetail : '');
+          var statusClock = ev.status ? ev.status.displayClock : '';
+          var statusPeriod = ev.status ? ev.status.period : 0;
+
+          var state = 'upcoming';
+          if (statusType === 'STATUS_IN_PROGRESS' || statusType === 'STATUS_HALFTIME' || statusType === 'STATUS_END_PERIOD') state = 'live';
+          else if (statusType === 'STATUS_FINAL' || statusType === 'STATUS_FULL_TIME') state = 'final';
+
+          var homeLogo = homeTeam.team && homeTeam.team.logo ? homeTeam.team.logo : '';
+          var awayLogo = awayTeam.team && awayTeam.team.logo ? awayTeam.team.logo : '';
+
+          events.push({
+            id: ev.id,
+            sportKey: sportKey,
+            league: config.name,
+            leagueIcon: config.icon,
+            sport: config.sport,
+            homeTeam: homeTeam.team ? homeTeam.team.displayName : 'Home',
+            homeAbbr: homeTeam.team ? homeTeam.team.abbreviation : 'HOM',
+            homeLogo: homeLogo,
+            homeScore: homeTeam.score || '0',
+            homeRecord: homeTeam.records && homeTeam.records[0] ? homeTeam.records[0].summary : '',
+            awayTeam: awayTeam.team ? awayTeam.team.displayName : 'Away',
+            awayAbbr: awayTeam.team ? awayTeam.team.abbreviation : 'AWY',
+            awayLogo: awayLogo,
+            awayScore: awayTeam.score || '0',
+            awayRecord: awayTeam.records && awayTeam.records[0] ? awayTeam.records[0].summary : '',
+            state: state,
+            statusDetail: statusDetail,
+            statusClock: statusClock,
+            statusPeriod: statusPeriod,
+            startTime: ev.date,
+            name: ev.name || (homeTeam.team.displayName + ' vs ' + awayTeam.team.displayName)
+          });
+        }
+        return events;
+      }
+
+      async function loadEvents() {
+        if (loadingInProgress) return;
+        loadingInProgress = true;
+
+        var container = document.getElementById('sports-events-container');
+        if (container && Object.keys(eventsCache).length === 0) {
+          container.innerHTML = '<div class="events-loading"><div class="spinner-sm"></div>Loading live events from ESPN...</div>';
+        }
+
+        var allKeys = Object.keys(SPORTS);
+        var promises = [];
+        for (var i = 0; i < allKeys.length; i++) {
+          promises.push(fetchSportEvents(allKeys[i]));
+        }
+        var results = await Promise.all(promises);
+        for (var j = 0; j < allKeys.length; j++) {
+          eventsCache[allKeys[j]] = results[j];
+        }
+
+        loadingInProgress = false;
+        renderEvents();
+        updateTabCounts();
+
+        if (refreshTimer) clearInterval(refreshTimer);
+        refreshTimer = setInterval(function() {
+          if (document.getElementById('screen-sports').classList.contains('active')) loadEvents();
+        }, 60000);
+      }
+
+      function getAllEvents() {
+        var all = [];
+        for (var key in eventsCache) {
+          all = all.concat(eventsCache[key]);
+        }
+        return all;
+      }
+
+      function getFilteredEvents() {
+        if (currentSportFilter === 'all') return getAllEvents();
+        var groups = SPORT_GROUPS[currentSportFilter];
+        if (!groups) return [];
+        var out = [];
+        for (var g = 0; g < groups.length; g++) {
+          if (eventsCache[groups[g]]) out = out.concat(eventsCache[groups[g]]);
+        }
+        return out;
+      }
+
+      function updateTabCounts() {
+        var tabs = document.querySelectorAll('.sport-tab');
+        for (var t = 0; t < tabs.length; t++) {
+          var sport = tabs[t].dataset.sport;
+          var count = 0;
+          if (sport === 'all') {
+            count = getAllEvents().length;
+          } else {
+            var groups = SPORT_GROUPS[sport];
+            if (groups) {
+              for (var g = 0; g < groups.length; g++) {
+                count += (eventsCache[groups[g]] || []).length;
+              }
+            }
+          }
+          var badge = tabs[t].querySelector('.tab-count');
+          if (badge) badge.textContent = count;
+          else if (count > 0) {
+            var sp = document.createElement('span');
+            sp.className = 'tab-count'; sp.textContent = count;
+            tabs[t].appendChild(sp);
+          }
+        }
+      }
+
+      function renderEvents() {
+        var container = document.getElementById('sports-events-container');
+        if (!container) return;
+        var events = getFilteredEvents();
+
+        events.sort(function(a, b) {
+          var order = { live: 0, upcoming: 1, final: 2 };
+          if (order[a.state] !== order[b.state]) return order[a.state] - order[b.state];
+          return new Date(a.startTime) - new Date(b.startTime);
+        });
+
+        if (events.length === 0) {
+          container.innerHTML = '<div class="event-no-data">No events found for this sport right now. Try another sport or check back later!</div>';
+          return;
+        }
+
+        var html = '<div class="events-grid">';
+        for (var i = 0; i < events.length; i++) {
+          html += renderEventCard(events[i]);
+        }
+        html += '</div>';
+        container.innerHTML = html;
+      }
+
+      function renderEventCard(ev) {
+        var statusClass = ev.state;
+        var statusText = ev.statusDetail || 'Scheduled';
+        if (ev.state === 'live' && ev.statusClock) {
+          statusText = ev.statusClock + (ev.statusPeriod ? ' P' + ev.statusPeriod : '');
+        }
+
+        var timeStr = '';
+        if (ev.state === 'upcoming') {
+          var d = new Date(ev.startTime);
+          var now = new Date();
+          if (d.toDateString() === now.toDateString()) {
+            timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          } else {
+            timeStr = d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          }
+        }
+
+        var hasDraw = (ev.sport === 'soccer');
+
+        var h = '<div class="event-card" data-event-id="' + ev.id + '">';
+        h += '<div class="event-card-top">';
+        h += '<div class="event-league"><span class="league-icon">' + ev.leagueIcon + '</span> ' + ev.league + '</div>';
+        h += '<span class="event-status ' + statusClass + '">' + (ev.state === 'live' ? '\uD83D\uDD34 LIVE' : (ev.state === 'final' ? 'FINAL' : 'UPCOMING')) + '</span>';
+        h += '</div>';
+
+        h += '<div class="event-matchup">';
+        h += '<div class="event-team home">';
+        if (ev.homeLogo) h += '<img class="event-team-logo" src="' + ev.homeLogo + '" alt="" onerror="this.style.display=\'none\'" />';
+        h += '<div><div class="event-team-name">' + ev.homeAbbr + '</div>';
+        if (ev.homeRecord) h += '<div class="event-team-record">' + ev.homeRecord + '</div>';
+        h += '</div></div>';
+
+        h += '<div class="event-score-center">';
+        if (ev.state !== 'upcoming') {
+          h += '<div class="event-score">' + ev.homeScore + ' <span class="score-sep">-</span> ' + ev.awayScore + '</div>';
+          h += '<div class="event-time ' + (ev.state === 'live' ? 'live-time' : '') + '">' + statusText + '</div>';
+        } else {
+          h += '<div class="event-time">' + timeStr + '</div>';
+          h += '<div style="font-size:0.75rem;color:var(--text2);margin-top:2px;">VS</div>';
+        }
+        h += '</div>';
+
+        h += '<div class="event-team away">';
+        if (ev.awayLogo) h += '<img class="event-team-logo" src="' + ev.awayLogo + '" alt="" onerror="this.style.display=\'none\'" />';
+        h += '<div><div class="event-team-name">' + ev.awayAbbr + '</div>';
+        if (ev.awayRecord) h += '<div class="event-team-record">' + ev.awayRecord + '</div>';
+        h += '</div></div>';
+        h += '</div>';
+
+        if (ev.state !== 'final') {
+          h += '<div class="event-bet-row">';
+          h += '<label>Bet:</label>';
+          h += '<input type="number" class="sports-bet-amount" placeholder="0.5" min="0.001" step="0.001" value="0.5" />';
+          h += '<span class="sol-label">SOL</span>';
+          h += '<button class="btn-bet-team home-bet" data-event-id="' + ev.id + '" data-pick="home" data-team="' + ev.homeTeam + '" data-match="' + ev.name + '" data-league="' + ev.league + '" data-sport-key="' + ev.sportKey + '">' + ev.homeAbbr + '</button>';
+          if (hasDraw) {
+            h += '<button class="btn-bet-team draw-bet" data-event-id="' + ev.id + '" data-pick="draw" data-team="Draw" data-match="' + ev.name + '" data-league="' + ev.league + '" data-sport-key="' + ev.sportKey + '">Draw</button>';
+          }
+          h += '<button class="btn-bet-team away-bet" data-event-id="' + ev.id + '" data-pick="away" data-team="' + ev.awayTeam + '" data-match="' + ev.name + '" data-league="' + ev.league + '" data-sport-key="' + ev.sportKey + '">' + ev.awayAbbr + '</button>';
+          h += '</div>';
+        }
+
+        h += '</div>';
+        return h;
+      }
+
+      function handleCreateBet(btn) {
+        var card = btn.closest('.event-card');
+        var amountInput = card.querySelector('.sports-bet-amount');
+        var amount = parseFloat(amountInput.value);
+        if (isNaN(amount) || amount < 0.001) {
+          App.showToast('Enter a valid bet amount (min 0.001 SOL)', 'error');
+          return;
+        }
+
+        var walletAddr = typeof PhantomWallet !== 'undefined' ? PhantomWallet.getPublicKey() : null;
+        if (!walletAddr) {
+          App.showToast('Connect your wallet first!', 'error');
+          return;
+        }
+
+        var bet = {
+          id: 'sb_' + (betIdCounter++),
+          eventId: btn.dataset.eventId,
+          matchName: btn.dataset.match,
+          league: btn.dataset.league,
+          sportKey: btn.dataset.sportKey,
+          pick: btn.dataset.pick,
+          teamName: btn.dataset.team,
+          amount: amount,
+          creatorWallet: walletAddr,
+          creatorName: typeof PhantomWallet !== 'undefined' ? PhantomWallet.shortenAddress(walletAddr) : 'Unknown',
+          createdAt: Date.now(),
+          status: 'open'
+        };
+
+        sportsBets.push(bet);
+        renderPendingBets();
+        App.showToast('Sports bet created! Waiting for opponent to accept...', 'info');
+
+        btn.textContent = '\u2713 Bet Placed';
+        btn.style.opacity = '0.6';
+        btn.disabled = true;
+        setTimeout(function() {
+          btn.textContent = btn.dataset.pick === 'draw' ? 'Draw' : (btn.dataset.pick === 'home' ? card.querySelector('.event-team.home .event-team-name').textContent : card.querySelector('.event-team.away .event-team-name').textContent);
+          btn.style.opacity = '';
+          btn.disabled = false;
+        }, 2000);
+      }
+
+      function handleAcceptBet(btn) {
+        var betId = btn.dataset.betId;
+        var walletAddr = typeof PhantomWallet !== 'undefined' ? PhantomWallet.getPublicKey() : null;
+        if (!walletAddr) {
+          App.showToast('Connect your wallet first!', 'error');
+          return;
+        }
+
+        for (var i = 0; i < sportsBets.length; i++) {
+          if (sportsBets[i].id === betId) {
+            if (sportsBets[i].creatorWallet === walletAddr) {
+              App.showToast('You cannot accept your own bet!', 'error');
+              return;
+            }
+            sportsBets[i].status = 'matched';
+            sportsBets[i].acceptorWallet = walletAddr;
+            sportsBets[i].acceptorName = typeof PhantomWallet !== 'undefined' ? PhantomWallet.shortenAddress(walletAddr) : 'Unknown';
+
+            var oppositePick = sportsBets[i].pick === 'home' ? 'away' : (sportsBets[i].pick === 'away' ? 'home' : 'not-draw');
+            sportsBets[i].acceptorPick = oppositePick;
+
+            App.showToast('Bet accepted! The winner will be determined when the game finishes.', 'info');
+            renderPendingBets();
+            return;
+          }
+        }
+      }
+
+      function renderPendingBets() {
+        var container = document.getElementById('sports-pending-list');
+        var countEl = document.getElementById('sports-pending-count');
+        if (!container) return;
+
+        var openBets = sportsBets.filter(function(b) { return b.status === 'open'; });
+        if (countEl) countEl.textContent = openBets.length;
+
+        if (openBets.length === 0) {
+          container.innerHTML = '<div class="sports-empty">No open sports bets yet \u2014 pick an event above to create one!</div>';
+          return;
+        }
+
+        var walletAddr = typeof PhantomWallet !== 'undefined' ? PhantomWallet.getPublicKey() : null;
+        var html = '';
+        for (var i = 0; i < openBets.length; i++) {
+          var b = openBets[i];
+          var isOwn = b.creatorWallet === walletAddr;
+          html += '<div class="sports-bet-card">';
+          html += '<div class="sbc-event"><div class="sbc-event-name">' + b.matchName + '</div>';
+          html += '<div class="sbc-event-league">' + b.league + '</div></div>';
+          html += '<span class="sbc-pick ' + b.pick + '">' + b.teamName + '</span>';
+          html += '<span class="sbc-amount">' + b.amount + ' SOL</span>';
+          html += '<span class="sbc-user">by ' + b.creatorName + '</span>';
+          if (isOwn) {
+            html += '<button class="btn-accept-sports" disabled style="opacity:0.5;cursor:default;">Your Bet</button>';
+          } else {
+            html += '<button class="btn-accept-sports" data-bet-id="' + b.id + '">Accept</button>';
+          }
+          html += '</div>';
+        }
+        container.innerHTML = html;
+      }
+
+      return { init: init, loadEvents: loadEvents };
+    })();
   </script>
   <script>
     if ('serviceWorker' in navigator) {
