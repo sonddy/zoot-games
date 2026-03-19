@@ -4967,6 +4967,7 @@
         if (connOnline) connOnline.textContent = data.onlineCount;
 
         renderPendingBets(data.waiting);
+        if (data.openSportsBets) SportsBetting.updatePendingBets(data.openSportsBets);
 
         var activeList = document.getElementById('active-list');
         activeList.innerHTML = data.activeGames.length === 0
@@ -5309,7 +5310,7 @@
       }
 
       document.addEventListener('DOMContentLoaded', init);
-      return { showScreen: showScreen, sendAction: sendAction, acceptBet: acceptBet, showToast: showToast, getEscrow: function() { return escrowAddress; }, isTest: function() { return isTestMode; }, getBalance: function() { return currentBalance; }, refreshBalance: refreshBalance };
+      return { showScreen: showScreen, sendAction: sendAction, acceptBet: acceptBet, showToast: showToast, getEscrow: function() { return escrowAddress; }, isTest: function() { return isTestMode; }, getBalance: function() { return currentBalance; }, refreshBalance: refreshBalance, getSocket: function() { return socket; } };
     })();
 
   </script>
@@ -5341,14 +5342,14 @@
 
       var eventsCache = {};
       var currentSportFilter = 'all';
-      var sportsBets = [];
-      var betIdCounter = 1;
+      var serverSportsBets = [];
       var loadingInProgress = false;
       var refreshTimer = null;
 
       function init() {
         setupSportTabs();
         setupEventListeners();
+        setupSocketListeners();
       }
 
       function setupSportTabs() {
@@ -5620,6 +5621,29 @@
         return h;
       }
 
+      function setupSocketListeners() {
+        var checkSocket = setInterval(function() {
+          var sock = App.getSocket();
+          if (!sock) return;
+          clearInterval(checkSocket);
+
+          sock.on('sports_bet_created', function(data) {
+            var payout = (data.betAmount * 1.8).toFixed(3);
+            App.showToast('Sports bet of ' + data.betAmount + ' SOL placed! Win ' + payout + ' SOL (1.8x). Waiting for opponent...', 'info');
+          });
+
+          sock.on('sports_bet_accepted', function(data) {
+            var payout = data.payout ? data.payout.toFixed(3) : '?';
+            App.showToast('Bet accepted on ' + data.matchName + '! Winner gets ' + payout + ' SOL (1.8x).', 'info');
+          });
+
+          sock.on('sports_bet_matched', function(data) {
+            var payout = data.payout ? data.payout.toFixed(3) : '?';
+            App.showToast(data.acceptorName + ' accepted your sports bet! Winner gets ' + payout + ' SOL.', 'info');
+          });
+        }, 500);
+      }
+
       async function handleCreateBet(btn) {
         var card = btn.closest('.event-card');
         var amountInput = card.querySelector('.sports-bet-amount');
@@ -5630,24 +5654,33 @@
         }
 
         var escrowAddress = App.getEscrow();
-        if (!escrowAddress) { App.showToast('Server not ready, try again', 'error'); return; }
+        var sock = App.getSocket();
+        if (!escrowAddress || !sock) { App.showToast('Server not ready, try again', 'error'); return; }
 
         var walletAddr = typeof PhantomWallet !== 'undefined' ? PhantomWallet.getPublicKey() : null;
-        if (!walletAddr) {
-          App.showToast('Connect your wallet first!', 'error');
-          return;
-        }
+        if (!walletAddr) { App.showToast('Connect your wallet first!', 'error'); return; }
 
-        if (amount > App.getBalance()) {
-          App.showToast('Not enough SOL in your wallet!', 'error');
-          return;
-        }
+        if (amount > App.getBalance()) { App.showToast('Not enough SOL in your wallet!', 'error'); return; }
 
         var originalText = btn.textContent;
         btn.disabled = true;
 
+        var payload = {
+          eventId: btn.dataset.eventId,
+          matchName: btn.dataset.match,
+          league: btn.dataset.league,
+          sportKey: btn.dataset.sportKey,
+          pick: btn.dataset.pick,
+          teamName: btn.dataset.team,
+          betAmount: amount
+        };
+
         if (App.isTest()) {
-          createBetEntry(btn, card, amount, walletAddr, 'test_sports_' + Date.now());
+          payload.txSignature = 'test_sports_' + Date.now();
+          sock.emit('create_sports_bet', payload);
+          btn.textContent = '\u2713 Bet Placed!';
+          btn.style.background = 'var(--green)';
+          setTimeout(function() { btn.textContent = originalText; btn.style.background = ''; btn.disabled = false; }, 3000);
           return;
         }
 
@@ -5659,9 +5692,7 @@
           var web3 = window.solanaWeb3;
           if (!web3) throw new Error('Solana library not loaded \u2014 refresh page');
 
-          var rpcUrl = PhantomWallet.getRpcUrl();
-          var connection = new web3.Connection(rpcUrl, 'confirmed');
-
+          var connection = new web3.Connection(PhantomWallet.getRpcUrl(), 'confirmed');
           var fromPubkey = provider.publicKey;
           var toPubkey = new web3.PublicKey(escrowAddress);
           var lamports = Math.floor(amount * web3.LAMPORTS_PER_SOL);
@@ -5684,8 +5715,13 @@
           btn.textContent = 'Confirming tx...';
           await connection.confirmTransaction(signature, 'confirmed');
 
-          createBetEntry(btn, card, amount, walletAddr, signature);
+          payload.txSignature = signature;
+          sock.emit('create_sports_bet', payload);
+
+          btn.textContent = '\u2713 Bet Placed!';
+          btn.style.background = 'var(--green)';
           App.refreshBalance();
+          setTimeout(function() { btn.textContent = originalText; btn.style.background = ''; btn.disabled = false; }, 3000);
         } catch (err) {
           var msg = err.message || 'Transaction cancelled';
           if (msg.indexOf('User rejected') >= 0 || msg.indexOf('cancelled') >= 0) msg = 'You cancelled the transaction';
@@ -5695,64 +5731,17 @@
         }
       }
 
-      function createBetEntry(btn, card, amount, walletAddr, txSignature) {
-        var bet = {
-          id: 'sb_' + (betIdCounter++),
-          eventId: btn.dataset.eventId,
-          matchName: btn.dataset.match,
-          league: btn.dataset.league,
-          sportKey: btn.dataset.sportKey,
-          pick: btn.dataset.pick,
-          teamName: btn.dataset.team,
-          amount: amount,
-          creatorWallet: walletAddr,
-          creatorName: PhantomWallet.shortenAddress(walletAddr),
-          txSignature: txSignature,
-          createdAt: Date.now(),
-          status: 'open'
-        };
-
-        sportsBets.push(bet);
-        renderPendingBets();
-
-        btn.textContent = '\u2713 Bet Placed!';
-        btn.style.background = 'var(--green)';
-        var payout = (amount * 1.8).toFixed(3);
-        App.showToast('Sports bet of ' + amount + ' SOL placed! Win ' + payout + ' SOL (1.8x). Waiting for opponent...', 'info');
-
-        setTimeout(function() {
-          btn.textContent = btn.dataset.pick === 'draw' ? 'Draw' : (btn.dataset.pick === 'home' ? (card.querySelector('.event-team.home .event-team-name') || {}).textContent || 'Home' : (card.querySelector('.event-team.away .event-team-name') || {}).textContent || 'Away');
-          btn.style.background = '';
-          btn.disabled = false;
-        }, 3000);
-      }
-
       async function handleAcceptBet(btn) {
         var betId = btn.dataset.betId;
+        var betAmount = parseFloat(btn.dataset.betAmount);
         var escrowAddress = App.getEscrow();
-        if (!escrowAddress) { App.showToast('Server not ready, try again', 'error'); return; }
+        var sock = App.getSocket();
+        if (!escrowAddress || !sock) { App.showToast('Server not ready, try again', 'error'); return; }
 
         var walletAddr = typeof PhantomWallet !== 'undefined' ? PhantomWallet.getPublicKey() : null;
-        if (!walletAddr) {
-          App.showToast('Connect your wallet first!', 'error');
-          return;
-        }
+        if (!walletAddr) { App.showToast('Connect your wallet first!', 'error'); return; }
 
-        var targetBet = null;
-        for (var i = 0; i < sportsBets.length; i++) {
-          if (sportsBets[i].id === betId) { targetBet = sportsBets[i]; break; }
-        }
-        if (!targetBet) { App.showToast('Bet not found', 'error'); return; }
-
-        if (targetBet.creatorWallet === walletAddr) {
-          App.showToast('You cannot accept your own bet!', 'error');
-          return;
-        }
-
-        if (targetBet.amount > App.getBalance()) {
-          App.showToast('Not enough SOL in your wallet!', 'error');
-          return;
-        }
+        if (betAmount > App.getBalance()) { App.showToast('Not enough SOL in your wallet!', 'error'); return; }
 
         btn.disabled = true;
         btn.textContent = 'Joining...';
@@ -5770,8 +5759,12 @@
           }
         };
 
+        var onServerError = function(d) { resetBtn(d.msg); };
+        sock.once('error_msg', onServerError);
+        sock.once('sports_bet_accepted', function() { sock.off('error_msg', onServerError); });
+
         if (App.isTest()) {
-          matchBet(targetBet, walletAddr, 'test_accept_sports_' + Date.now());
+          sock.emit('accept_sports_bet', { betId: betId, txSignature: 'test_accept_sports_' + Date.now() });
           btn.textContent = '\u2713 Matched!';
           btn.style.background = 'var(--green)';
           return;
@@ -5785,12 +5778,10 @@
           var web3 = window.solanaWeb3;
           if (!web3) throw new Error('Solana library not loaded \u2014 refresh page');
 
-          var rpcUrl = PhantomWallet.getRpcUrl();
-          var connection = new web3.Connection(rpcUrl, 'confirmed');
-
+          var connection = new web3.Connection(PhantomWallet.getRpcUrl(), 'confirmed');
           var fromPubkey = provider.publicKey;
           var toPubkey = new web3.PublicKey(escrowAddress);
-          var lamports = Math.floor(targetBet.amount * web3.LAMPORTS_PER_SOL);
+          var lamports = Math.floor(betAmount * web3.LAMPORTS_PER_SOL);
 
           var transaction = new web3.Transaction().add(
             web3.SystemProgram.transfer({ fromPubkey: fromPubkey, toPubkey: toPubkey, lamports: lamports })
@@ -5810,27 +5801,20 @@
           btn.textContent = 'Confirming tx...';
           await connection.confirmTransaction(signature, 'confirmed');
 
-          matchBet(targetBet, walletAddr, signature);
-
+          sock.emit('accept_sports_bet', { betId: betId, txSignature: signature });
           btn.textContent = '\u2713 Matched!';
           btn.style.background = 'var(--green)';
-          var payout = (targetBet.amount * 1.8).toFixed(3);
-          App.showToast('Bet accepted! Winner gets ' + payout + ' SOL (1.8x). Determined when the game finishes.', 'info');
           App.refreshBalance();
         } catch (err) {
+          sock.off('error_msg', onServerError);
           var msg = err.message || 'Transaction failed';
           if (msg.indexOf('User rejected') >= 0 || msg.indexOf('cancelled') >= 0) msg = 'You cancelled the transaction';
           resetBtn(msg);
         }
       }
 
-      function matchBet(bet, walletAddr, txSignature) {
-        bet.status = 'matched';
-        bet.acceptorWallet = walletAddr;
-        bet.acceptorName = PhantomWallet.shortenAddress(walletAddr);
-        bet.acceptTxSignature = txSignature;
-        var oppositePick = bet.pick === 'home' ? 'away' : (bet.pick === 'away' ? 'home' : 'not-draw');
-        bet.acceptorPick = oppositePick;
+      function updatePendingBets(betsFromServer) {
+        serverSportsBets = betsFromServer || [];
         renderPendingBets();
       }
 
@@ -5839,37 +5823,38 @@
         var countEl = document.getElementById('sports-pending-count');
         if (!container) return;
 
-        var openBets = sportsBets.filter(function(b) { return b.status === 'open'; });
-        if (countEl) countEl.textContent = openBets.length;
+        if (countEl) countEl.textContent = serverSportsBets.length;
 
-        if (openBets.length === 0) {
+        if (serverSportsBets.length === 0) {
           container.innerHTML = '<div class="sports-empty">No open sports bets yet \u2014 pick an event above to create one!</div>';
           return;
         }
 
         var walletAddr = typeof PhantomWallet !== 'undefined' ? PhantomWallet.getPublicKey() : null;
+        var sock = App.getSocket();
+        var mySocketId = sock ? sock.id : null;
         var html = '';
-        for (var i = 0; i < openBets.length; i++) {
-          var b = openBets[i];
-          var isOwn = b.creatorWallet === walletAddr;
+        for (var i = 0; i < serverSportsBets.length; i++) {
+          var b = serverSportsBets[i];
+          var isOwn = b.creatorSocketId === mySocketId;
           html += '<div class="sports-bet-card">';
           html += '<div class="sbc-event"><div class="sbc-event-name">' + b.matchName + '</div>';
           html += '<div class="sbc-event-league">' + b.league + '</div></div>';
           html += '<span class="sbc-pick ' + b.pick + '">' + b.teamName + '</span>';
-          html += '<span class="sbc-amount">' + b.amount + ' SOL</span>';
+          html += '<span class="sbc-amount">' + b.betAmount + ' SOL</span>';
           html += '<span class="multiplier-badge" style="font-size:0.6rem;">1.8x</span>';
           html += '<span class="sbc-user">by ' + b.creatorName + '</span>';
           if (isOwn) {
             html += '<button class="btn-accept-sports" disabled style="opacity:0.5;cursor:default;">Your Bet</button>';
           } else {
-            html += '<button class="btn-accept-sports" data-bet-id="' + b.id + '">Accept</button>';
+            html += '<button class="btn-accept-sports" data-bet-id="' + b.id + '" data-bet-amount="' + b.betAmount + '">Accept</button>';
           }
           html += '</div>';
         }
         container.innerHTML = html;
       }
 
-      return { init: init, loadEvents: loadEvents };
+      return { init: init, loadEvents: loadEvents, updatePendingBets: updatePendingBets };
     })();
   </script>
   <script>

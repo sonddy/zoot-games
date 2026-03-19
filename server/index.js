@@ -65,6 +65,7 @@ const rooms = new Map();
 const players = new Map();
 const matchQueue = new Map();
 const usedSignatures = new Set();
+const sportsBets = new Map();
 
 const HOUSE_FEE = 0.10;
 const HOUSE_WALLET = '2LK7yxZsy6YVCkFQ4PrL644ve1fgRj5FuDexj5JgS753';
@@ -334,6 +335,96 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('create_sports_bet', async ({ eventId, matchName, league, sportKey, pick, teamName, betAmount, txSignature }) => {
+    const player = players.get(socket.id);
+    if (!player) return socket.emit('error_msg', { msg: 'Register first' });
+
+    const bet = parseFloat(betAmount) || 0;
+    if (!TEST_MODE) {
+      if (!bet || bet <= 0) return socket.emit('error_msg', { msg: 'Invalid bet amount' });
+      if (!txSignature) return socket.emit('error_msg', { msg: 'No payment transaction provided' });
+      const verification = await verifyBetPayment(txSignature, bet);
+      if (!verification.ok) return socket.emit('error_msg', { msg: verification.error });
+    }
+
+    const betId = 'sb_' + uuidv4().slice(0, 8);
+    sportsBets.set(betId, {
+      id: betId,
+      eventId,
+      matchName: matchName || 'Unknown Match',
+      league: league || '',
+      sportKey: sportKey || '',
+      pick,
+      teamName: teamName || pick,
+      betAmount: bet,
+      creatorSocketId: socket.id,
+      creatorWallet: player.walletAddress,
+      creatorName: player.displayName,
+      txSignature,
+      createdAt: Date.now(),
+      status: 'open',
+    });
+
+    socket.emit('sports_bet_created', { betId, betAmount: bet });
+    broadcastLobby();
+  });
+
+  socket.on('accept_sports_bet', async ({ betId, txSignature }) => {
+    const player = players.get(socket.id);
+    if (!player) return socket.emit('error_msg', { msg: 'Register first' });
+
+    const entry = sportsBets.get(betId);
+    if (!entry) return socket.emit('error_msg', { msg: 'This sports bet is no longer available' });
+    if (entry.status !== 'open') return socket.emit('error_msg', { msg: 'This bet has already been taken' });
+    if (entry.creatorSocketId === socket.id) return socket.emit('error_msg', { msg: 'You cannot accept your own bet' });
+
+    const bet = entry.betAmount;
+    if (!TEST_MODE) {
+      if (!txSignature) return socket.emit('error_msg', { msg: 'No payment transaction provided' });
+      const verification = await verifyBetPayment(txSignature, bet);
+      if (!verification.ok) return socket.emit('error_msg', { msg: verification.error });
+    }
+
+    entry.status = 'matched';
+    entry.acceptorSocketId = socket.id;
+    entry.acceptorWallet = player.walletAddress;
+    entry.acceptorName = player.displayName;
+    entry.acceptTxSignature = txSignature;
+    entry.acceptorPick = entry.pick === 'home' ? 'away' : (entry.pick === 'away' ? 'home' : 'not-draw');
+    entry.matchedAt = Date.now();
+
+    const pot = bet * 2;
+    const houseCut = pot * HOUSE_FEE;
+    const payout = pot - houseCut;
+
+    const creatorSock = io.sockets.sockets.get(entry.creatorSocketId);
+    if (creatorSock) creatorSock.emit('sports_bet_matched', { betId, acceptorName: entry.acceptorName, payout });
+
+    socket.emit('sports_bet_accepted', { betId, matchName: entry.matchName, payout });
+    broadcastLobby();
+  });
+
+  socket.on('cancel_sports_bet', async ({ betId }) => {
+    const player = players.get(socket.id);
+    if (!player) return;
+
+    const entry = sportsBets.get(betId);
+    if (!entry || entry.creatorSocketId !== socket.id || entry.status !== 'open') return;
+
+    if (!TEST_MODE) {
+      try {
+        await sendSOL(player.walletAddress, entry.betAmount);
+        socket.emit('balance_update', { refreshWallet: true, msg: 'Sports bet refunded!' });
+      } catch (e) {
+        console.error('Sports bet refund error:', e.message);
+        socket.emit('error_msg', { msg: 'Refund failed: ' + e.message });
+      }
+    }
+
+    sportsBets.delete(betId);
+    broadcastLobby();
+  });
+
   socket.on('get_lobby', () => broadcastLobby());
 
   socket.on('disconnect', async () => {
@@ -380,6 +471,15 @@ io.on('connection', (socket) => {
         });
         room.state = 'finished';
         setTimeout(() => cleanupRoom(room.id), 3000);
+      }
+    }
+
+    for (const [sbId, sb] of sportsBets) {
+      if (sb.creatorSocketId === socket.id && sb.status === 'open') {
+        if (player && !TEST_MODE) {
+          try { await sendSOL(player.walletAddress, sb.betAmount); } catch (e) { console.error('Sports bet refund on disconnect:', e.message); }
+        }
+        sportsBets.delete(sbId);
       }
     }
 
@@ -476,7 +576,26 @@ function broadcastLobby() {
       activeGames.push({ gameType: room.gameType, betAmount: room.betAmount, players: room.players.map((sid) => players.get(sid)?.displayName) });
     }
   }
-  io.emit('lobby_update', { waiting, activeGames, onlineCount: players.size });
+  const openSportsBets = [];
+  for (const [, sb] of sportsBets) {
+    if (sb.status === 'open') {
+      openSportsBets.push({
+        id: sb.id,
+        eventId: sb.eventId,
+        matchName: sb.matchName,
+        league: sb.league,
+        sportKey: sb.sportKey,
+        pick: sb.pick,
+        teamName: sb.teamName,
+        betAmount: sb.betAmount,
+        creatorName: sb.creatorName,
+        creatorWallet: sb.creatorWallet ? sb.creatorWallet.slice(0, 4) + '…' + sb.creatorWallet.slice(-4) : '',
+        creatorSocketId: sb.creatorSocketId,
+        createdAt: sb.createdAt,
+      });
+    }
+  }
+  io.emit('lobby_update', { waiting, activeGames, onlineCount: players.size, openSportsBets });
 }
 
 const PORT = process.env.PORT || 3000;
