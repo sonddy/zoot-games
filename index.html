@@ -5573,7 +5573,10 @@
         var h = '<div class="event-card" data-event-id="' + ev.id + '">';
         h += '<div class="event-card-top">';
         h += '<div class="event-league"><span class="league-icon">' + ev.leagueIcon + '</span> ' + ev.league + '</div>';
+        h += '<div style="display:flex;align-items:center;gap:0.4rem;">';
+        h += '<span class="multiplier-badge">1.8x Payout</span>';
         h += '<span class="event-status ' + statusClass + '">' + (ev.state === 'live' ? '\uD83D\uDD34 LIVE' : (ev.state === 'final' ? 'FINAL' : 'UPCOMING')) + '</span>';
+        h += '</div>';
         h += '</div>';
 
         h += '<div class="event-matchup">';
@@ -5714,7 +5717,8 @@
 
         btn.textContent = '\u2713 Bet Placed!';
         btn.style.background = 'var(--green)';
-        App.showToast('Sports bet of ' + amount + ' SOL placed! Waiting for opponent...', 'info');
+        var payout = (amount * 1.8).toFixed(3);
+        App.showToast('Sports bet of ' + amount + ' SOL placed! Win ' + payout + ' SOL (1.8x). Waiting for opponent...', 'info');
 
         setTimeout(function() {
           btn.textContent = btn.dataset.pick === 'draw' ? 'Draw' : (btn.dataset.pick === 'home' ? (card.querySelector('.event-team.home .event-team-name') || {}).textContent || 'Home' : (card.querySelector('.event-team.away .event-team-name') || {}).textContent || 'Away');
@@ -5810,7 +5814,8 @@
 
           btn.textContent = '\u2713 Matched!';
           btn.style.background = 'var(--green)';
-          App.showToast('Bet accepted! Winner determined when the game finishes.', 'info');
+          var payout = (targetBet.amount * 1.8).toFixed(3);
+          App.showToast('Bet accepted! Winner gets ' + payout + ' SOL (1.8x). Determined when the game finishes.', 'info');
           App.refreshBalance();
         } catch (err) {
           var msg = err.message || 'Transaction failed';
@@ -5852,6 +5857,7 @@
           html += '<div class="sbc-event-league">' + b.league + '</div></div>';
           html += '<span class="sbc-pick ' + b.pick + '">' + b.teamName + '</span>';
           html += '<span class="sbc-amount">' + b.amount + ' SOL</span>';
+          html += '<span class="multiplier-badge" style="font-size:0.6rem;">1.8x</span>';
           html += '<span class="sbc-user">by ' + b.creatorName + '</span>';
           if (isOwn) {
             html += '<button class="btn-accept-sports" disabled style="opacity:0.5;cursor:default;">Your Bet</button>';
