@@ -61,6 +61,23 @@ app.get('/api/escrow', (req, res) => {
   res.json({ escrowAddress: ESCROW_ADDRESS });
 });
 
+app.get('/api/sports/:sport/:league/scoreboard', async (req, res) => {
+  const { sport, league } = req.params;
+  const allowed = ['soccer','football','basketball','baseball','hockey','mma'];
+  if (!allowed.includes(sport)) return res.status(400).json({ error: 'Invalid sport' });
+  try {
+    const url = `https://site.api.espn.com/apis/site/v2/sports/${sport}/${league}/scoreboard`;
+    const resp = await fetch(url);
+    if (!resp.ok) return res.status(resp.status).json({ error: 'ESPN API error' });
+    const data = await resp.json();
+    res.set('Cache-Control', 'public, max-age=20');
+    res.json(data);
+  } catch (err) {
+    console.error('ESPN proxy error:', err.message);
+    res.status(502).json({ error: 'Failed to fetch from ESPN' });
+  }
+});
+
 const rooms = new Map();
 const players = new Map();
 const matchQueue = new Map();

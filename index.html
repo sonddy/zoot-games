@@ -5717,7 +5717,7 @@
       async function fetchSportEvents(sportKey) {
         var config = SPORTS[sportKey];
         if (!config) return [];
-        var url = 'https://site.api.espn.com/apis/site/v2/sports/' + config.sport + '/' + config.league + '/scoreboard';
+        var url = '/api/sports/' + config.sport + '/' + config.league + '/scoreboard';
         try {
           var resp = await fetch(url);
           if (!resp.ok) return [];
