@@ -55,6 +55,14 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(cors());
 app.use(express.json());
+app.use((req, res, next) => {
+  if (req.path === '/' || req.path.endsWith('.html')) {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.get('/api/escrow', (req, res) => {
@@ -66,11 +74,12 @@ app.get('/api/sports/:sport/:league/scoreboard', async (req, res) => {
   const allowed = ['soccer','football','basketball','baseball','hockey','mma'];
   if (!allowed.includes(sport)) return res.status(400).json({ error: 'Invalid sport' });
   try {
-    const url = `https://site.api.espn.com/apis/site/v2/sports/${sport}/${league}/scoreboard`;
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const url = `https://site.api.espn.com/apis/site/v2/sports/${sport}/${league}/scoreboard?dates=${today}`;
     const resp = await fetch(url);
     if (!resp.ok) return res.status(resp.status).json({ error: 'ESPN API error' });
     const data = await resp.json();
-    res.set('Cache-Control', 'public, max-age=20');
+    res.set('Cache-Control', 'public, max-age=15');
     res.json(data);
   } catch (err) {
     console.error('ESPN proxy error:', err.message);

@@ -1,4 +1,4 @@
-var CACHE_NAME = 'zg-v2';
+var CACHE_NAME = 'zg-v3';
 var ASSETS = [
   '/',
   '/manifest.json',
