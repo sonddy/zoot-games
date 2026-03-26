@@ -16,3 +16,5 @@ services:
         sync: false
       - key: ESCROW_PRIVATE_KEY
         sync: false
+      - key: PANDASCORE_API_KEY
+        sync: false

@@ -1475,6 +1475,126 @@
     .sbc-teams-mini .team-abbr.leading { color: var(--accent); }
     .sbc-teams-mini .team-abbr.trailing { color: var(--red); opacity: 0.7; }
 
+    /* ═══ ESPORTS ═══ */
+    .esport-tab { border-color: #9146ff !important; }
+    .esport-tab:hover { border-color: #9146ff !important; color: #bf94ff !important; }
+    .esport-tab.active { background: linear-gradient(135deg, #9146ff, #6441a5) !important; border-color: transparent !important; }
+    .esports-section-label {
+      display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem;
+      font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text2);
+    }
+    .esports-section-label::before {
+      content: ''; display: inline-block; width: 4px; height: 20px;
+      background: linear-gradient(180deg, #9146ff, #6441a5); border-radius: 2px;
+    }
+    .esports-grid { display: flex; flex-direction: column; gap: 0.8rem; margin-bottom: 2rem; }
+    .esport-card {
+      background: linear-gradient(135deg, var(--bg2), var(--surface));
+      border: 1px solid var(--surface2); border-radius: var(--radius);
+      overflow: hidden; transition: all 0.2s;
+    }
+    .esport-card:hover { border-color: #9146ff; box-shadow: 0 4px 20px rgba(145,70,255,0.15); }
+    .esport-card-header {
+      display: flex; align-items: center; gap: 0.8rem; padding: 0.8rem 1rem;
+      border-bottom: 1px solid rgba(30,45,68,0.4);
+    }
+    .esport-game-icon {
+      width: 32px; height: 32px; border-radius: 6px; object-fit: cover;
+      background: var(--surface); flex-shrink: 0;
+    }
+    .esport-game-fallback {
+      width: 32px; height: 32px; border-radius: 6px; background: linear-gradient(135deg, #9146ff, #6441a5);
+      display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0;
+    }
+    .esport-card-meta { flex: 1; min-width: 0; }
+    .esport-card-league {
+      font-size: 0.68rem; color: #bf94ff; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .esport-card-game { font-size: 0.75rem; color: var(--text2); }
+    .esport-card-status {
+      font-size: 0.6rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 999px;
+      text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0;
+    }
+    .esport-card-status.live { background: var(--red); color: #fff; animation: livePulse 2s ease-in-out infinite; }
+    .esport-card-status.upcoming { background: rgba(145,70,255,0.15); color: #bf94ff; }
+    .esport-matchup {
+      display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+      padding: 0.7rem 1rem;
+    }
+    .esport-team {
+      display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0;
+    }
+    .esport-team.away { flex-direction: row-reverse; text-align: right; }
+    .esport-team-logo {
+      width: 30px; height: 30px; border-radius: 6px; object-fit: contain;
+      background: rgba(255,255,255,0.05); flex-shrink: 0;
+    }
+    .esport-team-name {
+      font-weight: 700; font-size: 0.85rem; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .esport-vs {
+      color: var(--text2); font-size: 0.75rem; font-weight: 600;
+      flex-shrink: 0; min-width: 30px; text-align: center;
+    }
+    .esport-score {
+      font-size: 1.3rem; font-weight: 900; min-width: 50px; text-align: center;
+      display: flex; align-items: center; justify-content: center; gap: 0.3rem;
+    }
+    .esport-score .s-home { color: var(--text); }
+    .esport-score .s-sep { color: var(--text2); font-size: 0.9rem; }
+    .esport-score .s-away { color: var(--text); }
+    .esport-stream-wrap {
+      position: relative; width: 100%; padding-top: 56.25%; background: #000;
+      border-top: 1px solid rgba(30,45,68,0.4);
+    }
+    .esport-stream-wrap iframe {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;
+    }
+    .esport-stream-btn {
+      display: flex; align-items: center; justify-content: center; gap: 0.4rem;
+      padding: 0.5rem 1rem; margin: 0 1rem 0.7rem; border-radius: 6px;
+      background: linear-gradient(135deg, #9146ff, #6441a5); color: #fff; border: none;
+      font-family: inherit; font-weight: 700; font-size: 0.78rem; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .esport-stream-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .esport-stream-btn .twitch-icon { font-size: 1rem; }
+    .esport-no-stream {
+      padding: 0.4rem 1rem 0.7rem; font-size: 0.72rem; color: var(--text2); text-align: center;
+    }
+    .esport-bet-row {
+      display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem 0.7rem;
+      border-top: 1px solid rgba(30,45,68,0.4);
+    }
+    .esport-bet-row label { font-size: 0.75rem; color: var(--text2); font-weight: 600; white-space: nowrap; }
+    .esport-bet-row input[type="number"] {
+      background: var(--bg); border: 2px solid var(--surface2); border-radius: 6px;
+      padding: 0.35rem 0.5rem; color: var(--gold); font-family: inherit; font-size: 0.85rem;
+      font-weight: 700; outline: none; width: 75px;
+    }
+    .esport-bet-row input[type="number"]:focus { border-color: var(--gold); }
+    .esport-bet-row .sol-label { font-size: 0.75rem; color: var(--gold); font-weight: 700; }
+    .btn-bet-esport {
+      flex: 1; border: none; border-radius: 6px; padding: 0.4rem 0.5rem; font-family: inherit;
+      font-weight: 700; font-size: 0.75rem; cursor: pointer; transition: all 0.2s;
+      text-transform: uppercase; letter-spacing: 0.5px; color: #fff;
+    }
+    .btn-bet-esport.team1 { background: linear-gradient(135deg, #9146ff, #6441a5); }
+    .btn-bet-esport.team2 { background: linear-gradient(135deg, #3498db, #2980b9); }
+    .btn-bet-esport:hover { transform: translateY(-1px); opacity: 0.9; }
+    .esport-time-label { font-size: 0.72rem; color: var(--text2); padding: 0 1rem 0.5rem; }
+
+    @media (max-width: 600px) {
+      .esport-card-header { padding: 0.6rem 0.7rem; }
+      .esport-matchup { padding: 0.5rem 0.7rem; gap: 0.4rem; }
+      .esport-team-name { font-size: 0.78rem; }
+      .esport-bet-row { flex-wrap: wrap; gap: 0.4rem; padding: 0.5rem 0.7rem; }
+      .btn-bet-esport { min-width: 0; }
+      .esport-stream-btn { margin: 0 0.7rem 0.5rem; }
+    }
+
     /* ═══ TABLET ═══ */
     @media (max-width: 900px) {
       .game-cards { grid-template-columns: repeat(2, 1fr); gap: 0.8rem; }
@@ -2263,7 +2383,10 @@
         <button class="sport-tab" data-sport="baseball">&#9918; Baseball (MLB)</button>
         <button class="sport-tab" data-sport="hockey">&#127954; Hockey (NHL)</button>
         <button class="sport-tab" data-sport="mma">&#129354; MMA (UFC)</button>
+        <button class="sport-tab esport-tab" data-sport="esports">&#127918; Esports</button>
       </div>
+
+      <div id="esports-container" style="display:none;"></div>
 
       <div id="sports-events-container">
         <div class="events-loading">
@@ -5625,7 +5748,17 @@
             for (var j = 0; j < tabs.length; j++) tabs[j].classList.remove('active');
             this.classList.add('active');
             currentSportFilter = this.dataset.sport;
-            renderEvents();
+            var sportsEl = document.getElementById('sports-events-container');
+            var esportsEl = document.getElementById('esports-container');
+            if (currentSportFilter === 'esports') {
+              if (sportsEl) sportsEl.style.display = 'none';
+              if (esportsEl) esportsEl.style.display = 'block';
+              loadEsports();
+            } else {
+              if (sportsEl) sportsEl.style.display = '';
+              if (esportsEl) esportsEl.style.display = 'none';
+              renderEvents();
+            }
           });
         }
       }
@@ -5863,6 +5996,7 @@
       }
 
       function renderEvents() {
+        if (currentSportFilter === 'esports') return;
         var container = document.getElementById('sports-events-container');
         if (!container) return;
         var events = getFilteredEvents();
@@ -5980,8 +6114,8 @@
       }
 
       async function handleCreateBet(btn) {
-        var card = btn.closest('.event-card');
-        var amountInput = card.querySelector('.sports-bet-amount');
+        var card = btn.closest('.event-card') || btn.closest('.esport-card');
+        var amountInput = card.querySelector('.sports-bet-amount') || card.querySelector('.esports-bet-amount');
         var amount = parseFloat(amountInput.value);
         if (isNaN(amount) || amount < 0.001) {
           App.showToast('Enter a valid bet amount (min 0.001 SOL)', 'error');
@@ -6230,6 +6364,232 @@
           html += '</div>';
         }
         container.innerHTML = html;
+      }
+
+      // ═══ ESPORTS ═══
+      var esportsCache = [];
+      var esportsLoading = false;
+      var openStreams = {};
+
+      var GAME_ICONS = {
+        'League of Legends': '\uD83C\uDFAE', 'LoL': '\uD83C\uDFAE',
+        'CS2': '\uD83D\uDD2B', 'Counter-Strike 2': '\uD83D\uDD2B', 'CS:GO': '\uD83D\uDD2B',
+        'Dota 2': '\u2694\uFE0F', 'Valorant': '\uD83D\uDCA0',
+        'Overwatch': '\uD83C\uDF1F', 'Overwatch 2': '\uD83C\uDF1F',
+        'Rocket League': '\uD83D\uDE80', 'Rainbow Six': '\uD83C\uDFAF',
+        'Call of Duty': '\uD83C\uDF96\uFE0F', 'Fortnite': '\u26A1',
+        'PUBG': '\uD83E\uDE96', 'StarCraft': '\uD83D\uDE80',
+        'Apex Legends': '\uD83D\uDCA5', 'Mobile Legends': '\uD83D\uDCF1'
+      };
+
+      function getGameIcon(gameName) {
+        for (var key in GAME_ICONS) {
+          if (gameName && gameName.indexOf(key) >= 0) return GAME_ICONS[key];
+        }
+        return '\uD83C\uDFAE';
+      }
+
+      async function loadEsports() {
+        if (esportsLoading) return;
+        esportsLoading = true;
+        var container = document.getElementById('esports-container');
+        if (!container) return;
+        if (esportsCache.length === 0) {
+          container.innerHTML = '<div class="events-loading"><div class="spinner-sm"></div>Loading esports events...</div>';
+        }
+
+        try {
+          var runningResp = await fetch('/api/esports/running');
+          var upcomingResp = await fetch('/api/esports/upcoming');
+          var running = runningResp.ok ? await runningResp.json() : [];
+          var upcoming = upcomingResp.ok ? await upcomingResp.json() : [];
+          esportsCache = running.concat(upcoming.slice(0, 30));
+        } catch(e) {
+          console.warn('Esports fetch failed:', e.message);
+        }
+
+        esportsLoading = false;
+        renderEsports();
+      }
+
+      function renderEsports() {
+        var container = document.getElementById('esports-container');
+        if (!container) return;
+
+        if (esportsCache.length === 0) {
+          container.innerHTML = '<div class="event-no-data">No esports events found right now. Check back soon!</div>';
+          return;
+        }
+
+        var liveMatches = [];
+        var upcomingMatches = [];
+        for (var i = 0; i < esportsCache.length; i++) {
+          var m = esportsCache[i];
+          if (m.status === 'running') liveMatches.push(m);
+          else if (m.status === 'not_started') upcomingMatches.push(m);
+        }
+
+        var html = '';
+
+        if (liveMatches.length > 0) {
+          html += '<div class="esports-section-label">\uD83D\uDD34 Live Now (' + liveMatches.length + ')</div>';
+          html += '<div class="esports-grid">';
+          for (var j = 0; j < liveMatches.length; j++) {
+            html += renderEsportCard(liveMatches[j]);
+          }
+          html += '</div>';
+        }
+
+        if (upcomingMatches.length > 0) {
+          html += '<div class="esports-section-label">\uD83D\uDD52 Upcoming</div>';
+          html += '<div class="esports-grid">';
+          for (var k = 0; k < upcomingMatches.length; k++) {
+            html += renderEsportCard(upcomingMatches[k]);
+          }
+          html += '</div>';
+        }
+
+        container.innerHTML = html;
+        setupEsportsBetListeners();
+      }
+
+      function renderEsportCard(match) {
+        var opponents = match.opponents || [];
+        var team1 = opponents[0] ? opponents[0].opponent : null;
+        var team2 = opponents[1] ? opponents[1].opponent : null;
+        var t1Name = team1 ? team1.name : 'TBD';
+        var t2Name = team2 ? team2.name : 'TBD';
+        var t1Logo = team1 && team1.image_url ? team1.image_url : '';
+        var t2Logo = team2 && team2.image_url ? team2.image_url : '';
+        var gameName = match.videogame ? match.videogame.name : 'Esports';
+        var gameIcon = getGameIcon(gameName);
+        var league = match.league ? match.league.name : '';
+        var serie = match.serie ? match.serie.full_name : '';
+        var isLive = match.status === 'running';
+
+        var results = match.results || [];
+        var t1Score = results[0] ? results[0].score : 0;
+        var t2Score = results[1] ? results[1].score : 0;
+
+        var streamUrl = '';
+        if (match.streams_list && match.streams_list.length > 0) {
+          for (var s = 0; s < match.streams_list.length; s++) {
+            var stream = match.streams_list[s];
+            if (stream.raw_url && stream.raw_url.indexOf('twitch.tv') >= 0) {
+              streamUrl = stream.raw_url;
+              break;
+            }
+          }
+          if (!streamUrl && match.streams_list[0].raw_url) {
+            streamUrl = match.streams_list[0].raw_url;
+          }
+        }
+
+        var twitchChannel = '';
+        if (streamUrl && streamUrl.indexOf('twitch.tv') >= 0) {
+          var parts = streamUrl.replace(/\/$/, '').split('/');
+          twitchChannel = parts[parts.length - 1];
+        }
+
+        var matchId = match.id || Math.random().toString(36).substr(2);
+        var matchName = t1Name + ' vs ' + t2Name;
+
+        var h = '<div class="esport-card" data-match-id="' + matchId + '">';
+
+        h += '<div class="esport-card-header">';
+        h += '<div class="esport-game-fallback">' + gameIcon + '</div>';
+        h += '<div class="esport-card-meta">';
+        h += '<div class="esport-card-league">' + league + (serie ? ' \u2022 ' + serie : '') + '</div>';
+        h += '<div class="esport-card-game">' + gameName + '</div>';
+        h += '</div>';
+        h += '<span class="multiplier-badge">1.8x</span> ';
+        h += '<span class="esport-card-status ' + (isLive ? 'live' : 'upcoming') + '">' + (isLive ? '\uD83D\uDD34 LIVE' : 'UPCOMING') + '</span>';
+        h += '</div>';
+
+        h += '<div class="esport-matchup">';
+        h += '<div class="esport-team">';
+        if (t1Logo) h += '<img class="esport-team-logo" src="' + t1Logo + '" alt="" onerror="this.style.display=\'none\'" />';
+        h += '<span class="esport-team-name">' + t1Name + '</span>';
+        h += '</div>';
+        if (isLive) {
+          h += '<div class="esport-score"><span class="s-home">' + t1Score + '</span><span class="s-sep">-</span><span class="s-away">' + t2Score + '</span></div>';
+        } else {
+          h += '<div class="esport-vs">VS</div>';
+        }
+        h += '<div class="esport-team away">';
+        if (t2Logo) h += '<img class="esport-team-logo" src="' + t2Logo + '" alt="" onerror="this.style.display=\'none\'" />';
+        h += '<span class="esport-team-name">' + t2Name + '</span>';
+        h += '</div>';
+        h += '</div>';
+
+        if (!isLive && match.scheduled_at) {
+          var d = new Date(match.scheduled_at);
+          var now = new Date();
+          var timeStr = '';
+          if (d.toDateString() === now.toDateString()) {
+            timeStr = 'Today at ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          } else {
+            timeStr = d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' at ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          }
+          h += '<div class="esport-time-label">\uD83D\uDD52 ' + timeStr + '</div>';
+        }
+
+        if (isLive && twitchChannel) {
+          h += '<div class="esport-stream-btn-wrap" style="padding:0 1rem 0.5rem;">';
+          h += '<button class="esport-stream-btn" data-channel="' + twitchChannel + '" data-match-id="' + matchId + '">';
+          h += '<span class="twitch-icon">\uD83D\uDCFA</span> Watch on Twitch';
+          h += '</button>';
+          h += '</div>';
+          h += '<div id="stream-embed-' + matchId + '" class="esport-stream-embed"></div>';
+        } else if (isLive && streamUrl) {
+          h += '<div style="padding:0 1rem 0.5rem;">';
+          h += '<a href="' + streamUrl + '" target="_blank" rel="noopener" class="esport-stream-btn" style="text-decoration:none;">';
+          h += '<span class="twitch-icon">\uD83D\uDCFA</span> Watch Stream';
+          h += '</a></div>';
+        }
+
+        h += '<div class="esport-bet-row">';
+        h += '<label>Bet:</label>';
+        h += '<input type="number" class="esports-bet-amount" placeholder="0.5" min="0.001" step="0.001" value="0.5" />';
+        h += '<span class="sol-label">SOL</span>';
+        h += '<button class="btn-bet-esport team1" data-event-id="' + matchId + '" data-pick="home" data-team="' + t1Name.replace(/"/g, '&quot;') + '" data-match="' + matchName.replace(/"/g, '&quot;') + '" data-league="' + (league + ' - ' + gameName).replace(/"/g, '&quot;') + '" data-sport-key="esports">' + t1Name + '</button>';
+        h += '<button class="btn-bet-esport team2" data-event-id="' + matchId + '" data-pick="away" data-team="' + t2Name.replace(/"/g, '&quot;') + '" data-match="' + matchName.replace(/"/g, '&quot;') + '" data-league="' + (league + ' - ' + gameName).replace(/"/g, '&quot;') + '" data-sport-key="esports">' + t2Name + '</button>';
+        h += '</div>';
+
+        h += '</div>';
+        return h;
+      }
+
+      function setupEsportsBetListeners() {
+        var container = document.getElementById('esports-container');
+        if (!container) return;
+
+        container.querySelectorAll('.esport-stream-btn[data-channel]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var channel = this.dataset.channel;
+            var mid = this.dataset.matchId;
+            var embedDiv = document.getElementById('stream-embed-' + mid);
+            if (!embedDiv) return;
+
+            if (openStreams[mid]) {
+              embedDiv.innerHTML = '';
+              delete openStreams[mid];
+              this.innerHTML = '<span class="twitch-icon">\uD83D\uDCFA</span> Watch on Twitch';
+              return;
+            }
+
+            var parentHost = window.location.hostname;
+            embedDiv.innerHTML = '<div class="esport-stream-wrap"><iframe src="https://player.twitch.tv/?channel=' + channel + '&parent=' + parentHost + '&muted=true&autoplay=true" allowfullscreen></iframe></div>';
+            openStreams[mid] = true;
+            this.innerHTML = '<span class="twitch-icon">\u274C</span> Close Stream';
+          });
+        });
+
+        container.querySelectorAll('.btn-bet-esport').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            handleCreateBet(this);
+          });
+        });
       }
 
       return { init: init, loadEvents: loadEvents, updatePendingBets: updatePendingBets };

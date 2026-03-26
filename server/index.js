@@ -87,6 +87,38 @@ app.get('/api/sports/:sport/:league/scoreboard', async (req, res) => {
   }
 });
 
+const PANDASCORE_TOKEN = process.env.PANDASCORE_API_KEY || '';
+
+app.get('/api/esports/running', async (req, res) => {
+  try {
+    const headers = PANDASCORE_TOKEN ? { 'Authorization': 'Bearer ' + PANDASCORE_TOKEN } : {};
+    const url = 'https://api.pandascore.co/matches/running?per_page=50&sort=-scheduled_at';
+    const resp = await fetch(url, { headers });
+    if (!resp.ok) return res.status(resp.status).json({ error: 'PandaScore API error' });
+    const data = await resp.json();
+    res.set('Cache-Control', 'public, max-age=30');
+    res.json(data);
+  } catch (err) {
+    console.error('PandaScore running error:', err.message);
+    res.status(502).json({ error: 'Failed to fetch esports data' });
+  }
+});
+
+app.get('/api/esports/upcoming', async (req, res) => {
+  try {
+    const headers = PANDASCORE_TOKEN ? { 'Authorization': 'Bearer ' + PANDASCORE_TOKEN } : {};
+    const url = 'https://api.pandascore.co/matches/upcoming?per_page=50&sort=scheduled_at';
+    const resp = await fetch(url, { headers });
+    if (!resp.ok) return res.status(resp.status).json({ error: 'PandaScore API error' });
+    const data = await resp.json();
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json(data);
+  } catch (err) {
+    console.error('PandaScore upcoming error:', err.message);
+    res.status(502).json({ error: 'Failed to fetch esports data' });
+  }
+});
+
 const rooms = new Map();
 const players = new Map();
 const matchQueue = new Map();
