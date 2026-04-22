@@ -9,6 +9,13 @@ const {
   Keypair, Connection, PublicKey, LAMPORTS_PER_SOL,
   Transaction, SystemProgram, sendAndConfirmTransaction,
 } = require('@solana/web3.js');
+const {
+  getMint,
+  getAssociatedTokenAddress,
+  createAssociatedTokenAccountInstruction,
+  createTransferCheckedInstruction,
+  TOKEN_PROGRAM_ID,
+} = require('@solana/spl-token');
 const DominoGame = require('./games/domino');
 const TicTacToeGame = require('./games/tictactoe');
 const MancalaGame = require('./games/mancala');
@@ -48,6 +55,41 @@ if (process.env.ESCROW_PRIVATE_KEY) {
 }
 const ESCROW_ADDRESS = escrowKeypair.publicKey.toBase58();
 console.log('Escrow wallet:', ESCROW_ADDRESS);
+
+const ZOOT_MINT_ADDRESS = process.env.ZOOT_MINT || '3max6YL5yL6nrLHN3iHZWqfH1ufoSWFXs6RA4VjLhAtd';
+const ZOOT_MINT = new PublicKey(ZOOT_MINT_ADDRESS);
+let zootDecimals = 9;
+let zootEscrowAta = null;
+
+async function initZootToken() {
+  try {
+    const mintInfo = await getMint(solanaConnection, ZOOT_MINT);
+    zootDecimals = mintInfo.decimals;
+    zootEscrowAta = await getAssociatedTokenAddress(ZOOT_MINT, escrowKeypair.publicKey);
+    const info = await solanaConnection.getAccountInfo(zootEscrowAta);
+    if (!info) {
+      console.log('ZOOT escrow ATA does not exist, creating...');
+      try {
+        const tx = new Transaction().add(
+          createAssociatedTokenAccountInstruction(
+            escrowKeypair.publicKey,
+            zootEscrowAta,
+            escrowKeypair.publicKey,
+            ZOOT_MINT
+          )
+        );
+        await sendAndConfirmTransaction(solanaConnection, tx, [escrowKeypair]);
+        console.log('ZOOT escrow ATA created:', zootEscrowAta.toBase58());
+      } catch (e) {
+        console.error('Failed to create ZOOT escrow ATA (escrow may need SOL for rent):', e.message);
+      }
+    }
+    console.log('ZOOT token ready — mint:', ZOOT_MINT_ADDRESS, '| decimals:', zootDecimals, '| escrow ATA:', zootEscrowAta ? zootEscrowAta.toBase58() : 'n/a');
+  } catch (e) {
+    console.error('ZOOT init warning:', e.message);
+  }
+}
+initZootToken();
 
 const app = express();
 const server = http.createServer(app);
@@ -144,9 +186,34 @@ async function sendSOL(toAddress, amount) {
   return sig;
 }
 
-async function verifyBetPayment(signature, expectedAmount) {
-  if (usedSignatures.has(signature)) return { ok: false, error: 'Transaction already used' };
+async function sendZoot(toAddress, amount) {
+  const destOwner = new PublicKey(toAddress);
+  const destAta = await getAssociatedTokenAddress(ZOOT_MINT, destOwner);
+  if (!zootEscrowAta) zootEscrowAta = await getAssociatedTokenAddress(ZOOT_MINT, escrowKeypair.publicKey);
 
+  const ixs = [];
+  const destInfo = await solanaConnection.getAccountInfo(destAta);
+  if (!destInfo) {
+    ixs.push(createAssociatedTokenAccountInstruction(
+      escrowKeypair.publicKey, destAta, destOwner, ZOOT_MINT
+    ));
+  }
+  const rawAmount = BigInt(Math.floor(amount * Math.pow(10, zootDecimals)));
+  ixs.push(createTransferCheckedInstruction(
+    zootEscrowAta, ZOOT_MINT, destAta, escrowKeypair.publicKey, rawAmount, zootDecimals
+  ));
+  const tx = new Transaction().add(...ixs);
+  const sig = await sendAndConfirmTransaction(solanaConnection, tx, [escrowKeypair]);
+  console.log(`Sent ${amount} ZOOT to ${toAddress} — tx: ${sig}`);
+  return sig;
+}
+
+async function sendCurrency(currency, toAddress, amount) {
+  if (currency === 'ZOOT') return sendZoot(toAddress, amount);
+  return sendSOL(toAddress, amount);
+}
+
+async function verifySolPayment(signature, expectedAmount) {
   const tx = await solanaConnection.getTransaction(signature, {
     commitment: 'confirmed',
     maxSupportedTransactionVersion: 0,
@@ -160,13 +227,48 @@ async function verifyBetPayment(signature, expectedAmount) {
   const received = (tx.meta.postBalances[escrowIndex] - tx.meta.preBalances[escrowIndex]) / LAMPORTS_PER_SOL;
   if (received < expectedAmount * 0.99) return { ok: false, error: 'Insufficient payment. Received ' + received.toFixed(6) + ' SOL' };
 
-  usedSignatures.add(signature);
   return { ok: true, received };
 }
 
-function createRoom(gameType, betAmount, player1Socket) {
+async function verifyZootPayment(signature, expectedAmount) {
+  const tx = await solanaConnection.getTransaction(signature, {
+    commitment: 'confirmed',
+    maxSupportedTransactionVersion: 0,
+  });
+  if (!tx || tx.meta.err) return { ok: false, error: 'Transaction not found or failed' };
+
+  const pre = tx.meta.preTokenBalances || [];
+  const post = tx.meta.postTokenBalances || [];
+  const mintStr = ZOOT_MINT_ADDRESS;
+
+  const readAmount = (arr) => {
+    for (const b of arr) {
+      if (b.owner === ESCROW_ADDRESS && b.mint === mintStr) {
+        return parseFloat(b.uiTokenAmount.uiAmountString || b.uiTokenAmount.uiAmount || '0');
+      }
+    }
+    return 0;
+  };
+  const received = readAmount(post) - readAmount(pre);
+  if (received < expectedAmount * 0.99) {
+    return { ok: false, error: 'Insufficient $ZOOT payment. Received ' + received.toFixed(6) + ' ZOOT' };
+  }
+  return { ok: true, received };
+}
+
+async function verifyBetPayment(signature, expectedAmount, currency) {
+  if (usedSignatures.has(signature)) return { ok: false, error: 'Transaction already used' };
+  const useZoot = currency === 'ZOOT';
+  const result = useZoot
+    ? await verifyZootPayment(signature, expectedAmount)
+    : await verifySolPayment(signature, expectedAmount);
+  if (result.ok) usedSignatures.add(signature);
+  return result;
+}
+
+function createRoom(gameType, betAmount, player1Socket, currency) {
   const id = uuidv4().slice(0, 8);
-  const room = { id, gameType, betAmount, players: [player1Socket], state: 'waiting', game: null, createdAt: Date.now(), turnTimer: null };
+  const room = { id, gameType, betAmount, currency: currency || 'SOL', players: [player1Socket], state: 'waiting', game: null, createdAt: Date.now(), turnTimer: null };
   rooms.set(id, room);
   return room;
 }
@@ -178,21 +280,22 @@ async function handleGameOver(room, result) {
   const pot = room.betAmount * 2;
   const houseCut = pot * HOUSE_FEE;
   const payout = pot - houseCut;
+  const currency = room.currency || 'SOL';
 
   if (winnerIdx !== null) {
     const winnerSocketId = room.players[winnerIdx];
     const winnerPlayer = players.get(winnerSocketId);
     if (winnerPlayer && !TEST_MODE) {
       try {
-        await sendSOL(winnerPlayer.walletAddress, payout);
+        await sendCurrency(currency, winnerPlayer.walletAddress, payout);
         const winSock = io.sockets.sockets.get(winnerSocketId);
-        if (winSock) winSock.emit('balance_update', { refreshWallet: true, msg: 'You won ' + payout.toFixed(3) + ' SOL!' });
+        if (winSock) winSock.emit('balance_update', { refreshWallet: true, msg: 'You won ' + payout.toFixed(3) + ' ' + currency + '!' });
       } catch (e) {
         console.error('Payout error:', e.message);
       }
       try {
-        await sendSOL(HOUSE_WALLET, houseCut);
-        console.log('House fee sent:', houseCut.toFixed(4), 'SOL to', HOUSE_WALLET);
+        await sendCurrency(currency, HOUSE_WALLET, houseCut);
+        console.log('House fee sent:', houseCut.toFixed(4), currency, 'to', HOUSE_WALLET);
       } catch (e) {
         console.error('House fee transfer error:', e.message);
       }
@@ -200,7 +303,7 @@ async function handleGameOver(room, result) {
     io.to(room.id).emit('game_over', {
       winner: winnerPlayer ? winnerPlayer.displayName : null,
       winnerWallet: winnerPlayer ? winnerPlayer.walletAddress : null,
-      payout, isDraw: false, resigned: !!result.resigned,
+      payout, currency, isDraw: false, resigned: !!result.resigned,
     });
   } else {
     if (!TEST_MODE) {
@@ -208,7 +311,7 @@ async function handleGameOver(room, result) {
         const p = players.get(sid);
         if (p) {
           try {
-            await sendSOL(p.walletAddress, room.betAmount);
+            await sendCurrency(currency, p.walletAddress, room.betAmount);
             const s = io.sockets.sockets.get(sid);
             if (s) s.emit('balance_update', { refreshWallet: true, msg: 'Draw — bet refunded!' });
           } catch (e) {
@@ -217,7 +320,7 @@ async function handleGameOver(room, result) {
         }
       }
     }
-    io.to(room.id).emit('game_over', { winner: null, winnerWallet: null, payout: 0, isDraw: true });
+    io.to(room.id).emit('game_over', { winner: null, winnerWallet: null, payout: 0, currency, isDraw: true });
   }
   setTimeout(() => cleanupRoom(room.id), 5000);
 }
@@ -268,31 +371,35 @@ io.on('connection', (socket) => {
       displayName: displayName || walletAddress.slice(0, 6),
       escrowAddress: ESCROW_ADDRESS,
       testMode: TEST_MODE,
+      zootMint: ZOOT_MINT_ADDRESS,
+      zootDecimals: zootDecimals,
+      zootEscrowAta: zootEscrowAta ? zootEscrowAta.toBase58() : null,
     });
     broadcastLobby();
   });
 
-  socket.on('find_match', async ({ gameType, betAmount, gridSize, txSignature }) => {
+  socket.on('find_match', async ({ gameType, betAmount, gridSize, txSignature, currency }) => {
     const player = players.get(socket.id);
     if (!player) return socket.emit('error_msg', { msg: 'Register first' });
 
+    const cur = currency === 'ZOOT' ? 'ZOOT' : 'SOL';
     const bet = parseFloat(betAmount) || 0;
     if (!TEST_MODE) {
       if (!bet || bet <= 0) return socket.emit('error_msg', { msg: 'Invalid bet amount' });
       if (!txSignature) return socket.emit('error_msg', { msg: 'No payment transaction provided' });
-      const verification = await verifyBetPayment(txSignature, bet);
+      const verification = await verifyBetPayment(txSignature, bet, cur);
       if (!verification.ok) return socket.emit('error_msg', { msg: verification.error });
     }
 
     const opts = {};
     if (gameType === 'tictactoe' && gridSize) opts.gridSize = gridSize;
 
-    const queueKey = `${gameType}_${bet}${gridSize ? '_' + gridSize : ''}`;
+    const queueKey = `${gameType}_${bet}_${cur}${gridSize ? '_' + gridSize : ''}`;
     if (matchQueue.has(queueKey)) {
       const waiting = matchQueue.get(queueKey);
       matchQueue.delete(queueKey);
 
-      const room = createRoom(gameType, bet, waiting.socketId);
+      const room = createRoom(gameType, bet, waiting.socketId, cur);
       room.options = { ...waiting.options, ...opts };
       room.players.push(socket.id);
       room.state = 'playing';
@@ -306,8 +413,8 @@ io.on('connection', (socket) => {
 
       startGame(room);
     } else {
-      matchQueue.set(queueKey, { socketId: socket.id, bet, txSignature, options: opts });
-      socket.emit('waiting', { msg: 'Waiting for an opponent...', betAmount: bet, gameType });
+      matchQueue.set(queueKey, { socketId: socket.id, bet, currency: cur, txSignature, options: opts, gameType, gridSize: gridSize || null });
+      socket.emit('waiting', { msg: 'Waiting for an opponent...', betAmount: bet, gameType, currency: cur });
     }
     broadcastLobby();
   });
@@ -318,7 +425,7 @@ io.on('connection', (socket) => {
         const player = players.get(socket.id);
         if (player && !TEST_MODE) {
           try {
-            await sendSOL(player.walletAddress, val.bet);
+            await sendCurrency(val.currency || 'SOL', player.walletAddress, val.bet);
             socket.emit('balance_update', { refreshWallet: true, msg: 'Bet refunded to your wallet!' });
           } catch (e) {
             console.error('Refund error:', e.message);
@@ -343,21 +450,21 @@ io.on('connection', (socket) => {
     if (entry.socketId === socket.id) return socket.emit('error_msg', { msg: 'You cannot accept your own bet' });
 
     const bet = entry.bet;
+    const cur = entry.currency || 'SOL';
 
     if (!TEST_MODE) {
       if (!txSignature) return socket.emit('error_msg', { msg: 'No payment transaction provided' });
-      const verification = await verifyBetPayment(txSignature, bet);
+      const verification = await verifyBetPayment(txSignature, bet, cur);
       if (!verification.ok) return socket.emit('error_msg', { msg: verification.error });
     }
 
     if (!matchQueue.has(betId)) return socket.emit('error_msg', { msg: 'Bet was taken by someone else' });
     matchQueue.delete(betId);
 
-    const parts = betId.split('_');
-    const gameType = parts[0];
+    const gameType = entry.gameType || betId.split('_')[0];
     const opts = entry.options || {};
 
-    const room = createRoom(gameType, bet, entry.socketId);
+    const room = createRoom(gameType, bet, entry.socketId, cur);
     room.options = opts;
     room.players.push(socket.id);
     room.state = 'playing';
@@ -393,15 +500,16 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('create_sports_bet', async ({ eventId, matchName, league, sportKey, pick, teamName, betAmount, txSignature }) => {
+  socket.on('create_sports_bet', async ({ eventId, matchName, league, sportKey, pick, teamName, betAmount, txSignature, currency }) => {
     const player = players.get(socket.id);
     if (!player) return socket.emit('error_msg', { msg: 'Register first' });
 
+    const cur = currency === 'ZOOT' ? 'ZOOT' : 'SOL';
     const bet = parseFloat(betAmount) || 0;
     if (!TEST_MODE) {
       if (!bet || bet <= 0) return socket.emit('error_msg', { msg: 'Invalid bet amount' });
       if (!txSignature) return socket.emit('error_msg', { msg: 'No payment transaction provided' });
-      const verification = await verifyBetPayment(txSignature, bet);
+      const verification = await verifyBetPayment(txSignature, bet, cur);
       if (!verification.ok) return socket.emit('error_msg', { msg: verification.error });
     }
 
@@ -415,6 +523,7 @@ io.on('connection', (socket) => {
       pick,
       teamName: teamName || pick,
       betAmount: bet,
+      currency: cur,
       creatorSocketId: socket.id,
       creatorWallet: player.walletAddress,
       creatorName: player.displayName,
@@ -423,7 +532,7 @@ io.on('connection', (socket) => {
       status: 'open',
     });
 
-    socket.emit('sports_bet_created', { betId, betAmount: bet });
+    socket.emit('sports_bet_created', { betId, betAmount: bet, currency: cur });
     broadcastLobby();
   });
 
@@ -437,9 +546,10 @@ io.on('connection', (socket) => {
     if (entry.creatorSocketId === socket.id) return socket.emit('error_msg', { msg: 'You cannot accept your own bet' });
 
     const bet = entry.betAmount;
+    const cur = entry.currency || 'SOL';
     if (!TEST_MODE) {
       if (!txSignature) return socket.emit('error_msg', { msg: 'No payment transaction provided' });
-      const verification = await verifyBetPayment(txSignature, bet);
+      const verification = await verifyBetPayment(txSignature, bet, cur);
       if (!verification.ok) return socket.emit('error_msg', { msg: verification.error });
     }
 
@@ -456,9 +566,9 @@ io.on('connection', (socket) => {
     const payout = pot - houseCut;
 
     const creatorSock = io.sockets.sockets.get(entry.creatorSocketId);
-    if (creatorSock) creatorSock.emit('sports_bet_matched', { betId, acceptorName: entry.acceptorName, payout });
+    if (creatorSock) creatorSock.emit('sports_bet_matched', { betId, acceptorName: entry.acceptorName, payout, currency: cur });
 
-    socket.emit('sports_bet_accepted', { betId, matchName: entry.matchName, payout });
+    socket.emit('sports_bet_accepted', { betId, matchName: entry.matchName, payout, currency: cur });
     broadcastLobby();
   });
 
@@ -471,7 +581,7 @@ io.on('connection', (socket) => {
 
     if (!TEST_MODE) {
       try {
-        await sendSOL(player.walletAddress, entry.betAmount);
+        await sendCurrency(entry.currency || 'SOL', player.walletAddress, entry.betAmount);
         socket.emit('balance_update', { refreshWallet: true, msg: 'Sports bet refunded!' });
       } catch (e) {
         console.error('Sports bet refund error:', e.message);
@@ -492,7 +602,7 @@ io.on('connection', (socket) => {
     for (const [key, val] of matchQueue) {
       if (val.socketId === socket.id) {
         if (player && !TEST_MODE) {
-          try { await sendSOL(player.walletAddress, val.bet); } catch (e) { console.error('Refund on disconnect:', e.message); }
+          try { await sendCurrency(val.currency || 'SOL', player.walletAddress, val.bet); } catch (e) { console.error('Refund on disconnect:', e.message); }
         }
         matchQueue.delete(key);
         break;
@@ -509,23 +619,24 @@ io.on('connection', (socket) => {
         const pot = room.betAmount * 2;
         const houseCut = pot * HOUSE_FEE;
         const payout = pot - houseCut;
+        const currency = room.currency || 'SOL';
 
         if (winnerPlayer && !TEST_MODE) {
           try {
-            await sendSOL(winnerPlayer.walletAddress, payout);
+            await sendCurrency(currency, winnerPlayer.walletAddress, payout);
             const winSock = io.sockets.sockets.get(winnerSocketId);
-            if (winSock) winSock.emit('balance_update', { refreshWallet: true, msg: 'Opponent left — you won ' + payout.toFixed(3) + ' SOL!' });
+            if (winSock) winSock.emit('balance_update', { refreshWallet: true, msg: 'Opponent left — you won ' + payout.toFixed(3) + ' ' + currency + '!' });
           } catch (e) { console.error('Payout on disconnect:', e.message); }
           try {
-            await sendSOL(HOUSE_WALLET, houseCut);
-            console.log('House fee sent:', houseCut.toFixed(4), 'SOL to', HOUSE_WALLET);
+            await sendCurrency(currency, HOUSE_WALLET, houseCut);
+            console.log('House fee sent:', houseCut.toFixed(4), currency, 'to', HOUSE_WALLET);
           } catch (e) { console.error('House fee on disconnect:', e.message); }
         }
 
         io.to(room.id).emit('game_over', {
           winner: winnerPlayer ? winnerPlayer.displayName : null,
           winnerWallet: winnerPlayer ? winnerPlayer.walletAddress : null,
-          payout, isDraw: false, reason: 'Opponent disconnected',
+          payout, currency, isDraw: false, reason: 'Opponent disconnected',
         });
         room.state = 'finished';
         setTimeout(() => cleanupRoom(room.id), 3000);
@@ -535,7 +646,7 @@ io.on('connection', (socket) => {
     for (const [sbId, sb] of sportsBets) {
       if (sb.creatorSocketId === socket.id && sb.status === 'open') {
         if (player && !TEST_MODE) {
-          try { await sendSOL(player.walletAddress, sb.betAmount); } catch (e) { console.error('Sports bet refund on disconnect:', e.message); }
+          try { await sendCurrency(sb.currency || 'SOL', player.walletAddress, sb.betAmount); } catch (e) { console.error('Sports bet refund on disconnect:', e.message); }
         }
         sportsBets.delete(sbId);
       }
@@ -578,7 +689,7 @@ function startGame(room) {
       const p1 = players.get(room.players[0]);
       const p2 = players.get(room.players[1]);
       sock.emit('game_start', {
-        roomId: room.id, gameType: room.gameType, betAmount: room.betAmount, playerIndex: idx,
+        roomId: room.id, gameType: room.gameType, betAmount: room.betAmount, currency: room.currency || 'SOL', playerIndex: idx,
         players: [
           { username: p1?.displayName, wallet: p1?.walletAddress },
           { username: p2?.displayName, wallet: p2?.walletAddress },
@@ -613,25 +724,22 @@ function cleanupRoom(roomId) {
 function broadcastLobby() {
   const waiting = [];
   for (const [key, val] of matchQueue) {
-    const parts = key.split('_');
-    const gameType = parts[0];
-    const bet = parts[1];
-    const gridSize = parts[2] || null;
     const p = players.get(val.socketId);
     waiting.push({
       id: key,
-      gameType,
-      betAmount: parseFloat(bet),
+      gameType: val.gameType || key.split('_')[0],
+      betAmount: val.bet,
+      currency: val.currency || 'SOL',
       username: p?.displayName || 'Anon',
       wallet: p?.walletAddress ? p.walletAddress.slice(0, 4) + '…' + p.walletAddress.slice(-4) : '',
-      gridSize: gridSize ? parseInt(gridSize) : null,
+      gridSize: val.gridSize || null,
       socketId: val.socketId,
     });
   }
   const activeGames = [];
   for (const [, room] of rooms) {
     if (room.state === 'playing') {
-      activeGames.push({ gameType: room.gameType, betAmount: room.betAmount, players: room.players.map((sid) => players.get(sid)?.displayName) });
+      activeGames.push({ gameType: room.gameType, betAmount: room.betAmount, currency: room.currency || 'SOL', players: room.players.map((sid) => players.get(sid)?.displayName) });
     }
   }
   const openSportsBets = [];
@@ -646,6 +754,7 @@ function broadcastLobby() {
         pick: sb.pick,
         teamName: sb.teamName,
         betAmount: sb.betAmount,
+        currency: sb.currency || 'SOL',
         creatorName: sb.creatorName,
         creatorWallet: sb.creatorWallet ? sb.creatorWallet.slice(0, 4) + '…' + sb.creatorWallet.slice(-4) : '',
         creatorSocketId: sb.creatorSocketId,

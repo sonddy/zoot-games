@@ -329,6 +329,40 @@
     .bet-input-group input[type="number"]:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--glow-gold); }
     .bet-input-group .sol-label { font-size: 0.85rem; color: var(--gold); font-weight: 700; }
 
+    .currency-select {
+      background: var(--surface); border: 1px solid var(--surface2);
+      color: var(--gold); font-family: inherit; font-size: 0.8rem; font-weight: 700;
+      border-radius: 6px; padding: 0.35rem 0.55rem; cursor: pointer; outline: none;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .currency-select:hover { border-color: var(--gold); }
+    .currency-select.is-zoot { color: #ffd166; border-color: rgba(255,193,7,0.55); background: linear-gradient(135deg, rgba(255,193,7,0.08), rgba(255,193,7,0.02)); }
+    .currency-select option { background: var(--bg2); color: var(--text); }
+
+    .balance-zoot-line {
+      display: flex; align-items: center; gap: 0.4rem;
+      margin-top: 0.3rem; font-size: 0.95rem; color: var(--gold); font-weight: 700;
+    }
+    .balance-zoot-line img { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; }
+    .balance-zoot-line .zoot-tag { font-size: 0.7rem; color: var(--text2); font-weight: 600; }
+
+    .topbar-balance-zoot {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      background: rgba(255,193,7,0.08); border: 1px solid rgba(255,193,7,0.25);
+      color: #ffd166; font-weight: 700; font-size: 0.75rem;
+      padding: 0.25rem 0.55rem; border-radius: 999px; margin-left: 0.35rem;
+    }
+    .topbar-balance-zoot img { width: 14px; height: 14px; border-radius: 50%; object-fit: cover; }
+
+    .currency-chip {
+      display: inline-flex; align-items: center; gap: 0.22rem;
+      padding: 0.08rem 0.45rem; border-radius: 999px;
+      font-size: 0.65rem; font-weight: 700; letter-spacing: 0.03em;
+      background: rgba(255,193,7,0.1); color: #ffd166; border: 1px solid rgba(255,193,7,0.35);
+      margin-left: 0.3rem;
+    }
+    .currency-chip.sol { background: rgba(0,212,170,0.1); color: #00d4aa; border-color: rgba(0,212,170,0.35); }
+
     .pending-bets-section {
       margin-bottom: 2.5rem;
       background: linear-gradient(135deg, var(--bg2), rgba(21,31,50,0.6));
@@ -1856,6 +1890,7 @@
       <div class="topbar-center"><span id="online-count" class="badge badge-live">0 online</span></div>
       <div class="topbar-right">
         <span id="topbar-balance" class="badge" style="color:var(--gold);font-weight:700;border-color:rgba(255,193,7,0.2);">0 SOL</span>
+        <span id="topbar-balance-zoot" class="topbar-balance-zoot"><img src="/zootcoin.png" alt="" onerror="this.style.display='none'" />0 $ZOOT</span>
         <span id="wallet-display" class="wallet-badge"></span>
         <div class="menu-dropdown-wrap">
           <button class="menu-toggle">&#9776; <span class="menu-arrow">&#9660;</span></button>
@@ -1899,7 +1934,12 @@
       <div class="wallet-panel">
         <h3>&#128176; Your Wallet</h3>
         <div class="balance-display"><span id="balance-amount">--</span> SOL</div>
-        <div class="balance-sub">Your real Solana wallet balance &mdash; this SOL is used for bets</div>
+        <div class="balance-zoot-line" id="balance-zoot-line">
+          <img src="/zootcoin.png" alt="$ZOOT" onerror="this.style.display='none'" />
+          <span id="balance-zoot-amount">--</span>
+          <span class="zoot-tag">$ZOOT</span>
+        </div>
+        <div class="balance-sub">Your real Solana wallet balance &mdash; bet in SOL or $ZOOT</div>
         <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.8rem;">
           <span style="font-size:0.8rem;color:var(--text2);">Network:</span>
           <select id="network-select" style="background:var(--surface);border:1px solid var(--surface2);color:var(--accent2);border-radius:6px;padding:0.3rem 0.6rem;font-size:0.8rem;font-family:inherit;cursor:pointer;">
@@ -2346,6 +2386,7 @@
       <div class="topbar-center"><span id="online-count-sports" class="badge badge-live">0 online</span></div>
       <div class="topbar-right">
         <span id="topbar-balance-sports" class="badge" style="color:var(--gold);font-weight:700;border-color:rgba(255,193,7,0.2);">0 SOL</span>
+        <span id="topbar-balance-zoot-sports" class="topbar-balance-zoot"><img src="/zootcoin.png" alt="" onerror="this.style.display='none'" />0 $ZOOT</span>
         <span id="wallet-display-sports" class="wallet-badge"></span>
         <div class="menu-dropdown-wrap">
           <button class="menu-toggle">&#9776; <span class="menu-arrow">&#9660;</span></button>
@@ -2568,6 +2609,143 @@
       }
 
       return { connect: connect, disconnect: disconnect, getPublicKey: getPublicKey, getProvider: getProviderRef, shortenAddress: shortenAddress, getRpcUrl: getRpcUrl, getNetwork: getNetwork, setNetwork: setNetwork };
+    })();
+
+    // ════════════════════════════════════════
+    // SPL TOKEN ($ZOOT) HELPERS
+    // ════════════════════════════════════════
+    var SplToken = (function() {
+      var TOKEN_PROGRAM_ID_STR = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+      var ASSOCIATED_TOKEN_PROGRAM_ID_STR = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
+      var tokenProgram = null;
+      var assocProgram = null;
+      var mintPk = null;
+      var decimals = 9;
+
+      function ensureInit() {
+        var web3 = window.solanaWeb3;
+        if (!web3 || tokenProgram) return;
+        tokenProgram = new web3.PublicKey(TOKEN_PROGRAM_ID_STR);
+        assocProgram = new web3.PublicKey(ASSOCIATED_TOKEN_PROGRAM_ID_STR);
+      }
+
+      function setMint(mintStr, dec) {
+        ensureInit();
+        var web3 = window.solanaWeb3;
+        if (!web3) return;
+        mintPk = new web3.PublicKey(mintStr);
+        if (typeof dec === 'number') decimals = dec;
+      }
+
+      function getMint() { return mintPk; }
+      function getDecimals() { return decimals; }
+
+      function getATA(ownerPk) {
+        ensureInit();
+        var web3 = window.solanaWeb3;
+        var seeds = [ownerPk.toBuffer(), tokenProgram.toBuffer(), mintPk.toBuffer()];
+        return web3.PublicKey.findProgramAddressSync(seeds, assocProgram)[0];
+      }
+
+      function toRawAmount(uiAmount) {
+        var mul = Math.pow(10, decimals);
+        var raw = Math.floor(Number(uiAmount) * mul + 0.5);
+        return BigInt(raw);
+      }
+
+      function buildTransferCheckedIx(sourceAta, destAta, ownerPk, rawAmount) {
+        ensureInit();
+        var web3 = window.solanaWeb3;
+        var data = new Uint8Array(10);
+        data[0] = 12;
+        var v = BigInt(rawAmount);
+        var MASK = BigInt(0xff);
+        for (var i = 0; i < 8; i++) {
+          data[1 + i] = Number((v >> BigInt(8 * i)) & MASK);
+        }
+        data[9] = decimals;
+        return new web3.TransactionInstruction({
+          keys: [
+            { pubkey: sourceAta, isSigner: false, isWritable: true },
+            { pubkey: mintPk, isSigner: false, isWritable: false },
+            { pubkey: destAta, isSigner: false, isWritable: true },
+            { pubkey: ownerPk, isSigner: true, isWritable: false },
+          ],
+          programId: tokenProgram,
+          data: data,
+        });
+      }
+
+      function buildCreateATAIx(payerPk, ataPk, ownerPk) {
+        ensureInit();
+        var web3 = window.solanaWeb3;
+        return new web3.TransactionInstruction({
+          keys: [
+            { pubkey: payerPk, isSigner: true, isWritable: true },
+            { pubkey: ataPk, isSigner: false, isWritable: true },
+            { pubkey: ownerPk, isSigner: false, isWritable: false },
+            { pubkey: mintPk, isSigner: false, isWritable: false },
+            { pubkey: web3.SystemProgram.programId, isSigner: false, isWritable: false },
+            { pubkey: tokenProgram, isSigner: false, isWritable: false },
+          ],
+          programId: assocProgram,
+          data: new Uint8Array([1]),
+        });
+      }
+
+      async function buildTransferTransaction(connection, fromOwnerPk, toOwnerStr, uiAmount) {
+        ensureInit();
+        var web3 = window.solanaWeb3;
+        var toOwner = new web3.PublicKey(toOwnerStr);
+        var fromAta = getATA(fromOwnerPk);
+        var toAta = getATA(toOwner);
+
+        var tx = new web3.Transaction();
+
+        var destInfo = null;
+        try { destInfo = await connection.getAccountInfo(toAta); } catch(_) {}
+        if (!destInfo) {
+          tx.add(buildCreateATAIx(fromOwnerPk, toAta, toOwner));
+        }
+        tx.add(buildTransferCheckedIx(fromAta, toAta, fromOwnerPk, toRawAmount(uiAmount)));
+        return tx;
+      }
+
+      async function fetchBalance(rpcUrl, ownerAddr) {
+        ensureInit();
+        if (!mintPk) return 0;
+        try {
+          var web3 = window.solanaWeb3;
+          var ownerPk = new web3.PublicKey(ownerAddr);
+          var ata = getATA(ownerPk);
+          var body = JSON.stringify({
+            jsonrpc: '2.0', id: 1,
+            method: 'getTokenAccountBalance',
+            params: [ata.toBase58()]
+          });
+          var resp = await fetch(rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body
+          });
+          var json = await resp.json();
+          if (json.error) return 0;
+          if (!json.result || !json.result.value) return 0;
+          var ui = json.result.value.uiAmount;
+          return typeof ui === 'number' ? ui : 0;
+        } catch (e) {
+          return 0;
+        }
+      }
+
+      return {
+        setMint: setMint,
+        getMint: getMint,
+        getDecimals: getDecimals,
+        getATA: getATA,
+        buildTransferTransaction: buildTransferTransaction,
+        fetchBalance: fetchBalance,
+      };
     })();
 
     // ════════════════════════════════════════
@@ -5110,9 +5288,12 @@
       var gameState = null;
       var currentGameData = null;
       var currentBalance = 0;
+      var currentZootBalance = 0;
       var escrowAddress = null;
       var solConnection = null;
       var isTestMode = false;
+      var zootMintAddress = null;
+      var zootDecimals = 9;
 
       function showScreen(name) {
         var all = ['connect','lobby','waiting','game','sports'];
@@ -5125,6 +5306,12 @@
         if (name === 'sports') SportsBetting.loadEvents();
       }
 
+      function formatZoot(amt) {
+        if (amt >= 1000) return amt.toLocaleString(undefined, { maximumFractionDigits: 0 });
+        if (amt >= 1) return amt.toFixed(2);
+        return amt.toFixed(4);
+      }
+
       function updateBalanceUI(bal) {
         currentBalance = bal;
         document.getElementById('balance-amount').textContent = bal.toFixed(3);
@@ -5133,12 +5320,21 @@
         if (sportsBalance) sportsBalance.textContent = bal.toFixed(3) + ' SOL';
       }
 
+      function updateZootBalanceUI(bal) {
+        currentZootBalance = bal;
+        var el = document.getElementById('balance-zoot-amount');
+        if (el) el.textContent = formatZoot(bal);
+        var topZ = document.getElementById('topbar-balance-zoot');
+        if (topZ) topZ.innerHTML = '<img src="/zootcoin.png" alt="" onerror="this.style.display=\'none\'" />' + formatZoot(bal) + ' $ZOOT';
+        var topZS = document.getElementById('topbar-balance-zoot-sports');
+        if (topZS) topZS.innerHTML = '<img src="/zootcoin.png" alt="" onerror="this.style.display=\'none\'" />' + formatZoot(bal) + ' $ZOOT';
+      }
+
       async function refreshBalance() {
         var walletAddr = PhantomWallet.getPublicKey();
         if (!walletAddr) return;
 
         var rpcUrl = PhantomWallet.getRpcUrl();
-        console.log('Fetching balance from:', rpcUrl, 'for:', walletAddr);
 
         try {
           var body = JSON.stringify({
@@ -5159,6 +5355,15 @@
         } catch (e) {
           console.error('Balance fetch error:', e);
           showToast('Balance fetch failed — try Refresh', 'error');
+        }
+
+        if (zootMintAddress) {
+          try {
+            var zbal = await SplToken.fetchBalance(rpcUrl, walletAddr);
+            updateZootBalanceUI(zbal);
+          } catch (e) {
+            updateZootBalanceUI(0);
+          }
         }
       }
 
@@ -5185,6 +5390,11 @@
         socket.on('registered', function(data) {
           escrowAddress = data.escrowAddress;
           isTestMode = !!data.testMode;
+          zootMintAddress = data.zootMint || null;
+          zootDecimals = typeof data.zootDecimals === 'number' ? data.zootDecimals : 9;
+          if (zootMintAddress && window.solanaWeb3) {
+            try { SplToken.setMint(zootMintAddress, zootDecimals); } catch (e) { console.warn('ZOOT init:', e.message); }
+          }
           document.getElementById('connected-wallet-addr').textContent = data.walletAddress;
           document.getElementById('wallet-display').textContent = PhantomWallet.shortenAddress(data.walletAddress);
           var wdSports = document.getElementById('wallet-display-sports');
@@ -5199,7 +5409,8 @@
         });
 
         socket.on('waiting', function(data) {
-          document.getElementById('waiting-info').textContent = data.gameType.toUpperCase() + ' — ' + data.betAmount + ' SOL bet';
+          var curLabel = data.currency === 'ZOOT' ? '$ZOOT' : 'SOL';
+          document.getElementById('waiting-info').textContent = data.gameType.toUpperCase() + ' — ' + data.betAmount + ' ' + curLabel + ' bet';
           showScreen('waiting');
         });
 
@@ -5256,6 +5467,8 @@
           if (navigator.clipboard) navigator.clipboard.writeText(this.textContent).then(function() { showToast('Address copied!', 'info'); });
         });
 
+        injectCurrencySelectors();
+
         // Game cards — bet by signing a Phantom transfer to escrow
         var cards = document.querySelectorAll('.game-card');
         for (var ci = 0; ci < cards.length; ci++) {
@@ -5267,17 +5480,23 @@
                 this.classList.add('active');
               });
             }
-            card.querySelector('.btn-play').addEventListener('click', async function() {
+            var playBtn = card.querySelector('.btn-play');
+            if (!playBtn) return;
+            playBtn.addEventListener('click', async function() {
               var gameType = card.dataset.game;
               var betInput = card.querySelector('.bet-amount-input');
+              if (!betInput) return;
               var betAmount = parseFloat(betInput.value);
               if (!betAmount || betAmount <= 0) { showToast('Enter a bet amount', 'error'); betInput.focus(); return; }
               if (!escrowAddress) { showToast('Server not ready, try again', 'error'); return; }
 
+              var currencySel = card.querySelector('.currency-select');
+              var currency = currencySel ? currencySel.value : 'SOL';
+
               var btn = this;
               btn.disabled = true;
 
-              var payload = { gameType: gameType, betAmount: betAmount };
+              var payload = { gameType: gameType, betAmount: betAmount, currency: currency };
               var activeGrid = card.querySelector('.grid-btn.active');
               if (activeGrid) payload.gridSize = parseInt(activeGrid.dataset.grid);
 
@@ -5289,38 +5508,13 @@
                 return;
               }
 
-              if (betAmount > currentBalance) { showToast('Not enough SOL in your wallet!', 'error'); btn.disabled = false; return; }
+              var balanceNeeded = currency === 'ZOOT' ? currentZootBalance : currentBalance;
+              if (betAmount > balanceNeeded) { showToast('Not enough ' + (currency === 'ZOOT' ? '$ZOOT' : 'SOL') + ' in your wallet!', 'error'); btn.disabled = false; btn.textContent = 'Find Match'; return; }
 
               btn.textContent = 'Confirm in Phantom...';
 
               try {
-                var provider = PhantomWallet.getProvider();
-                var web3 = window.solanaWeb3;
-                solConnection = new web3.Connection(PhantomWallet.getRpcUrl(), 'confirmed');
-
-                var fromPubkey = provider.publicKey;
-                var toPubkey = new web3.PublicKey(escrowAddress);
-                var lamports = Math.floor(betAmount * web3.LAMPORTS_PER_SOL);
-
-                var transaction = new web3.Transaction().add(
-                  web3.SystemProgram.transfer({
-                    fromPubkey: fromPubkey,
-                    toPubkey: toPubkey,
-                    lamports: lamports,
-                  })
-                );
-                transaction.feePayer = fromPubkey;
-                var bh = await solConnection.getLatestBlockhash('confirmed');
-                transaction.recentBlockhash = bh.blockhash;
-
-                var signed = await provider.signTransaction(transaction);
-                btn.textContent = 'Sending bet...';
-
-                var signature = await solConnection.sendRawTransaction(signed.serialize());
-                btn.textContent = 'Confirming...';
-
-                await solConnection.confirmTransaction(signature, 'confirmed');
-
+                var signature = await sendBetPayment(currency, betAmount, btn);
                 payload.txSignature = signature;
                 socket.emit('find_match', payload);
                 btn.disabled = false;
@@ -5334,6 +5528,62 @@
             });
           })(cards[ci]);
         }
+      }
+
+      function injectCurrencySelectors() {
+        var labels = document.querySelectorAll('.bet-input-group .sol-label');
+        for (var i = 0; i < labels.length; i++) {
+          var lab = labels[i];
+          if (lab.dataset.swapped === '1') continue;
+          var sel = document.createElement('select');
+          sel.className = 'currency-select';
+          var o1 = document.createElement('option'); o1.value = 'SOL'; o1.textContent = 'SOL';
+          var o2 = document.createElement('option'); o2.value = 'ZOOT'; o2.textContent = '$ZOOT';
+          sel.appendChild(o1); sel.appendChild(o2);
+          sel.addEventListener('change', function() {
+            if (this.value === 'ZOOT') this.classList.add('is-zoot');
+            else this.classList.remove('is-zoot');
+          });
+          lab.parentNode.replaceChild(sel, lab);
+          sel.dataset.swapped = '1';
+        }
+      }
+
+      async function sendBetPayment(currency, uiAmount, btn) {
+        var provider = PhantomWallet.getProvider();
+        if (!provider || !provider.publicKey) throw new Error('Wallet not connected — reconnect Phantom');
+        var web3 = window.solanaWeb3;
+        if (!web3) throw new Error('Solana library not loaded — refresh page');
+        solConnection = new web3.Connection(PhantomWallet.getRpcUrl(), 'confirmed');
+
+        var fromPubkey = provider.publicKey;
+        var toAddress = escrowAddress;
+
+        var transaction;
+        if (currency === 'ZOOT') {
+          if (!zootMintAddress) throw new Error('$ZOOT not initialized — please refresh');
+          transaction = await SplToken.buildTransferTransaction(solConnection, fromPubkey, toAddress, uiAmount);
+        } else {
+          var toPubkey = new web3.PublicKey(toAddress);
+          var lamports = Math.floor(uiAmount * web3.LAMPORTS_PER_SOL);
+          transaction = new web3.Transaction().add(
+            web3.SystemProgram.transfer({ fromPubkey: fromPubkey, toPubkey: toPubkey, lamports: lamports })
+          );
+        }
+        transaction.feePayer = fromPubkey;
+        if (btn) btn.textContent = 'Getting blockhash...';
+        var bh = await solConnection.getLatestBlockhash('confirmed');
+        transaction.recentBlockhash = bh.blockhash;
+
+        if (btn) btn.textContent = 'Sign in Phantom...';
+        var signed = await provider.signTransaction(transaction);
+
+        if (btn) btn.textContent = 'Sending tx...';
+        var signature = await solConnection.sendRawTransaction(signed.serialize());
+
+        if (btn) btn.textContent = 'Confirming tx...';
+        await solConnection.confirmTransaction(signature, 'confirmed');
+        return signature;
       }
 
       var pendingFilter = 'all';
@@ -5356,7 +5606,7 @@
         var activeList = document.getElementById('active-list');
         activeList.innerHTML = data.activeGames.length === 0
           ? '<li class="empty-msg">No active games</li>'
-          : data.activeGames.map(function(g) { return '<li><span>' + g.players.join(' vs ') + '</span><span>' + (GAME_NAMES[g.gameType] || g.gameType) + ' — ' + g.betAmount + ' SOL</span></li>'; }).join('');
+          : data.activeGames.map(function(g) { return '<li><span>' + g.players.join(' vs ') + '</span><span>' + (GAME_NAMES[g.gameType] || g.gameType) + ' — ' + g.betAmount + ' ' + (g.currency === 'ZOOT' ? '$ZOOT' : 'SOL') + '</span></li>'; }).join('');
       }
 
       function renderPendingBets(bets) {
@@ -5391,12 +5641,12 @@
           html += '<div class="pending-bet-game">' + name + gridLabel + '</div>';
           html += '<div class="pending-bet-player">' + b.username + ' <span class="wallet-tag">' + b.wallet + '</span></div>';
           html += '</div>';
-          html += '<div class="pending-bet-amount">' + b.betAmount + ' <small>SOL</small></div>';
+          html += '<div class="pending-bet-amount">' + b.betAmount + ' <small>' + (b.currency === 'ZOOT' ? '$ZOOT' : 'SOL') + '</small></div>';
 
           if (isOwn) {
             html += '<button class="pending-bet-accept own-label" disabled>Your Bet</button>';
           } else {
-            html += '<button class="pending-bet-accept" data-bet-id="' + b.id + '" data-bet-amount="' + b.betAmount + '">Accept</button>';
+            html += '<button class="pending-bet-accept" data-bet-id="' + b.id + '" data-bet-amount="' + b.betAmount + '" data-currency="' + (b.currency || 'SOL') + '">Accept</button>';
           }
           html += '</div>';
         }
@@ -5442,12 +5692,13 @@
           if (!btn || btn.disabled || btn.classList.contains('own-label')) return;
           var betId = btn.getAttribute('data-bet-id');
           var betAmount = parseFloat(btn.getAttribute('data-bet-amount'));
+          var currency = btn.getAttribute('data-currency') || 'SOL';
           if (!betId) return;
-          acceptBet(betId, betAmount, btn);
+          acceptBet(betId, betAmount, currency, btn);
         });
       }
 
-      async function acceptBet(betId, betAmount, btn) {
+      async function acceptBet(betId, betAmount, currency, btn) {
         if (!socket) { showToast('Not connected to server', 'error'); return; }
         if (!escrowAddress) { showToast('Server not ready, try again', 'error'); return; }
 
@@ -5476,39 +5727,15 @@
           return;
         }
 
+        var balanceNeeded = currency === 'ZOOT' ? currentZootBalance : currentBalance;
+        if (betAmount > balanceNeeded) {
+          socket.off('error_msg', onServerError);
+          resetBtn('Not enough ' + (currency === 'ZOOT' ? '$ZOOT' : 'SOL') + ' in your wallet!');
+          return;
+        }
+
         try {
-          var provider = PhantomWallet.getProvider();
-          if (!provider || !provider.publicKey) throw new Error('Wallet not connected — reconnect Phantom');
-
-          btn.textContent = 'Confirm in Phantom...';
-          var web3 = window.solanaWeb3;
-          if (!web3) throw new Error('Solana library not loaded — refresh page');
-
-          var rpcUrl = PhantomWallet.getRpcUrl();
-          solConnection = new web3.Connection(rpcUrl, 'confirmed');
-
-          var fromPubkey = provider.publicKey;
-          var toPubkey = new web3.PublicKey(escrowAddress);
-          var lamports = Math.floor(betAmount * web3.LAMPORTS_PER_SOL);
-
-          var transaction = new web3.Transaction().add(
-            web3.SystemProgram.transfer({ fromPubkey: fromPubkey, toPubkey: toPubkey, lamports: lamports })
-          );
-          transaction.feePayer = fromPubkey;
-
-          btn.textContent = 'Getting blockhash...';
-          var bh = await solConnection.getLatestBlockhash('confirmed');
-          transaction.recentBlockhash = bh.blockhash;
-
-          btn.textContent = 'Sign in Phantom...';
-          var signed = await provider.signTransaction(transaction);
-
-          btn.textContent = 'Sending tx...';
-          var signature = await solConnection.sendRawTransaction(signed.serialize());
-
-          btn.textContent = 'Confirming tx...';
-          await solConnection.confirmTransaction(signature, 'confirmed');
-
+          var signature = await sendBetPayment(currency, betAmount, btn);
           btn.textContent = 'Matching...';
           btn.style.background = 'var(--green)';
           socket.emit('accept_bet', { betId: betId, txSignature: signature });
@@ -5535,7 +5762,7 @@
         } else {
           topbar.style.display = '';
           document.getElementById('game-type-label').textContent = data.gameType.toUpperCase();
-          document.getElementById('game-bet-label').textContent = data.betAmount + ' SOL';
+          document.getElementById('game-bet-label').textContent = data.betAmount + ' ' + (data.currency === 'ZOOT' ? '$ZOOT' : 'SOL');
           document.getElementById('player1-label').textContent = data.players[0].username;
           document.getElementById('player2-label').textContent = data.players[1].username;
           document.getElementById('player1-label').style.color = data.playerIndex === 0 ? '#00d4aa' : '';
@@ -5618,7 +5845,7 @@
           title.textContent = iWon ? 'YOU WIN!' : 'YOU LOSE';
           title.style.color = iWon ? '#00c853' : '#ff3d57';
           detail.textContent = data.reason ? data.winner + ' wins — ' + data.reason : data.winner + ' wins!';
-          payout.textContent = iWon ? '+' + data.payout.toFixed(3) + ' SOL' : '';
+          payout.textContent = iWon ? '+' + data.payout.toFixed(3) + ' ' + (data.currency === 'ZOOT' ? '$ZOOT' : 'SOL') : '';
           if (iWon) GameSounds.win(); else GameSounds.lose();
         }
         overlay.classList.remove('hidden');
@@ -5695,7 +5922,7 @@
       }
 
       document.addEventListener('DOMContentLoaded', init);
-      return { showScreen: showScreen, sendAction: sendAction, acceptBet: acceptBet, showToast: showToast, getEscrow: function() { return escrowAddress; }, isTest: function() { return isTestMode; }, getBalance: function() { return currentBalance; }, refreshBalance: refreshBalance, getSocket: function() { return socket; } };
+      return { showScreen: showScreen, sendAction: sendAction, acceptBet: acceptBet, showToast: showToast, getEscrow: function() { return escrowAddress; }, isTest: function() { return isTestMode; }, getBalance: function() { return currentBalance; }, getZootBalance: function() { return currentZootBalance; }, getZootMint: function() { return zootMintAddress; }, refreshBalance: refreshBalance, getSocket: function() { return socket; } };
     })();
 
   </script>
@@ -5770,12 +5997,27 @@
             var betBtn = e.target.closest('.btn-bet-team');
             if (betBtn) handleCreateBet(betBtn);
           });
+          container.addEventListener('change', function(e) {
+            var sel = e.target.closest('.sports-currency');
+            if (sel) {
+              if (sel.value === 'ZOOT') sel.classList.add('is-zoot'); else sel.classList.remove('is-zoot');
+            }
+          });
         }
         var pendingList = document.getElementById('sports-pending-list');
         if (pendingList) {
           pendingList.addEventListener('click', function(e) {
             var acceptBtn = e.target.closest('.btn-accept-sports');
             if (acceptBtn) handleAcceptBet(acceptBtn);
+          });
+        }
+        var esportsContainer = document.getElementById('esports-container');
+        if (esportsContainer) {
+          esportsContainer.addEventListener('change', function(e) {
+            var sel = e.target.closest('.sports-currency');
+            if (sel) {
+              if (sel.value === 'ZOOT') sel.classList.add('is-zoot'); else sel.classList.remove('is-zoot');
+            }
           });
         }
       }
@@ -6077,7 +6319,7 @@
           h += '<div class="event-bet-row">';
           h += '<label>Bet:</label>';
           h += '<input type="number" class="sports-bet-amount" placeholder="0.5" min="0.001" step="0.001" value="0.5" />';
-          h += '<span class="sol-label">SOL</span>';
+          h += '<select class="currency-select sports-currency"><option value="SOL">SOL</option><option value="ZOOT">$ZOOT</option></select>';
           h += '<button class="btn-bet-team home-bet" data-event-id="' + ev.id + '" data-pick="home" data-team="' + ev.homeTeam + '" data-match="' + ev.name + '" data-league="' + ev.league + '" data-sport-key="' + ev.sportKey + '">' + ev.homeAbbr + '</button>';
           if (hasDraw) {
             h += '<button class="btn-bet-team draw-bet" data-event-id="' + ev.id + '" data-pick="draw" data-team="Draw" data-match="' + ev.name + '" data-league="' + ev.league + '" data-sport-key="' + ev.sportKey + '">Draw</button>';
@@ -6098,27 +6340,69 @@
 
           sock.on('sports_bet_created', function(data) {
             var payout = (data.betAmount * 1.8).toFixed(3);
-            App.showToast('Sports bet of ' + data.betAmount + ' SOL placed! Win ' + payout + ' SOL (1.8x). Waiting for opponent...', 'info');
+            var cur = data.currency === 'ZOOT' ? '$ZOOT' : 'SOL';
+            App.showToast('Sports bet of ' + data.betAmount + ' ' + cur + ' placed! Win ' + payout + ' ' + cur + ' (1.8x). Waiting for opponent...', 'info');
           });
 
           sock.on('sports_bet_accepted', function(data) {
             var payout = data.payout ? data.payout.toFixed(3) : '?';
-            App.showToast('Bet accepted on ' + data.matchName + '! Winner gets ' + payout + ' SOL (1.8x).', 'info');
+            var cur = data.currency === 'ZOOT' ? '$ZOOT' : 'SOL';
+            App.showToast('Bet accepted on ' + data.matchName + '! Winner gets ' + payout + ' ' + cur + ' (1.8x).', 'info');
           });
 
           sock.on('sports_bet_matched', function(data) {
             var payout = data.payout ? data.payout.toFixed(3) : '?';
-            App.showToast(data.acceptorName + ' accepted your sports bet! Winner gets ' + payout + ' SOL.', 'info');
+            var cur = data.currency === 'ZOOT' ? '$ZOOT' : 'SOL';
+            App.showToast(data.acceptorName + ' accepted your sports bet! Winner gets ' + payout + ' ' + cur + '.', 'info');
           });
         }, 500);
+      }
+
+      async function buildAndSendPayment(currency, uiAmount, btn) {
+        var escrowAddr = App.getEscrow();
+        var provider = PhantomWallet.getProvider();
+        if (!provider || !provider.publicKey) throw new Error('Wallet not connected \u2014 reconnect Phantom');
+        var web3 = window.solanaWeb3;
+        if (!web3) throw new Error('Solana library not loaded \u2014 refresh page');
+        var connection = new web3.Connection(PhantomWallet.getRpcUrl(), 'confirmed');
+        var fromPubkey = provider.publicKey;
+
+        var transaction;
+        if (currency === 'ZOOT') {
+          if (!App.getZootMint()) throw new Error('$ZOOT not initialized \u2014 please refresh');
+          transaction = await SplToken.buildTransferTransaction(connection, fromPubkey, escrowAddr, uiAmount);
+        } else {
+          var toPubkey = new web3.PublicKey(escrowAddr);
+          var lamports = Math.floor(uiAmount * web3.LAMPORTS_PER_SOL);
+          transaction = new web3.Transaction().add(
+            web3.SystemProgram.transfer({ fromPubkey: fromPubkey, toPubkey: toPubkey, lamports: lamports })
+          );
+        }
+        transaction.feePayer = fromPubkey;
+
+        if (btn) btn.textContent = 'Getting blockhash...';
+        var bh = await connection.getLatestBlockhash('confirmed');
+        transaction.recentBlockhash = bh.blockhash;
+
+        if (btn) btn.textContent = 'Sign in Phantom...';
+        var signed = await provider.signTransaction(transaction);
+
+        if (btn) btn.textContent = 'Sending tx...';
+        var signature = await connection.sendRawTransaction(signed.serialize());
+
+        if (btn) btn.textContent = 'Confirming tx...';
+        await connection.confirmTransaction(signature, 'confirmed');
+        return signature;
       }
 
       async function handleCreateBet(btn) {
         var card = btn.closest('.event-card') || btn.closest('.esport-card');
         var amountInput = card.querySelector('.sports-bet-amount') || card.querySelector('.esports-bet-amount');
+        var currencySel = card.querySelector('.sports-currency');
+        var currency = currencySel ? currencySel.value : 'SOL';
         var amount = parseFloat(amountInput.value);
-        if (isNaN(amount) || amount < 0.001) {
-          App.showToast('Enter a valid bet amount (min 0.001 SOL)', 'error');
+        if (isNaN(amount) || amount <= 0) {
+          App.showToast('Enter a valid bet amount', 'error');
           return;
         }
 
@@ -6129,7 +6413,8 @@
         var walletAddr = typeof PhantomWallet !== 'undefined' ? PhantomWallet.getPublicKey() : null;
         if (!walletAddr) { App.showToast('Connect your wallet first!', 'error'); return; }
 
-        if (amount > App.getBalance()) { App.showToast('Not enough SOL in your wallet!', 'error'); return; }
+        var balanceNeeded = currency === 'ZOOT' ? App.getZootBalance() : App.getBalance();
+        if (amount > balanceNeeded) { App.showToast('Not enough ' + (currency === 'ZOOT' ? '$ZOOT' : 'SOL') + ' in your wallet!', 'error'); return; }
 
         var originalText = btn.textContent;
         btn.disabled = true;
@@ -6141,7 +6426,8 @@
           sportKey: btn.dataset.sportKey,
           pick: btn.dataset.pick,
           teamName: btn.dataset.team,
-          betAmount: amount
+          betAmount: amount,
+          currency: currency
         };
 
         if (App.isTest()) {
@@ -6156,34 +6442,7 @@
         btn.textContent = 'Confirm in Phantom...';
 
         try {
-          var provider = PhantomWallet.getProvider();
-          if (!provider || !provider.publicKey) throw new Error('Wallet not connected \u2014 reconnect Phantom');
-          var web3 = window.solanaWeb3;
-          if (!web3) throw new Error('Solana library not loaded \u2014 refresh page');
-
-          var connection = new web3.Connection(PhantomWallet.getRpcUrl(), 'confirmed');
-          var fromPubkey = provider.publicKey;
-          var toPubkey = new web3.PublicKey(escrowAddress);
-          var lamports = Math.floor(amount * web3.LAMPORTS_PER_SOL);
-
-          var transaction = new web3.Transaction().add(
-            web3.SystemProgram.transfer({ fromPubkey: fromPubkey, toPubkey: toPubkey, lamports: lamports })
-          );
-          transaction.feePayer = fromPubkey;
-
-          btn.textContent = 'Getting blockhash...';
-          var bh = await connection.getLatestBlockhash('confirmed');
-          transaction.recentBlockhash = bh.blockhash;
-
-          btn.textContent = 'Sign in Phantom...';
-          var signed = await provider.signTransaction(transaction);
-
-          btn.textContent = 'Sending bet...';
-          var signature = await connection.sendRawTransaction(signed.serialize());
-
-          btn.textContent = 'Confirming tx...';
-          await connection.confirmTransaction(signature, 'confirmed');
-
+          var signature = await buildAndSendPayment(currency, amount, btn);
           payload.txSignature = signature;
           sock.emit('create_sports_bet', payload);
 
@@ -6203,6 +6462,7 @@
       async function handleAcceptBet(btn) {
         var betId = btn.dataset.betId;
         var betAmount = parseFloat(btn.dataset.betAmount);
+        var currency = btn.dataset.currency || 'SOL';
         var escrowAddress = App.getEscrow();
         var sock = App.getSocket();
         if (!escrowAddress || !sock) { App.showToast('Server not ready, try again', 'error'); return; }
@@ -6210,7 +6470,8 @@
         var walletAddr = typeof PhantomWallet !== 'undefined' ? PhantomWallet.getPublicKey() : null;
         if (!walletAddr) { App.showToast('Connect your wallet first!', 'error'); return; }
 
-        if (betAmount > App.getBalance()) { App.showToast('Not enough SOL in your wallet!', 'error'); return; }
+        var balanceNeeded = currency === 'ZOOT' ? App.getZootBalance() : App.getBalance();
+        if (betAmount > balanceNeeded) { App.showToast('Not enough ' + (currency === 'ZOOT' ? '$ZOOT' : 'SOL') + ' in your wallet!', 'error'); return; }
 
         btn.disabled = true;
         btn.textContent = 'Joining...';
@@ -6240,36 +6501,7 @@
         }
 
         try {
-          var provider = PhantomWallet.getProvider();
-          if (!provider || !provider.publicKey) throw new Error('Wallet not connected \u2014 reconnect Phantom');
-
-          btn.textContent = 'Confirm in Phantom...';
-          var web3 = window.solanaWeb3;
-          if (!web3) throw new Error('Solana library not loaded \u2014 refresh page');
-
-          var connection = new web3.Connection(PhantomWallet.getRpcUrl(), 'confirmed');
-          var fromPubkey = provider.publicKey;
-          var toPubkey = new web3.PublicKey(escrowAddress);
-          var lamports = Math.floor(betAmount * web3.LAMPORTS_PER_SOL);
-
-          var transaction = new web3.Transaction().add(
-            web3.SystemProgram.transfer({ fromPubkey: fromPubkey, toPubkey: toPubkey, lamports: lamports })
-          );
-          transaction.feePayer = fromPubkey;
-
-          btn.textContent = 'Getting blockhash...';
-          var bh = await connection.getLatestBlockhash('confirmed');
-          transaction.recentBlockhash = bh.blockhash;
-
-          btn.textContent = 'Sign in Phantom...';
-          var signed = await provider.signTransaction(transaction);
-
-          btn.textContent = 'Sending tx...';
-          var signature = await connection.sendRawTransaction(signed.serialize());
-
-          btn.textContent = 'Confirming tx...';
-          await connection.confirmTransaction(signature, 'confirmed');
-
+          var signature = await buildAndSendPayment(currency, betAmount, btn);
           sock.emit('accept_sports_bet', { betId: betId, txSignature: signature });
           btn.textContent = '\u2713 Matched!';
           btn.style.background = 'var(--green)';
@@ -6312,14 +6544,14 @@
           html += '<div class="sbc-event"><div class="sbc-event-name">' + b.matchName + '</div>';
           html += '<div class="sbc-event-league">' + b.league + '</div></div>';
           html += '<span class="sbc-pick ' + b.pick + '">' + b.teamName + '</span>';
-          html += '<span class="sbc-amount">' + b.betAmount + ' SOL</span>';
+          html += '<span class="sbc-amount">' + b.betAmount + ' ' + (b.currency === 'ZOOT' ? '$ZOOT' : 'SOL') + '</span>';
           html += '<span class="multiplier-badge" style="font-size:0.6rem;">1.8x</span>';
           html += '<span class="sbc-user">by ' + b.creatorName + '</span>';
 
           if (isOwn) {
             html += '<button class="btn-accept-sports" disabled style="opacity:0.5;cursor:default;">Your Bet</button>';
           } else {
-            html += '<button class="btn-accept-sports" data-bet-id="' + b.id + '" data-bet-amount="' + b.betAmount + '">Accept</button>';
+            html += '<button class="btn-accept-sports" data-bet-id="' + b.id + '" data-bet-amount="' + b.betAmount + '" data-currency="' + (b.currency || 'SOL') + '">Accept</button>';
           }
 
           if (ev && ev.state !== 'upcoming') {
@@ -6551,7 +6783,7 @@
         h += '<div class="esport-bet-row">';
         h += '<label>Bet:</label>';
         h += '<input type="number" class="esports-bet-amount" placeholder="0.5" min="0.001" step="0.001" value="0.5" />';
-        h += '<span class="sol-label">SOL</span>';
+        h += '<select class="currency-select sports-currency"><option value="SOL">SOL</option><option value="ZOOT">$ZOOT</option></select>';
         h += '<button class="btn-bet-esport team1" data-event-id="' + matchId + '" data-pick="home" data-team="' + t1Name.replace(/"/g, '&quot;') + '" data-match="' + matchName.replace(/"/g, '&quot;') + '" data-league="' + (league + ' - ' + gameName).replace(/"/g, '&quot;') + '" data-sport-key="esports">' + t1Name + '</button>';
         h += '<button class="btn-bet-esport team2" data-event-id="' + matchId + '" data-pick="away" data-team="' + t2Name.replace(/"/g, '&quot;') + '" data-match="' + matchName.replace(/"/g, '&quot;') + '" data-league="' + (league + ' - ' + gameName).replace(/"/g, '&quot;') + '" data-sport-key="esports">' + t2Name + '</button>';
         h += '</div>';
