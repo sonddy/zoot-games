@@ -1,0 +1,25 @@
+{
+  "appId": "com.zootgames.app",
+  "appName": "Zoot Games",
+  "webDir": "mobile-shell",
+  "server": {
+    "url": "https://zoot-games.onrender.com",
+    "cleartext": false,
+    "androidScheme": "https",
+    "iosScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "ios": {
+    "contentInset": "always",
+    "scrollEnabled": true
+  },
+  "plugins": {
+    "App": {
+      "launchUrl": ""
+    }
+  }
+}

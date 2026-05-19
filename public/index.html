@@ -2485,6 +2485,54 @@
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bs58@5.0.0/+esm" type="module" onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/bs58@4.0.1/index.js';document.head.appendChild(s);"></script>
+  <script>
+    // Provide a tiny bs58 fallback if the ESM/UMD bundles fail to load
+    window.__bs58Promise = (async function() {
+      try {
+        var mod = await import('https://cdn.jsdelivr.net/npm/bs58@5.0.0/+esm');
+        return mod.default || mod;
+      } catch (e) {
+        // Manual base58 encoder/decoder (subset for our needs)
+        var ALPHA = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+        function encode(buf) {
+          var bytes = new Uint8Array(buf);
+          var digits = [0];
+          for (var i = 0; i < bytes.length; i++) {
+            var carry = bytes[i];
+            for (var j = 0; j < digits.length; j++) {
+              carry += digits[j] << 8;
+              digits[j] = carry % 58;
+              carry = Math.floor(carry / 58);
+            }
+            while (carry) { digits.push(carry % 58); carry = Math.floor(carry / 58); }
+          }
+          var out = '';
+          for (var k = 0; k < bytes.length && bytes[k] === 0; k++) out += '1';
+          for (var l = digits.length - 1; l >= 0; l--) out += ALPHA[digits[l]];
+          return out;
+        }
+        function decode(str) {
+          var bytes = [0];
+          for (var i = 0; i < str.length; i++) {
+            var c = ALPHA.indexOf(str[i]);
+            if (c < 0) throw new Error('invalid base58 char ' + str[i]);
+            var carry = c;
+            for (var j = 0; j < bytes.length; j++) {
+              carry += bytes[j] * 58;
+              bytes[j] = carry & 0xff;
+              carry >>= 8;
+            }
+            while (carry) { bytes.push(carry & 0xff); carry >>= 8; }
+          }
+          for (var k = 0; k < str.length && str[k] === '1'; k++) bytes.push(0);
+          return new Uint8Array(bytes.reverse());
+        }
+        return { encode: encode, decode: decode };
+      }
+    })();
+  </script>
   <script>
     // ════════════════════════════════════════
     // GAME SOUNDS (Web Audio API)
@@ -2572,6 +2620,10 @@
       var publicKey = null;
       var network = 'mainnet-beta';
 
+      function isNativeMobile() {
+        return typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+      }
+
       function getProvider() {
         if (window.solana && window.solana.isPhantom) return window.solana;
         if (window.phantom && window.phantom.solana && window.phantom.solana.isPhantom) return window.phantom.solana;
@@ -2579,6 +2631,10 @@
       }
 
       async function connect() {
+        if (isNativeMobile()) {
+          publicKey = await PhantomMobile.connect();
+          return publicKey;
+        }
         provider = getProvider();
         if (!provider) throw new Error('Phantom wallet not found. Please install it from phantom.app');
         var resp = await provider.connect({ onlyIfTrusted: false });
@@ -2587,12 +2643,16 @@
       }
 
       function disconnect() {
+        if (isNativeMobile()) { PhantomMobile.disconnect(); publicKey = null; return; }
         if (provider) try { provider.disconnect(); } catch(_){}
         publicKey = null;
         provider = null;
       }
 
-      function getPublicKey() { return publicKey; }
+      function getPublicKey() {
+        if (isNativeMobile()) return PhantomMobile.getPublicKey() || publicKey;
+        return publicKey;
+      }
       function getProviderRef() { return provider; }
       function getNetwork() { return network; }
       function setNetwork(n) { network = n; }
@@ -2608,7 +2668,287 @@
         return addr.length <= 12 ? addr : addr.slice(0, 6) + '...' + addr.slice(-4);
       }
 
-      return { connect: connect, disconnect: disconnect, getPublicKey: getPublicKey, getProvider: getProviderRef, shortenAddress: shortenAddress, getRpcUrl: getRpcUrl, getNetwork: getNetwork, setNetwork: setNetwork };
+      /**
+       * Sign + send a transaction. On web, uses provider.signTransaction +
+       * connection.sendRawTransaction. On native mobile, uses Phantom's
+       * signAndSendTransaction deeplink (Phantom broadcasts the tx itself).
+       * Returns the transaction signature in both paths.
+       */
+      async function signAndSend(transaction, connection, fromPubkey) {
+        if (isNativeMobile()) {
+          if (!transaction.feePayer) transaction.feePayer = fromPubkey;
+          if (!transaction.recentBlockhash) {
+            var bh = await connection.getLatestBlockhash('confirmed');
+            transaction.recentBlockhash = bh.blockhash;
+          }
+          return PhantomMobile.signAndSendTransaction(transaction);
+        }
+        if (!provider) provider = getProvider();
+        if (!provider) throw new Error('Phantom wallet not found');
+        if (!transaction.feePayer) transaction.feePayer = fromPubkey;
+        if (!transaction.recentBlockhash) {
+          var bh2 = await connection.getLatestBlockhash('confirmed');
+          transaction.recentBlockhash = bh2.blockhash;
+        }
+        var signed = await provider.signTransaction(transaction);
+        return connection.sendRawTransaction(signed.serialize());
+      }
+
+      return {
+        isNativeMobile: isNativeMobile,
+        connect: connect, disconnect: disconnect,
+        getPublicKey: getPublicKey, getProvider: getProviderRef,
+        shortenAddress: shortenAddress, getRpcUrl: getRpcUrl,
+        getNetwork: getNetwork, setNetwork: setNetwork,
+        signAndSend: signAndSend,
+      };
+    })();
+
+    // ════════════════════════════════════════
+    // PHANTOM MOBILE (Capacitor deeplink protocol)
+    // ════════════════════════════════════════
+    // Phantom mobile doesn't inject window.solana into arbitrary WebViews.
+    // Instead it exposes an encrypted deeplink protocol:
+    // https://docs.phantom.com/phantom-deeplinks
+    // This module implements connect + signTransaction via that protocol,
+    // matching the surface of PhantomWallet so the rest of the app is unchanged.
+    var PhantomMobile = (function() {
+      var REDIRECT_BASE = 'zootgames://';
+      var dappKeypair = null;
+      var session = null;
+      var phantomEncPubKey = null;
+      var sharedSecret = null;
+      var userPubKey = null;
+      var pendingRequests = {};
+      var bs58Cached = null;
+
+      function isNative() {
+        return typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+      }
+
+      async function bs58() {
+        if (bs58Cached) return bs58Cached;
+        bs58Cached = await window.__bs58Promise;
+        return bs58Cached;
+      }
+
+      function ensureKeypair() {
+        if (dappKeypair) return dappKeypair;
+        var stored = null;
+        try { stored = localStorage.getItem('zg_dapp_keypair'); } catch (_) {}
+        if (stored) {
+          try {
+            var parsed = JSON.parse(stored);
+            dappKeypair = {
+              publicKey: new Uint8Array(parsed.publicKey),
+              secretKey: new Uint8Array(parsed.secretKey),
+            };
+            return dappKeypair;
+          } catch (_) {}
+        }
+        dappKeypair = nacl.box.keyPair();
+        try {
+          localStorage.setItem('zg_dapp_keypair', JSON.stringify({
+            publicKey: Array.from(dappKeypair.publicKey),
+            secretKey: Array.from(dappKeypair.secretKey),
+          }));
+        } catch (_) {}
+        return dappKeypair;
+      }
+
+      async function buildConnectUrl() {
+        var b58 = await bs58();
+        var kp = ensureKeypair();
+        var params = new URLSearchParams({
+          dapp_encryption_public_key: b58.encode(kp.publicKey),
+          cluster: 'mainnet-beta',
+          app_url: window.location.origin,
+          redirect_link: REDIRECT_BASE + 'onPhantomConnect',
+        });
+        return 'https://phantom.app/ul/v1/connect?' + params.toString();
+      }
+
+      async function buildSignAndSendUrl(transaction) {
+        if (!session || !sharedSecret) throw new Error('Phantom not connected');
+        var b58 = await bs58();
+        var serialized = transaction.serialize({ requireAllSignatures: false, verifySignatures: false });
+        var payload = {
+          session: session,
+          transaction: b58.encode(serialized),
+        };
+        var payloadBytes = new TextEncoder().encode(JSON.stringify(payload));
+        var nonce = nacl.randomBytes(24);
+        var encrypted = nacl.box.after(payloadBytes, nonce, sharedSecret);
+        var kp = ensureKeypair();
+        var params = new URLSearchParams({
+          dapp_encryption_public_key: b58.encode(kp.publicKey),
+          nonce: b58.encode(nonce),
+          redirect_link: REDIRECT_BASE + 'onPhantomSign',
+          payload: b58.encode(encrypted),
+        });
+        return 'https://phantom.app/ul/v1/signAndSendTransaction?' + params.toString();
+      }
+
+      async function openPhantomUrl(url) {
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App && window.Capacitor.Plugins.App.openUrl) {
+          await window.Capacitor.Plugins.App.openUrl({ url: url });
+          return;
+        }
+        window.location.href = url;
+      }
+
+      async function handleConnectCallback(params) {
+        var b58 = await bs58();
+        if (params.get('errorCode')) {
+          var msg = params.get('errorMessage') || 'Phantom connection rejected';
+          var pr = pendingRequests.connect;
+          if (pr) { delete pendingRequests.connect; pr.reject(new Error(msg)); }
+          return;
+        }
+        var phantomPubB58 = params.get('phantom_encryption_public_key');
+        var nonceB58 = params.get('nonce');
+        var dataB58 = params.get('data');
+        if (!phantomPubB58 || !nonceB58 || !dataB58) {
+          var pr2 = pendingRequests.connect;
+          if (pr2) { delete pendingRequests.connect; pr2.reject(new Error('Invalid Phantom callback')); }
+          return;
+        }
+        phantomEncPubKey = b58.decode(phantomPubB58);
+        var kp = ensureKeypair();
+        sharedSecret = nacl.box.before(phantomEncPubKey, kp.secretKey);
+        var decrypted = nacl.box.open.after(b58.decode(dataB58), b58.decode(nonceB58), sharedSecret);
+        if (!decrypted) {
+          var pr3 = pendingRequests.connect;
+          if (pr3) { delete pendingRequests.connect; pr3.reject(new Error('Failed to decrypt Phantom response')); }
+          return;
+        }
+        var json = JSON.parse(new TextDecoder().decode(decrypted));
+        session = json.session;
+        userPubKey = json.public_key;
+        try {
+          localStorage.setItem('zg_phantom_session', JSON.stringify({
+            session: session,
+            userPubKey: userPubKey,
+            phantomEncPubKey: Array.from(phantomEncPubKey),
+            sharedSecret: Array.from(sharedSecret),
+          }));
+        } catch (_) {}
+        var pr4 = pendingRequests.connect;
+        if (pr4) { delete pendingRequests.connect; pr4.resolve(userPubKey); }
+      }
+
+      async function handleSignCallback(params) {
+        var b58 = await bs58();
+        var pr = pendingRequests.sign;
+        if (!pr) return;
+        delete pendingRequests.sign;
+        if (params.get('errorCode')) {
+          pr.reject(new Error(params.get('errorMessage') || 'Phantom signing rejected'));
+          return;
+        }
+        var nonceB58 = params.get('nonce');
+        var dataB58 = params.get('data');
+        if (!nonceB58 || !dataB58 || !sharedSecret) {
+          pr.reject(new Error('Invalid Phantom sign callback'));
+          return;
+        }
+        var decrypted = nacl.box.open.after(b58.decode(dataB58), b58.decode(nonceB58), sharedSecret);
+        if (!decrypted) { pr.reject(new Error('Failed to decrypt sign response')); return; }
+        var json = JSON.parse(new TextDecoder().decode(decrypted));
+        pr.resolve(json.signature);
+      }
+
+      async function handleIncomingDeeplink(url) {
+        try {
+          var u = new URL(url);
+          var host = u.host || u.pathname.replace(/^\/+/, '').split('/')[0];
+          var params = u.searchParams;
+          if (host === 'onPhantomConnect') await handleConnectCallback(params);
+          else if (host === 'onPhantomSign') await handleSignCallback(params);
+        } catch (e) {
+          console.error('Deeplink parse error:', e);
+        }
+      }
+
+      function restoreSession() {
+        try {
+          var raw = localStorage.getItem('zg_phantom_session');
+          if (!raw) return false;
+          var s = JSON.parse(raw);
+          session = s.session;
+          userPubKey = s.userPubKey;
+          phantomEncPubKey = new Uint8Array(s.phantomEncPubKey);
+          sharedSecret = new Uint8Array(s.sharedSecret);
+          return !!userPubKey;
+        } catch (_) { return false; }
+      }
+
+      async function connect() {
+        if (restoreSession() && userPubKey) return userPubKey;
+        var url = await buildConnectUrl();
+        var promise = new Promise(function(resolve, reject) {
+          pendingRequests.connect = { resolve: resolve, reject: reject };
+          setTimeout(function() {
+            if (pendingRequests.connect === promise) {
+              delete pendingRequests.connect;
+              reject(new Error('Phantom connection timed out — please try again'));
+            }
+          }, 120000);
+        });
+        await openPhantomUrl(url);
+        return promise;
+      }
+
+      function disconnect() {
+        session = null;
+        sharedSecret = null;
+        phantomEncPubKey = null;
+        userPubKey = null;
+        try { localStorage.removeItem('zg_phantom_session'); } catch (_) {}
+      }
+
+      async function signAndSendTransaction(transaction) {
+        if (!session) throw new Error('Wallet not connected');
+        var url = await buildSignAndSendUrl(transaction);
+        var promise = new Promise(function(resolve, reject) {
+          pendingRequests.sign = { resolve: resolve, reject: reject };
+          setTimeout(function() {
+            if (pendingRequests.sign) {
+              delete pendingRequests.sign;
+              reject(new Error('Phantom signing timed out'));
+            }
+          }, 120000);
+        });
+        await openPhantomUrl(url);
+        return promise;
+      }
+
+      function getPublicKey() { return userPubKey; }
+
+      function init() {
+        if (!isNative()) return;
+        restoreSession();
+        var App = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+        if (App && App.addListener) {
+          App.addListener('appUrlOpen', function(data) {
+            if (data && data.url && data.url.indexOf(REDIRECT_BASE) === 0) {
+              handleIncomingDeeplink(data.url);
+            }
+          });
+          App.getLaunchUrl().then(function(res) {
+            if (res && res.url && res.url.indexOf(REDIRECT_BASE) === 0) handleIncomingDeeplink(res.url);
+          }).catch(function(){});
+        }
+      }
+
+      return {
+        isNative: isNative,
+        init: init,
+        connect: connect,
+        disconnect: disconnect,
+        signAndSendTransaction: signAndSendTransaction,
+        getPublicKey: getPublicKey,
+      };
     })();
 
     // ════════════════════════════════════════
@@ -5368,6 +5708,7 @@
       }
 
       function init() {
+        try { PhantomMobile.init(); } catch (e) { console.warn('PhantomMobile init:', e); }
         setupConnectScreen();
         setupLobbyScreen();
         setupCategoryTabs();
@@ -5375,6 +5716,14 @@
         setupGameOverlay();
         setupMenuDropdowns();
         SportsBetting.init();
+        if (PhantomWallet.isNativeMobile()) tryAutoReconnect();
+      }
+
+      async function tryAutoReconnect() {
+        try {
+          var pk = PhantomMobile.getPublicKey();
+          if (pk) connectToServer();
+        } catch (_) {}
       }
 
       function connectToServer() {
@@ -5550,13 +5899,13 @@
       }
 
       async function sendBetPayment(currency, uiAmount, btn) {
-        var provider = PhantomWallet.getProvider();
-        if (!provider || !provider.publicKey) throw new Error('Wallet not connected — reconnect Phantom');
         var web3 = window.solanaWeb3;
         if (!web3) throw new Error('Solana library not loaded — refresh page');
         solConnection = new web3.Connection(PhantomWallet.getRpcUrl(), 'confirmed');
 
-        var fromPubkey = provider.publicKey;
+        var walletPk = PhantomWallet.getPublicKey();
+        if (!walletPk) throw new Error('Wallet not connected — reconnect Phantom');
+        var fromPubkey = new web3.PublicKey(walletPk);
         var toAddress = escrowAddress;
 
         var transaction;
@@ -5571,15 +5920,9 @@
           );
         }
         transaction.feePayer = fromPubkey;
-        if (btn) btn.textContent = 'Getting blockhash...';
-        var bh = await solConnection.getLatestBlockhash('confirmed');
-        transaction.recentBlockhash = bh.blockhash;
+        if (btn) btn.textContent = PhantomWallet.isNativeMobile() ? 'Opening Phantom...' : 'Sign in Phantom...';
 
-        if (btn) btn.textContent = 'Sign in Phantom...';
-        var signed = await provider.signTransaction(transaction);
-
-        if (btn) btn.textContent = 'Sending tx...';
-        var signature = await solConnection.sendRawTransaction(signed.serialize());
+        var signature = await PhantomWallet.signAndSend(transaction, solConnection, fromPubkey);
 
         if (btn) btn.textContent = 'Confirming tx...';
         await solConnection.confirmTransaction(signature, 'confirmed');
@@ -6360,12 +6703,12 @@
 
       async function buildAndSendPayment(currency, uiAmount, btn) {
         var escrowAddr = App.getEscrow();
-        var provider = PhantomWallet.getProvider();
-        if (!provider || !provider.publicKey) throw new Error('Wallet not connected \u2014 reconnect Phantom');
         var web3 = window.solanaWeb3;
         if (!web3) throw new Error('Solana library not loaded \u2014 refresh page');
+        var walletPk = PhantomWallet.getPublicKey();
+        if (!walletPk) throw new Error('Wallet not connected \u2014 reconnect Phantom');
+        var fromPubkey = new web3.PublicKey(walletPk);
         var connection = new web3.Connection(PhantomWallet.getRpcUrl(), 'confirmed');
-        var fromPubkey = provider.publicKey;
 
         var transaction;
         if (currency === 'ZOOT') {
@@ -6379,16 +6722,9 @@
           );
         }
         transaction.feePayer = fromPubkey;
+        if (btn) btn.textContent = PhantomWallet.isNativeMobile() ? 'Opening Phantom...' : 'Sign in Phantom...';
 
-        if (btn) btn.textContent = 'Getting blockhash...';
-        var bh = await connection.getLatestBlockhash('confirmed');
-        transaction.recentBlockhash = bh.blockhash;
-
-        if (btn) btn.textContent = 'Sign in Phantom...';
-        var signed = await provider.signTransaction(transaction);
-
-        if (btn) btn.textContent = 'Sending tx...';
-        var signature = await connection.sendRawTransaction(signed.serialize());
+        var signature = await PhantomWallet.signAndSend(transaction, connection, fromPubkey);
 
         if (btn) btn.textContent = 'Confirming tx...';
         await connection.confirmTransaction(signature, 'confirmed');
