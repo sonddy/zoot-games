@@ -16,6 +16,7 @@ const {
   createTransferCheckedInstruction,
   TOKEN_PROGRAM_ID,
 } = require('@solana/spl-token');
+const persistence = require('./persistence');
 const DominoGame = require('./games/domino');
 const TicTacToeGame = require('./games/tictactoe');
 const MancalaGame = require('./games/mancala');
@@ -213,6 +214,73 @@ async function sendCurrency(currency, toAddress, amount) {
   return sendSOL(toAddress, amount);
 }
 
+/**
+ * Refund a user with automatic persistence-backed retry.
+ * Returns { ok: true, sig } if the payout went through immediately,
+ * or { ok: false, queued: true } if it failed and was queued for retry.
+ *
+ * Notifies the user via socket if they're currently connected.
+ */
+async function refundUser({ walletAddress, currency, amount, reason, socketId }) {
+  if (!walletAddress || !amount || amount <= 0) return { ok: false, error: 'Invalid refund' };
+  const cur = currency === 'ZOOT' ? 'ZOOT' : 'SOL';
+
+  if (TEST_MODE) {
+    return { ok: true, sig: 'test_refund_' + Date.now() };
+  }
+
+  try {
+    const sig = await sendCurrency(cur, walletAddress, amount);
+    if (socketId) {
+      const s = io.sockets.sockets.get(socketId);
+      if (s) s.emit('balance_update', { refreshWallet: true, msg: (reason ? reason + ' — ' : '') + 'Refunded ' + amount + ' ' + cur + '!' });
+    }
+    return { ok: true, sig };
+  } catch (e) {
+    console.error('Refund failed, queuing for retry:', e.message);
+    try {
+      await persistence.addPendingRefund({
+        walletAddress, currency: cur, amount,
+        reason: reason || 'refund',
+        retries: 0,
+        lastError: e.message,
+      });
+    } catch (_) {}
+    if (socketId) {
+      const s = io.sockets.sockets.get(socketId);
+      if (s) s.emit('balance_update', { refreshWallet: false, msg: 'Refund of ' + amount + ' ' + cur + ' queued — will retry automatically' });
+    }
+    return { ok: false, queued: true, error: e.message };
+  }
+}
+
+const REFUND_RETRY_INTERVAL_MS = 20000;
+const REFUND_MAX_RETRIES = 30;
+
+async function processPendingRefunds() {
+  if (!persistence.isEnabled()) return;
+  let list = [];
+  try { list = await persistence.listPendingRefunds(25); } catch (_) { return; }
+  for (const r of list) {
+    if ((r.retries || 0) > REFUND_MAX_RETRIES) continue;
+    try {
+      await sendCurrency(r.currency || 'SOL', r.walletAddress, r.amount);
+      await persistence.removePendingRefund(r.id);
+      console.log('Pending refund cleared:', r.amount, r.currency, '→', r.walletAddress);
+      for (const [sid, p] of players) {
+        if (p.walletAddress === r.walletAddress) {
+          const s = io.sockets.sockets.get(sid);
+          if (s) s.emit('balance_update', { refreshWallet: true, msg: 'Pending refund of ' + r.amount + ' ' + (r.currency || 'SOL') + ' processed!' });
+        }
+      }
+    } catch (e) {
+      console.warn('Pending refund retry failed (retries=' + (r.retries || 0) + '):', e.message);
+      try { await persistence.incrementRefundRetry(r.id, e.message); } catch (_) {}
+    }
+  }
+}
+setInterval(processPendingRefunds, REFUND_RETRY_INTERVAL_MS);
+
 async function verifySolPayment(signature, expectedAmount) {
   const tx = await solanaConnection.getTransaction(signature, {
     commitment: 'confirmed',
@@ -273,9 +341,26 @@ function createRoom(gameType, betAmount, player1Socket, currency) {
   return room;
 }
 
+async function persistActiveRoom(room) {
+  if (!persistence.isEnabled() || room.state !== 'playing') return;
+  const playerData = room.players.map(sid => {
+    const p = players.get(sid);
+    return p ? { socketId: sid, walletAddress: p.walletAddress, displayName: p.displayName } : null;
+  }).filter(Boolean);
+  await persistence.saveActiveRoom(room.id, {
+    gameType: room.gameType,
+    betAmount: room.betAmount,
+    currency: room.currency || 'SOL',
+    players: playerData,
+    options: room.options || {},
+    createdAt: room.createdAt,
+  });
+}
+
 async function handleGameOver(room, result) {
   clearTurnTimer(room);
   room.state = 'finished';
+  persistence.removeActiveRoom(room.id).catch(()=>{});
   const winnerIdx = result.winner;
   const pot = room.betAmount * 2;
   const houseCut = pot * HOUSE_FEE;
@@ -291,13 +376,15 @@ async function handleGameOver(room, result) {
         const winSock = io.sockets.sockets.get(winnerSocketId);
         if (winSock) winSock.emit('balance_update', { refreshWallet: true, msg: 'You won ' + payout.toFixed(3) + ' ' + currency + '!' });
       } catch (e) {
-        console.error('Payout error:', e.message);
+        console.error('Payout error, queuing for retry:', e.message);
+        try { await persistence.addPendingRefund({ walletAddress: winnerPlayer.walletAddress, currency, amount: payout, reason: 'Game payout', retries: 0, lastError: e.message }); } catch (_) {}
       }
       try {
         await sendCurrency(currency, HOUSE_WALLET, houseCut);
         console.log('House fee sent:', houseCut.toFixed(4), currency, 'to', HOUSE_WALLET);
       } catch (e) {
-        console.error('House fee transfer error:', e.message);
+        console.error('House fee transfer error, queuing:', e.message);
+        try { await persistence.addPendingRefund({ walletAddress: HOUSE_WALLET, currency, amount: houseCut, reason: 'House fee', retries: 0, lastError: e.message }); } catch (_) {}
       }
     }
     io.to(room.id).emit('game_over', {
@@ -310,13 +397,13 @@ async function handleGameOver(room, result) {
       for (const sid of room.players) {
         const p = players.get(sid);
         if (p) {
-          try {
-            await sendCurrency(currency, p.walletAddress, room.betAmount);
-            const s = io.sockets.sockets.get(sid);
-            if (s) s.emit('balance_update', { refreshWallet: true, msg: 'Draw — bet refunded!' });
-          } catch (e) {
-            console.error('Refund error:', e.message);
-          }
+          await refundUser({
+            walletAddress: p.walletAddress,
+            currency,
+            amount: room.betAmount,
+            reason: 'Draw',
+            socketId: sid,
+          });
         }
       }
     }
@@ -398,6 +485,7 @@ io.on('connection', (socket) => {
     if (matchQueue.has(queueKey)) {
       const waiting = matchQueue.get(queueKey);
       matchQueue.delete(queueKey);
+      persistence.removeQueueEntry(queueKey).catch(()=>{});
 
       const room = createRoom(gameType, bet, waiting.socketId, cur);
       room.options = { ...waiting.options, ...opts };
@@ -411,9 +499,18 @@ io.on('connection', (socket) => {
       if (sock1) sock1.join(room.id);
       socket.join(room.id);
 
+      persistActiveRoom(room).catch(()=>{});
       startGame(room);
     } else {
-      matchQueue.set(queueKey, { socketId: socket.id, bet, currency: cur, txSignature, options: opts, gameType, gridSize: gridSize || null });
+      const entry = {
+        socketId: socket.id,
+        walletAddress: player.walletAddress,
+        bet, currency: cur, txSignature, options: opts, gameType,
+        gridSize: gridSize || null,
+        createdAt: Date.now(),
+      };
+      matchQueue.set(queueKey, entry);
+      persistence.saveQueueEntry(queueKey, entry).catch(()=>{});
       socket.emit('waiting', { msg: 'Waiting for an opponent...', betAmount: bet, gameType, currency: cur });
     }
     broadcastLobby();
@@ -423,16 +520,17 @@ io.on('connection', (socket) => {
     for (const [key, val] of matchQueue) {
       if (val.socketId === socket.id) {
         const player = players.get(socket.id);
-        if (player && !TEST_MODE) {
-          try {
-            await sendCurrency(val.currency || 'SOL', player.walletAddress, val.bet);
-            socket.emit('balance_update', { refreshWallet: true, msg: 'Bet refunded to your wallet!' });
-          } catch (e) {
-            console.error('Refund error:', e.message);
-            socket.emit('error_msg', { msg: 'Refund failed: ' + e.message });
-          }
-        }
         matchQueue.delete(key);
+        persistence.removeQueueEntry(key).catch(()=>{});
+        if (player) {
+          await refundUser({
+            walletAddress: player.walletAddress,
+            currency: val.currency || 'SOL',
+            amount: val.bet,
+            reason: 'Search cancelled',
+            socketId: socket.id,
+          });
+        }
         break;
       }
     }
@@ -460,6 +558,7 @@ io.on('connection', (socket) => {
 
     if (!matchQueue.has(betId)) return socket.emit('error_msg', { msg: 'Bet was taken by someone else' });
     matchQueue.delete(betId);
+    persistence.removeQueueEntry(betId).catch(()=>{});
 
     const gameType = entry.gameType || betId.split('_')[0];
     const opts = entry.options || {};
@@ -477,6 +576,7 @@ io.on('connection', (socket) => {
     if (sock1) sock1.join(room.id);
     socket.join(room.id);
 
+    persistActiveRoom(room).catch(()=>{});
     startGame(room);
     broadcastLobby();
   });
@@ -514,7 +614,7 @@ io.on('connection', (socket) => {
     }
 
     const betId = 'sb_' + uuidv4().slice(0, 8);
-    sportsBets.set(betId, {
+    const sbEntry = {
       id: betId,
       eventId,
       matchName: matchName || 'Unknown Match',
@@ -530,7 +630,9 @@ io.on('connection', (socket) => {
       txSignature,
       createdAt: Date.now(),
       status: 'open',
-    });
+    };
+    sportsBets.set(betId, sbEntry);
+    persistence.saveSportsBet(betId, sbEntry).catch(()=>{});
 
     socket.emit('sports_bet_created', { betId, betAmount: bet, currency: cur });
     broadcastLobby();
@@ -560,6 +662,7 @@ io.on('connection', (socket) => {
     entry.acceptTxSignature = txSignature;
     entry.acceptorPick = entry.pick === 'home' ? 'away' : (entry.pick === 'away' ? 'home' : 'not-draw');
     entry.matchedAt = Date.now();
+    persistence.saveSportsBet(entry.id, entry).catch(()=>{});
 
     const pot = bet * 2;
     const houseCut = pot * HOUSE_FEE;
@@ -579,17 +682,16 @@ io.on('connection', (socket) => {
     const entry = sportsBets.get(betId);
     if (!entry || entry.creatorSocketId !== socket.id || entry.status !== 'open') return;
 
-    if (!TEST_MODE) {
-      try {
-        await sendCurrency(entry.currency || 'SOL', player.walletAddress, entry.betAmount);
-        socket.emit('balance_update', { refreshWallet: true, msg: 'Sports bet refunded!' });
-      } catch (e) {
-        console.error('Sports bet refund error:', e.message);
-        socket.emit('error_msg', { msg: 'Refund failed: ' + e.message });
-      }
-    }
-
     sportsBets.delete(betId);
+    persistence.removeSportsBet(betId).catch(()=>{});
+
+    await refundUser({
+      walletAddress: player.walletAddress,
+      currency: entry.currency || 'SOL',
+      amount: entry.betAmount,
+      reason: 'Sports bet cancelled',
+      socketId: socket.id,
+    });
     broadcastLobby();
   });
 
@@ -601,10 +703,17 @@ io.on('connection', (socket) => {
 
     for (const [key, val] of matchQueue) {
       if (val.socketId === socket.id) {
-        if (player && !TEST_MODE) {
-          try { await sendCurrency(val.currency || 'SOL', player.walletAddress, val.bet); } catch (e) { console.error('Refund on disconnect:', e.message); }
-        }
         matchQueue.delete(key);
+        persistence.removeQueueEntry(key).catch(()=>{});
+        if (player) {
+          await refundUser({
+            walletAddress: player.walletAddress,
+            currency: val.currency || 'SOL',
+            amount: val.bet,
+            reason: 'Disconnected while waiting',
+            socketId: null,
+          });
+        }
         break;
       }
     }
@@ -626,11 +735,17 @@ io.on('connection', (socket) => {
             await sendCurrency(currency, winnerPlayer.walletAddress, payout);
             const winSock = io.sockets.sockets.get(winnerSocketId);
             if (winSock) winSock.emit('balance_update', { refreshWallet: true, msg: 'Opponent left — you won ' + payout.toFixed(3) + ' ' + currency + '!' });
-          } catch (e) { console.error('Payout on disconnect:', e.message); }
+          } catch (e) {
+            console.error('Payout on disconnect, queuing:', e.message);
+            try { await persistence.addPendingRefund({ walletAddress: winnerPlayer.walletAddress, currency, amount: payout, reason: 'Opponent disconnect payout', retries: 0, lastError: e.message }); } catch (_) {}
+          }
           try {
             await sendCurrency(currency, HOUSE_WALLET, houseCut);
             console.log('House fee sent:', houseCut.toFixed(4), currency, 'to', HOUSE_WALLET);
-          } catch (e) { console.error('House fee on disconnect:', e.message); }
+          } catch (e) {
+            console.error('House fee on disconnect, queuing:', e.message);
+            try { await persistence.addPendingRefund({ walletAddress: HOUSE_WALLET, currency, amount: houseCut, reason: 'House fee', retries: 0, lastError: e.message }); } catch (_) {}
+          }
         }
 
         io.to(room.id).emit('game_over', {
@@ -639,16 +754,24 @@ io.on('connection', (socket) => {
           payout, currency, isDraw: false, reason: 'Opponent disconnected',
         });
         room.state = 'finished';
+        persistence.removeActiveRoom(room.id).catch(()=>{});
         setTimeout(() => cleanupRoom(room.id), 3000);
       }
     }
 
     for (const [sbId, sb] of sportsBets) {
       if (sb.creatorSocketId === socket.id && sb.status === 'open') {
-        if (player && !TEST_MODE) {
-          try { await sendCurrency(sb.currency || 'SOL', player.walletAddress, sb.betAmount); } catch (e) { console.error('Sports bet refund on disconnect:', e.message); }
-        }
         sportsBets.delete(sbId);
+        persistence.removeSportsBet(sbId).catch(()=>{});
+        if (player) {
+          await refundUser({
+            walletAddress: player.walletAddress,
+            currency: sb.currency || 'SOL',
+            amount: sb.betAmount,
+            reason: 'Disconnected before bet matched',
+            socketId: null,
+          });
+        }
       }
     }
 
@@ -765,7 +888,106 @@ function broadcastLobby() {
   io.emit('lobby_update', { waiting, activeGames, onlineCount: players.size, openSportsBets });
 }
 
+/**
+ * Recover from previous run: anything left in the persistence store is, by
+ * definition, orphaned — either a player was waiting for an opponent, or a
+ * game was active when the process died. Refund all of them; the funds are
+ * safely held in the escrow wallet and will be returned to the rightful
+ * owners. Pending refunds are kicked off immediately on boot.
+ */
+async function recoverFromPreviousRun() {
+  if (!persistence.isEnabled()) {
+    console.log('Persistence disabled — skipping startup recovery (set FIREBASE_SERVICE_ACCOUNT to enable).');
+    return;
+  }
+  console.log('Persistence enabled — running startup recovery...');
+
+  try {
+    const orphanQueue = await persistence.loadQueue();
+    if (orphanQueue.length) console.log('Found', orphanQueue.length, 'orphaned waiting bet(s) — refunding...');
+    for (const entry of orphanQueue) {
+      if (entry.walletAddress && entry.bet) {
+        await refundUser({
+          walletAddress: entry.walletAddress,
+          currency: entry.currency || 'SOL',
+          amount: entry.bet,
+          reason: 'Server restarted while you were waiting',
+          socketId: null,
+        });
+      }
+      await persistence.removeQueueEntry(entry.id);
+    }
+  } catch (e) { console.error('Recovery (queue) error:', e.message); }
+
+  try {
+    const orphanRooms = await persistence.loadActiveRooms();
+    if (orphanRooms.length) console.log('Found', orphanRooms.length, 'orphaned active room(s) — refunding both players...');
+    for (const r of orphanRooms) {
+      const list = r.players || [];
+      for (const p of list) {
+        if (p.walletAddress && r.betAmount) {
+          await refundUser({
+            walletAddress: p.walletAddress,
+            currency: r.currency || 'SOL',
+            amount: r.betAmount,
+            reason: 'Game interrupted by server restart',
+            socketId: null,
+          });
+        }
+      }
+      await persistence.removeActiveRoom(r.id);
+    }
+  } catch (e) { console.error('Recovery (active rooms) error:', e.message); }
+
+  try {
+    const orphanSports = await persistence.loadSportsBets();
+    let restored = 0, refunded = 0;
+    for (const sb of orphanSports) {
+      if (sb.status === 'open') {
+        sb.creatorSocketId = null;
+        sportsBets.set(sb.id, sb);
+        restored++;
+      } else if (sb.status === 'matched') {
+        for (const wallet of [sb.creatorWallet, sb.acceptorWallet]) {
+          if (wallet && sb.betAmount) {
+            await refundUser({
+              walletAddress: wallet,
+              currency: sb.currency || 'SOL',
+              amount: sb.betAmount,
+              reason: 'Sports bet interrupted by server restart',
+              socketId: null,
+            });
+          }
+        }
+        await persistence.removeSportsBet(sb.id);
+        refunded++;
+      }
+    }
+    if (restored) console.log('Restored', restored, 'open sports bet(s).');
+    if (refunded) console.log('Refunded', refunded, 'matched sports bet(s) from previous run.');
+  } catch (e) { console.error('Recovery (sports bets) error:', e.message); }
+
+  try {
+    const pendings = await persistence.listPendingRefunds(100);
+    if (pendings.length) console.log('Found', pendings.length, 'pending refund(s) from previous run — will retry automatically.');
+  } catch (_) {}
+
+  console.log('Startup recovery complete.');
+  processPendingRefunds().catch(()=>{});
+}
+
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', async () => {
   console.log(`ZG (Zoot Games) running on http://localhost:${PORT}`);
+  try { await recoverFromPreviousRun(); } catch (e) { console.error('Recovery failed:', e.message); }
+});
+
+app.get('/api/refunds/pending', async (req, res) => {
+  if (!persistence.isEnabled()) return res.json({ enabled: false, pending: [] });
+  try {
+    const list = await persistence.listPendingRefunds(50);
+    res.json({ enabled: true, pending: list });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
