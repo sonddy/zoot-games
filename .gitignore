@@ -2,8 +2,12 @@ node_modules/
 .env
 .DS_Store
 
+# Local-only assets (not for repo)
+background/
+
 # Capacitor / Android build artifacts
 android/.gradle/
+android/.idea/
 android/build/
 android/app/build/
 android/local.properties
