@@ -363,6 +363,37 @@
     }
     .currency-chip.sol { background: rgba(0,212,170,0.1); color: #00d4aa; border-color: rgba(0,212,170,0.35); }
 
+    .app-download-pill {
+      position: fixed; right: 1rem; bottom: 1.2rem; z-index: 9000;
+      display: flex; align-items: center; gap: 0.7rem;
+      padding: 0.7rem 1rem 0.7rem 0.9rem;
+      background: linear-gradient(135deg, #ffc107, #ff9c2c);
+      color: #0b0f1c; border-radius: 999px;
+      box-shadow: 0 10px 30px rgba(255,193,7,0.4), 0 2px 8px rgba(0,0,0,0.4);
+      font-family: inherit; cursor: pointer; user-select: none;
+      animation: adpIn 0.4s ease-out;
+    }
+    @keyframes adpIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .app-download-pill:hover { filter: brightness(1.08); transform: translateY(-1px); transition: all 0.15s; }
+    .adp-icon { font-size: 1.3rem; }
+    .adp-text { display: flex; flex-direction: column; gap: 0.1rem; line-height: 1.15; }
+    .adp-title { font-size: 0.85rem; font-weight: 800; letter-spacing: 0.01em; }
+    .adp-sub { font-size: 0.65rem; opacity: 0.75; font-weight: 600; }
+    .adp-close {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: rgba(11,15,28,0.18); border: none; color: #0b0f1c;
+      font-size: 1rem; line-height: 1; cursor: pointer; padding: 0;
+      display: flex; align-items: center; justify-content: center;
+      margin-left: 0.2rem; font-weight: 700;
+    }
+    .adp-close:hover { background: rgba(11,15,28,0.32); }
+    @media (max-width: 480px) {
+      .app-download-pill { right: 0.7rem; bottom: 0.7rem; padding: 0.55rem 0.85rem 0.55rem 0.7rem; }
+      .adp-title { font-size: 0.78rem; }
+      .adp-sub { display: none; }
+    }
+    .menu-item-download .menu-item-icon { color: #ffc107; }
+
     .pending-bets-section {
       margin-bottom: 2.5rem;
       background: linear-gradient(135deg, var(--bg2), rgba(21,31,50,0.6));
@@ -1849,6 +1880,45 @@
 </head>
 <body>
 
+  <!-- FLOATING DOWNLOAD BADGE (hidden by default; revealed by JS when relevant) -->
+  <div id="app-download-pill" class="app-download-pill" style="display:none;" role="button" tabindex="0" aria-label="Get the Android app">
+    <span class="adp-icon">&#128241;</span>
+    <span class="adp-text">
+      <span class="adp-title">Get the Android App</span>
+      <span class="adp-sub" id="adp-sub">Native experience &middot; same wallet</span>
+    </span>
+    <button class="adp-close" id="adp-close" aria-label="Dismiss">&times;</button>
+  </div>
+
+  <!-- DOWNLOAD MODAL -->
+  <div id="download-overlay" class="hiw-overlay">
+    <div class="hiw-modal" style="max-width:520px;">
+      <button class="hiw-close" id="download-close">&times;</button>
+      <div class="hiw-content">
+        <h2 style="text-align:center;color:#ffc107;margin-top:0;">Zoot Games for Android</h2>
+        <p style="text-align:center;color:#99a0b3;margin:0 0 1.5rem;">A native wrapper around the same game server you already use. Bets, $ZOOT, and SOL all work identically. Phantom Wallet bounces in via mobile deeplinks.</p>
+
+        <div id="download-status" style="text-align:center;padding:1.2rem;background:rgba(255,193,7,0.06);border:1px solid rgba(255,193,7,0.25);border-radius:10px;margin-bottom:1.2rem;">
+          <div style="font-size:0.85rem;color:#99a0b3;">Checking availability...</div>
+        </div>
+
+        <div style="background:#0f1426;border-radius:10px;padding:1rem;margin-bottom:1rem;">
+          <div style="font-size:0.85rem;color:#99a0b3;line-height:1.7;">
+            <strong style="color:#e6e9f2;">How to install:</strong><br />
+            1. Tap <strong>Download APK</strong> above.<br />
+            2. Open the downloaded file from your notifications.<br />
+            3. Android will ask to allow installs from your browser &mdash; tap <strong>Settings</strong> &rarr; toggle on.<br />
+            4. Tap <strong>Install</strong>. Open Zoot Games. Tap <strong>Connect Phantom Wallet</strong>.
+          </div>
+        </div>
+
+        <div style="font-size:0.75rem;color:#5a6178;text-align:center;line-height:1.5;">
+          iOS coming soon. For now iPhone players can keep using <a href="https://zootgames.org" style="color:#ffc107;">zootgames.org</a> &mdash; works great in mobile Safari and in Phantom's in-app browser.
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- CONNECT SCREEN -->
   <div id="screen-connect" class="screen active">
     <video class="video-bg" autoplay muted loop playsinline>
@@ -1901,6 +1971,10 @@
             <div class="menu-dropdown-divider"></div>
             <button class="menu-dropdown-item" data-menu="sports">
               <span class="menu-item-icon">&#9917;</span> Sports Betting <span class="menu-item-badge" style="background:#ff6b35;">LIVE</span>
+            </button>
+            <div class="menu-dropdown-divider"></div>
+            <button class="menu-dropdown-item menu-item-download" data-menu="download">
+              <span class="menu-item-icon">&#128241;</span> Get Android App
             </button>
             <div class="menu-dropdown-divider"></div>
             <button class="menu-dropdown-item" data-menu="howItWorks">
@@ -2397,6 +2471,10 @@
             <div class="menu-dropdown-divider"></div>
             <button class="menu-dropdown-item active" data-menu="sports">
               <span class="menu-item-icon">&#9917;</span> Sports Betting <span class="menu-item-badge" style="background:#ff6b35;">LIVE</span>
+            </button>
+            <div class="menu-dropdown-divider"></div>
+            <button class="menu-dropdown-item menu-item-download" data-menu="download">
+              <span class="menu-item-icon">&#128241;</span> Get Android App
             </button>
             <div class="menu-dropdown-divider"></div>
             <button class="menu-dropdown-item" data-menu="howItWorks">
@@ -6260,12 +6338,124 @@
             if (target === 'games') showScreen('lobby');
             else if (target === 'sports') showScreen('sports');
             else if (target === 'howItWorks') document.getElementById('hiw-overlay').classList.add('open');
+            else if (target === 'download') DownloadApp.openModal();
           });
         }
       }
 
       document.addEventListener('DOMContentLoaded', init);
       return { showScreen: showScreen, sendAction: sendAction, acceptBet: acceptBet, showToast: showToast, getEscrow: function() { return escrowAddress; }, isTest: function() { return isTestMode; }, getBalance: function() { return currentBalance; }, getZootBalance: function() { return currentZootBalance; }, getZootMint: function() { return zootMintAddress; }, refreshBalance: refreshBalance, getSocket: function() { return socket; } };
+    })();
+
+    // ════════════════════════════════════════
+    // ANDROID APK DOWNLOAD UI
+    // ════════════════════════════════════════
+    var DownloadApp = (function() {
+      var DISMISS_KEY = 'zg_apk_pill_dismissed';
+      var appInfo = null;
+
+      function isNativeApp() {
+        return typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+      }
+      function isAndroidBrowser() {
+        return /Android/i.test(navigator.userAgent) && !isNativeApp();
+      }
+      function isiOS() {
+        return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      }
+
+      async function fetchInfo() {
+        try {
+          var resp = await fetch('/api/app/info', { cache: 'no-cache' });
+          if (!resp.ok) return null;
+          appInfo = await resp.json();
+          return appInfo;
+        } catch (e) { return null; }
+      }
+
+      function dismissed() {
+        try { return localStorage.getItem(DISMISS_KEY) === '1'; } catch (_) { return false; }
+      }
+      function setDismissed() {
+        try { localStorage.setItem(DISMISS_KEY, '1'); } catch (_) {}
+      }
+
+      async function maybeShowPill() {
+        if (isNativeApp()) return;
+        if (dismissed()) return;
+        var info = await fetchInfo();
+        if (!info || !info.available) return;
+        var pill = document.getElementById('app-download-pill');
+        if (!pill) return;
+        var sub = document.getElementById('adp-sub');
+        if (sub) sub.textContent = info.sizeMb ? info.sizeMb + ' MB \u00b7 free' : 'Native build';
+        if (isAndroidBrowser()) sub.textContent = 'Tap to install \u00b7 ' + (info.sizeMb || '') + ' MB';
+        pill.style.display = 'flex';
+      }
+
+      function openModal() {
+        var ov = document.getElementById('download-overlay');
+        if (!ov) return;
+        ov.classList.add('open');
+        renderStatus();
+      }
+      function closeModal() {
+        var ov = document.getElementById('download-overlay');
+        if (ov) ov.classList.remove('open');
+      }
+
+      async function renderStatus() {
+        var el = document.getElementById('download-status');
+        if (!el) return;
+        if (isNativeApp()) {
+          el.innerHTML = '<div style="font-size:0.9rem;color:#00d4aa;font-weight:700;">\u2713 You\'re already using the native app.</div>';
+          return;
+        }
+        if (isiOS()) {
+          el.innerHTML = '<div style="font-size:0.9rem;color:#ffc107;font-weight:700;margin-bottom:0.4rem;">iOS app coming soon</div>'
+            + '<div style="font-size:0.78rem;color:#99a0b3;">For now, add zootgames.org to your home screen from Safari for a fullscreen experience.</div>';
+          return;
+        }
+        var info = await fetchInfo();
+        if (info && info.available) {
+          el.innerHTML = '<a href="/download" class="btn btn-primary" style="display:inline-block;padding:0.8rem 1.6rem;font-size:0.95rem;text-decoration:none;">\u2B07 Download APK (' + (info.sizeMb || '?') + ' MB)</a>'
+            + '<div style="font-size:0.7rem;color:#5a6178;margin-top:0.6rem;">Last updated ' + new Date(info.updated).toLocaleDateString() + '</div>';
+        } else {
+          el.innerHTML = '<div style="font-size:0.95rem;color:#ffc107;font-weight:700;margin-bottom:0.4rem;">APK Coming Soon</div>'
+            + '<div style="font-size:0.78rem;color:#99a0b3;">The Android build is still in the oven. Meanwhile zootgames.org works in any mobile browser.</div>';
+        }
+      }
+
+      function init() {
+        var pill = document.getElementById('app-download-pill');
+        var pillClose = document.getElementById('adp-close');
+        var modalClose = document.getElementById('download-close');
+        var overlay = document.getElementById('download-overlay');
+        if (pill) {
+          pill.addEventListener('click', function(e) {
+            if (e.target && e.target.id === 'adp-close') return;
+            openModal();
+          });
+        }
+        if (pillClose) {
+          pillClose.addEventListener('click', function(e) {
+            e.stopPropagation();
+            setDismissed();
+            if (pill) pill.style.display = 'none';
+          });
+        }
+        if (modalClose) modalClose.addEventListener('click', closeModal);
+        if (overlay) {
+          overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) closeModal();
+          });
+        }
+        setTimeout(maybeShowPill, 2500);
+      }
+
+      document.addEventListener('DOMContentLoaded', init);
+
+      return { openModal: openModal, closeModal: closeModal };
     })();
 
   </script>

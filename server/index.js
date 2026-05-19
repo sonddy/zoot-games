@@ -112,6 +112,40 @@ app.get('/api/escrow', (req, res) => {
   res.json({ escrowAddress: ESCROW_ADDRESS });
 });
 
+const APK_PATH = path.join(__dirname, '..', 'public', 'downloads', 'zoot-games.apk');
+app.get('/api/app/info', (req, res) => {
+  try {
+    const fs = require('fs');
+    if (!fs.existsSync(APK_PATH)) return res.json({ available: false });
+    const stat = fs.statSync(APK_PATH);
+    res.json({
+      available: true,
+      size: stat.size,
+      sizeMb: (stat.size / (1024 * 1024)).toFixed(1),
+      updated: stat.mtime.toISOString(),
+      url: '/download',
+    });
+  } catch (e) {
+    res.json({ available: false });
+  }
+});
+
+app.get('/download', (req, res) => {
+  const fs = require('fs');
+  if (!fs.existsSync(APK_PATH)) {
+    return res.status(404).type('html').send(`
+      <!doctype html><html><head><meta charset="utf-8"><title>Zoot Games — APK</title>
+      <style>body{background:#0b0f1c;color:#e6e9f2;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;padding:2rem;}
+      h1{color:#ffc107;} a{color:#ffc107;}</style></head>
+      <body><div><h1>Android App Coming Soon</h1>
+      <p>The Zoot Games APK isn't published yet. Check back soon, or play in your mobile browser at <a href="/">zootgames.org</a>.</p></div></body></html>`);
+  }
+  res.setHeader('Content-Disposition', 'attachment; filename="zoot-games.apk"');
+  res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  res.sendFile(APK_PATH);
+});
+
 app.get('/api/sports/:sport/:league/scoreboard', async (req, res) => {
   const { sport, league } = req.params;
   const allowed = ['soccer','football','basketball','baseball','hockey','mma'];
