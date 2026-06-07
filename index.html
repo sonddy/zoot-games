@@ -3107,11 +3107,20 @@
       function buildSignTxUrl(transaction)      { return buildSignDeeplink(transaction, 'signTransaction'); }
 
       async function openPhantomUrl(url) {
-        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App && window.Capacitor.Plugins.App.openUrl) {
-          await window.Capacitor.Plugins.App.openUrl({ url: url });
-          return;
+        // NOTE: Do NOT use Capacitor's App.openUrl — in @capacitor/app v8 there
+        // is no openUrl method, but Capacitor's Plugins.App is a Proxy that
+        // returns a wrapper function for any property access. Calling
+        // Plugins.App.openUrl(...) throws "App.openUrl() is not implemented on
+        // android". Instead, just navigate the WebView to the Phantom universal
+        // link — Android intercepts it and opens the Phantom app, leaving our
+        // WebView state intact. Phantom redirects back to zootgames:// which
+        // is dispatched via the appUrlOpen listener and our app is brought back
+        // to the foreground without a reload.
+        try {
+          window.location.href = url;
+        } catch (e) {
+          window.open(url, '_system');
         }
-        window.location.href = url;
       }
 
       async function handleConnectCallback(params) {
@@ -6288,7 +6297,12 @@
                 btn.textContent = defaultLabel;
                 refreshBalance();
               } catch (err) {
-                showToast(err.message || 'Transaction cancelled', 'error');
+                console.error('[bet] failed:', err, err && err.stack);
+                var betMsg = (err && err.message) || 'Transaction cancelled';
+                if (/not implemented|not supported/i.test(betMsg)) {
+                  betMsg = 'Wallet handoff failed. Tap "Disconnect Wallet" in the menu, then reconnect Phantom and try again.';
+                }
+                showToast(betMsg, 'error');
                 btn.disabled = false;
                 btn.textContent = defaultLabel;
               }
