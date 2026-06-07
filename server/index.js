@@ -151,11 +151,26 @@ app.get('/api/sports/:sport/:league/scoreboard', async (req, res) => {
   const { sport, league } = req.params;
   const allowed = ['soccer','football','basketball','baseball','hockey','mma'];
   if (!allowed.includes(sport)) return res.status(400).json({ error: 'Invalid sport' });
+
+  const days = Math.min(60, Math.max(1, parseInt(req.query.days, 10) || 30));
+  const fmt = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
+  const start = new Date();
+  const end = new Date();
+  end.setUTCDate(end.getUTCDate() + days);
+  const dates = `${fmt(start)}-${fmt(end)}`;
+
   try {
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const url = `https://site.api.espn.com/apis/site/v2/sports/${sport}/${league}/scoreboard?dates=${today}`;
+    const url = `https://site.api.espn.com/apis/site/v2/sports/${sport}/${league}/scoreboard?dates=${dates}&limit=200`;
     const resp = await fetch(url);
-    if (!resp.ok) return res.status(resp.status).json({ error: 'ESPN API error' });
+    if (!resp.ok) {
+      console.warn('ESPN range fetch failed', sport, league, resp.status, '— falling back to today only');
+      const today = fmt(new Date());
+      const fallback = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${sport}/${league}/scoreboard?dates=${today}`);
+      if (!fallback.ok) return res.status(fallback.status).json({ error: 'ESPN API error' });
+      const data = await fallback.json();
+      res.set('Cache-Control', 'public, max-age=15');
+      return res.json(data);
+    }
     const data = await resp.json();
     res.set('Cache-Control', 'public, max-age=15');
     res.json(data);

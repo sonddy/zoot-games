@@ -1248,6 +1248,18 @@
     }
     .wallet-address-box:hover { border-color: var(--accent); }
     .wallet-address-label { font-size: 0.7rem; color: var(--text2); margin-bottom: 0.2rem; display: block; }
+    .wallet-panel-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.4rem; }
+    .btn-wallet-action {
+      padding: 0.4rem 0.9rem; font-size: 0.8rem; font-family: inherit;
+      background: var(--surface2); color: var(--text); border: 1px solid var(--surface2);
+      border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.15s;
+      display: inline-flex; align-items: center; gap: 0.35rem;
+    }
+    .btn-wallet-action:hover { background: var(--surface); border-color: var(--accent); }
+    .btn-wallet-action.btn-disconnect { color: #ff8a8a; border-color: rgba(255,138,138,0.3); }
+    .btn-wallet-action.btn-disconnect:hover { background: rgba(255,77,77,0.12); border-color: #ff8a8a; color: #ff5050; }
+    .menu-dropdown-item.menu-item-disconnect { color: #ff8a8a; }
+    .menu-dropdown-item.menu-item-disconnect:hover { background: rgba(255,77,77,0.1); color: #ff5050; }
     .wallet-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
     .wallet-actions input[type="number"] {
       background: var(--bg); border: 2px solid var(--surface2); border-radius: 6px;
@@ -2126,6 +2138,10 @@
             <button class="menu-dropdown-item" data-menu="howItWorks">
               <span class="menu-item-icon">&#9432;</span> How It Works
             </button>
+            <div class="menu-dropdown-divider"></div>
+            <button class="menu-dropdown-item menu-item-disconnect" data-menu="disconnect">
+              <span class="menu-item-icon">&#128274;</span> Disconnect Wallet
+            </button>
           </div>
         </div>
       </div>
@@ -2171,7 +2187,10 @@
         </div>
         <span class="wallet-address-label">Connected wallet (click to copy):</span>
         <div class="wallet-address-box" id="connected-wallet-addr" title="Click to copy">Loading...</div>
-        <button id="btn-refresh-balance" class="btn" style="padding:0.4rem 1rem;font-size:0.85rem;background:var(--surface2);color:var(--text);margin-top:0.3rem;">&#x21bb; Refresh Balance</button>
+        <div class="wallet-panel-actions">
+          <button id="btn-refresh-balance" class="btn btn-wallet-action">&#x21bb; Refresh Balance</button>
+          <button id="btn-disconnect-wallet" class="btn btn-wallet-action btn-disconnect">&#128274; Disconnect</button>
+        </div>
       </div>
 
       <div class="zootcoin-banner">
@@ -2638,6 +2657,10 @@
             <div class="menu-dropdown-divider"></div>
             <button class="menu-dropdown-item" data-menu="howItWorks">
               <span class="menu-item-icon">&#9432;</span> How It Works
+            </button>
+            <div class="menu-dropdown-divider"></div>
+            <button class="menu-dropdown-item menu-item-disconnect" data-menu="disconnect">
+              <span class="menu-item-icon">&#128274;</span> Disconnect Wallet
             </button>
           </div>
         </div>
@@ -5927,6 +5950,61 @@
         if (topZS) topZS.innerHTML = '<img src="/zootcoin.png" alt="" onerror="this.style.display=\'none\'" />' + formatZoot(bal) + ' $ZOOT';
       }
 
+      async function disconnectWallet() {
+        try {
+          if (typeof Chat !== 'undefined' && Chat.setOpen) Chat.setOpen(false);
+
+          if (socket) {
+            try { socket.disconnect(); } catch (e) {}
+            socket = null;
+          }
+
+          try { await PhantomWallet.disconnect(); } catch (e) {}
+
+          currentBalance = 0;
+          currentZootBalance = 0;
+          escrowAddress = null;
+          ['topbar-balance', 'topbar-balance-sports'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.textContent = '0 SOL';
+          });
+          ['topbar-balance-zoot', 'topbar-balance-zoot-sports'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.innerHTML = '<img src="/zootcoin.png" alt="" onerror="this.style.display=\'none\'" />0 $ZOOT';
+          });
+          ['wallet-display', 'wallet-display-sports'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.textContent = '';
+          });
+          var addrEl = document.getElementById('connected-wallet-addr');
+          if (addrEl) addrEl.textContent = '';
+          var solEl = document.getElementById('balance-sol');
+          if (solEl) solEl.textContent = '0';
+          var zootEl = document.getElementById('balance-zoot');
+          if (zootEl) zootEl.textContent = '0';
+
+          if (typeof HouseMode !== 'undefined' && HouseMode.isActive && HouseMode.isActive()) {
+            var playersTab = document.querySelector('#opponent-toggle .opp-tab[data-opp="players"]');
+            if (playersTab) playersTab.click();
+          }
+
+          showScreen('connect');
+
+          var phantomBtn = document.getElementById('btn-connect-phantom');
+          if (phantomBtn) {
+            phantomBtn.disabled = false;
+            phantomBtn.innerHTML = '<img src="https://phantom.app/img/phantom-icon-purple.png" alt="" onerror="this.style.display=\'none\'" /> Connect &amp; Start Betting';
+          }
+          var errEl = document.getElementById('connect-error');
+          if (errEl) errEl.style.display = 'none';
+
+          showToast('Wallet disconnected — pick a different wallet to switch', 'info');
+        } catch (e) {
+          console.error('disconnectWallet error:', e);
+          showToast('Disconnect error: ' + (e.message || e), 'error');
+        }
+      }
+
       async function refreshBalance() {
         var walletAddr = PhantomWallet.getPublicKey();
         if (!walletAddr) return;
@@ -6068,6 +6146,9 @@
           refreshBalance();
           showToast('Refreshing balance...', 'info');
         });
+
+        var btnDisc = document.getElementById('btn-disconnect-wallet');
+        if (btnDisc) btnDisc.addEventListener('click', function() { disconnectWallet(); });
 
         // Copy wallet address
         document.getElementById('connected-wallet-addr').addEventListener('click', function() {
@@ -6548,6 +6629,7 @@
             else if (target === 'sports') showScreen('sports');
             else if (target === 'howItWorks') document.getElementById('hiw-overlay').classList.add('open');
             else if (target === 'download') DownloadApp.openModal();
+            else if (target === 'disconnect') disconnectWallet();
           });
         }
       }
@@ -6901,9 +6983,23 @@
       var SPORTS = {
         soccer:     { sport: 'soccer',     league: 'eng.1',  name: 'Premier League',  icon: '\u26BD' },
         soccer_la:  { sport: 'soccer',     league: 'esp.1',  name: 'La Liga',         icon: '\u26BD' },
+        soccer_ger: { sport: 'soccer',     league: 'ger.1',  name: 'Bundesliga',      icon: '\u26BD' },
+        soccer_ita: { sport: 'soccer',     league: 'ita.1',  name: 'Serie A',         icon: '\u26BD' },
+        soccer_fra: { sport: 'soccer',     league: 'fra.1',  name: 'Ligue 1',         icon: '\u26BD' },
         soccer_ucl: { sport: 'soccer',     league: 'uefa.champions', name: 'Champions League', icon: '\u26BD' },
         soccer_uel: { sport: 'soccer',     league: 'uefa.europa',    name: 'Europa League',    icon: '\u26BD' },
         soccer_mls: { sport: 'soccer',     league: 'usa.1',  name: 'MLS',             icon: '\u26BD' },
+        soccer_wc:        { sport: 'soccer', league: 'fifa.world',     name: 'FIFA World Cup 2026', icon: '\uD83C\uDFC6' },
+        soccer_cwc:       { sport: 'soccer', league: 'fifa.cwc',       name: 'FIFA Club World Cup', icon: '\uD83C\uDFC6' },
+        soccer_uefa_nations: { sport: 'soccer', league: 'uefa.nations', name: 'UEFA Nations League', icon: '\uD83C\uDFC6' },
+        soccer_concacaf_gold: { sport: 'soccer', league: 'concacaf.gold', name: 'CONCACAF Gold Cup', icon: '\uD83C\uDFC6' },
+        soccer_concacaf_nations: { sport: 'soccer', league: 'concacaf.nations.league', name: 'CONCACAF Nations League', icon: '\uD83C\uDFC6' },
+        soccer_copa:      { sport: 'soccer', league: 'conmebol.america', name: 'Copa America',     icon: '\uD83C\uDFC6' },
+        soccer_wcq_uefa:    { sport: 'soccer', league: 'fifa.worldq.uefa',    name: 'WC Qualifying — UEFA',    icon: '\uD83C\uDF0D' },
+        soccer_wcq_concacaf:{ sport: 'soccer', league: 'fifa.worldq.concacaf', name: 'WC Qualifying — CONCACAF', icon: '\uD83C\uDF0D' },
+        soccer_wcq_conmebol:{ sport: 'soccer', league: 'fifa.worldq.conmebol', name: 'WC Qualifying — CONMEBOL', icon: '\uD83C\uDF0D' },
+        soccer_wcq_afc:     { sport: 'soccer', league: 'fifa.worldq.afc',      name: 'WC Qualifying — AFC',      icon: '\uD83C\uDF0D' },
+        soccer_wcq_caf:     { sport: 'soccer', league: 'fifa.worldq.caf',      name: 'WC Qualifying — CAF',      icon: '\uD83C\uDF0D' },
         football:   { sport: 'football',   league: 'nfl',    name: 'NFL',             icon: '\uD83C\uDFC8' },
         basketball: { sport: 'basketball', league: 'nba',    name: 'NBA',             icon: '\uD83C\uDFC0' },
         baseball:   { sport: 'baseball',   league: 'mlb',    name: 'MLB',             icon: '\u26BE' },
@@ -6912,7 +7008,12 @@
       };
 
       var SPORT_GROUPS = {
-        soccer:     ['soccer', 'soccer_la', 'soccer_ucl', 'soccer_uel', 'soccer_mls'],
+        soccer: [
+          'soccer_wc', 'soccer_wcq_uefa', 'soccer_wcq_concacaf', 'soccer_wcq_conmebol', 'soccer_wcq_afc', 'soccer_wcq_caf',
+          'soccer_cwc', 'soccer_copa', 'soccer_uefa_nations', 'soccer_concacaf_gold', 'soccer_concacaf_nations',
+          'soccer_ucl', 'soccer_uel',
+          'soccer', 'soccer_la', 'soccer_ger', 'soccer_ita', 'soccer_fra', 'soccer_mls'
+        ],
         football:   ['football'],
         basketball: ['basketball'],
         baseball:   ['baseball'],
