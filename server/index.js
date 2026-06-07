@@ -420,27 +420,32 @@ async function handleGameOver(room, result) {
     committedHouseBets.delete(room.id);
     const playerSocketId = room.players[0];
     const player = players.get(playerSocketId);
+    const agent = room.houseAgent;
+    const houseLabel = agent ? agent.displayName : houseBot.HOUSE_DISPLAY_NAME;
+    const houseWallet = agent ? agent.walletDisplay : houseBot.HOUSE_WALLET_DISPLAY;
     if (winnerIdx === 0) {
       const payout = room.betAmount * HOUSE_PAYOUT_MULTIPLIER;
       if (player && !TEST_MODE) {
         try {
           await sendCurrency('ZOOT', player.walletAddress, payout);
           const sock = io.sockets.sockets.get(playerSocketId);
-          if (sock) sock.emit('balance_update', { refreshWallet: true, msg: 'You won ' + payout.toFixed(2) + ' $ZOOT vs the House!' });
+          if (sock) sock.emit('balance_update', { refreshWallet: true, msg: 'You beat ' + houseLabel + ' for ' + payout.toFixed(2) + ' $ZOOT!' });
         } catch (e) {
           console.error('House payout error, queuing:', e.message);
           try { await persistence.addPendingRefund({ walletAddress: player.walletAddress, currency: 'ZOOT', amount: payout, reason: 'House game payout', retries: 0, lastError: e.message }); } catch (_) {}
         }
       }
+      if (player) houseBot.agents.recordResult(player.walletAddress, 'W', agent && agent.id);
       io.to(room.id).emit('game_over', {
         winner: player ? player.displayName : null,
         winnerWallet: player ? player.walletAddress : null,
         payout, currency: 'ZOOT', isDraw: false, resigned: !!result.resigned, vsHouse: true,
       });
     } else if (winnerIdx === 1) {
+      if (player) houseBot.agents.recordResult(player.walletAddress, 'L', agent && agent.id);
       io.to(room.id).emit('game_over', {
-        winner: houseBot.HOUSE_DISPLAY_NAME,
-        winnerWallet: houseBot.HOUSE_WALLET_DISPLAY,
+        winner: houseLabel,
+        winnerWallet: houseWallet,
         payout: 0, currency: 'ZOOT', isDraw: false, resigned: !!result.resigned, vsHouse: true,
       });
     } else {
@@ -453,6 +458,7 @@ async function handleGameOver(room, result) {
           socketId: playerSocketId,
         });
       }
+      if (player) houseBot.agents.recordResult(player.walletAddress, 'D', agent && agent.id);
       io.to(room.id).emit('game_over', { winner: null, winnerWallet: null, payout: 0, currency: 'ZOOT', isDraw: true, vsHouse: true });
     }
     setTimeout(() => cleanupRoom(room.id), 5000);
@@ -642,6 +648,7 @@ io.on('connection', (socket) => {
       const room = createRoom(gameType, bet, socket.id, 'ZOOT');
       room.vsHouse = true;
       room.players = [socket.id, houseBot.HOUSE_SOCKET_ID];
+      room.houseAgent = houseBot.agents.pickAgent(player.walletAddress);
       room.state = 'playing';
       player.roomId = room.id;
       socket.join(room.id);
@@ -907,6 +914,9 @@ io.on('connection', (socket) => {
           committedHouseBets.delete(room.id);
           room.state = 'finished';
           persistence.removeActiveRoom(room.id).catch(()=>{});
+          if (player && player.walletAddress) {
+            houseBot.agents.recordResult(player.walletAddress, 'L', room.houseAgent && room.houseAgent.id);
+          }
           console.log('vsHouse player disconnected — house keeps the bet');
           setTimeout(() => cleanupRoom(room.id), 3000);
           players.delete(socket.id);
@@ -1008,7 +1018,10 @@ function startGame(room) {
         { username: p2?.displayName, wallet: p2?.walletAddress },
       ];
       if (room.vsHouse) {
-        playerInfo[1] = { username: houseBot.HOUSE_DISPLAY_NAME, wallet: houseBot.HOUSE_WALLET_DISPLAY };
+        const a = room.houseAgent;
+        playerInfo[1] = a
+          ? { username: a.displayName, wallet: a.walletDisplay, avatar: a.avatar }
+          : { username: houseBot.HOUSE_DISPLAY_NAME, wallet: houseBot.HOUSE_WALLET_DISPLAY };
       }
       sock.emit('game_start', {
         roomId: room.id, gameType: room.gameType, betAmount: room.betAmount, currency: room.currency || 'SOL', playerIndex: idx,
@@ -1055,10 +1068,11 @@ function scheduleHouseMove(room) {
   if (room._houseTimer) return; // already scheduled
 
   const housePlayerIndex = 1;
-  const action = houseBot.decideAction(room.game, room.gameType, housePlayerIndex);
+  const agent = room.houseAgent;
+  const action = houseBot.decideAction(room.game, room.gameType, housePlayerIndex, agent);
   if (!action) {
     if (room.gameType === 'reaction' && room.game.phase === 'waiting' && room.game.signalTime) {
-      const wait = room.game.signalTime - Date.now() + houseBot.getActionDelay('reaction', room.game);
+      const wait = room.game.signalTime - Date.now() + houseBot.getActionDelay('reaction', room.game, agent);
       room._houseTimer = setTimeout(() => {
         room._houseTimer = null;
         scheduleHouseMove(room);
@@ -1067,7 +1081,7 @@ function scheduleHouseMove(room) {
     return;
   }
 
-  const delay = houseBot.getActionDelay(room.gameType, room.game);
+  const delay = houseBot.getActionDelay(room.gameType, room.game, agent, action);
   room._houseTimer = setTimeout(() => {
     room._houseTimer = null;
     if (!rooms.has(room.id) || room.game.gameOver || room.state !== 'playing') return;

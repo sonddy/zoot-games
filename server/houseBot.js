@@ -1,6 +1,10 @@
 'use strict';
 
+const agents = require('./houseAgents');
+
 const HOUSE_SOCKET_ID = '__HOUSE_BOT__';
+// Legacy fallback names — only used if no agent has been assigned to a room.
+// In practice, every vsHouse room now gets an agent from houseAgents.pickAgent().
 const HOUSE_DISPLAY_NAME = 'House';
 const HOUSE_WALLET_DISPLAY = 'HOUSE';
 
@@ -72,37 +76,57 @@ function botCanAct(game, gameType, idx) {
 //   - null: nothing to do right now
 //   - { type: '__bot_auto' }: server should call game.autoPlayForTimeout(idx)
 //   - { type: '...specific...' }: server should call game.handleAction(idx, action)
-function decideAction(game, gameType, housePlayerIndex) {
+//
+// `agent` is the per-room houseAgent persona (see server/houseAgents.js).
+// Falls back to neutral behavior if no agent provided.
+function decideAction(game, gameType, housePlayerIndex, agent) {
   if (!game || game.gameOver) return null;
   const idx = housePlayerIndex;
   if (!botCanAct(game, gameType, idx)) return null;
 
+  // Fallback agent if none supplied (preserves legacy behavior).
+  const a = agent || { skill: 3, personality: 'mixed' };
+
   switch (gameType) {
     case 'rps': {
-      const opts = ['rock', 'paper', 'scissors'];
-      return { type: 'choose', choice: opts[rand(0, 2)] };
+      // Pull the opponent's pick history across the BO3 from roundResults
+      // (set by RPS game on each resolved round). Each entry is
+      // { choices: [c0, c1], winner }.
+      const opponentIdx = idx === 0 ? 1 : 0;
+      let history = [];
+      if (Array.isArray(game.roundResults)) {
+        history = game.roundResults
+          .map(h => (h && h.choices ? h.choices[opponentIdx] : null))
+          .filter(Boolean);
+      }
+      // Include this round's pick if the opponent has already locked in.
+      if (game.choices && game.choices[opponentIdx]) history.push(game.choices[opponentIdx]);
+      return { type: 'choose', choice: agents.rpsDecision(a, history) };
     }
     case 'coinflip':
       return null;
     case 'diceduel':
       return { type: 'roll' };
-    case 'hilo':
-      return { type: 'guess', guess: Math.random() < 0.5 ? 'higher' : 'lower' };
+    case 'hilo': {
+      // currentCard is an object { suit, value }; we want the value (1-13).
+      const cardObj = game.currentCard;
+      const cardValue = cardObj && typeof cardObj.value === 'number' ? cardObj.value : null;
+      return { type: 'guess', guess: agents.hiloDecision(a, cardValue) };
+    }
     case 'reaction': {
       const now = Date.now();
       if (!game.signalTime || now < game.signalTime) return null;
       return { type: 'react' };
     }
     case 'mathduel': {
-      // 65% correct gives a fair, beatable bot; the 3% edge comes from payout.
-      const correct = Math.random() < 0.65;
+      const plan = agents.mathDuelPlan(a);
       let value;
-      if (correct) value = game.answer;
+      if (plan.willBeCorrect) value = game.answer;
       else {
         const sign = Math.random() < 0.5 ? -1 : 1;
-        value = game.answer + sign * rand(1, 10);
+        value = game.answer + sign * plan.errorMagnitude;
       }
-      return { type: 'answer', value };
+      return { type: 'answer', value, __solveTimeMs: plan.solveTimeMs };
     }
     case 'war':
       return { type: 'flip' };
@@ -114,40 +138,27 @@ function decideAction(game, gameType, housePlayerIndex) {
 }
 
 // Returns a human-like delay (ms) before the bot performs its decided action.
-function getActionDelay(gameType, game) {
-  switch (gameType) {
-    case 'rps':       return rand(900, 2000);
-    case 'hilo':      return rand(1000, 2200);
-    case 'diceduel':  return rand(700, 1600);
-    case 'mathduel':  return rand(2000, 4500);
-    case 'war':       return rand(600, 1400);
-    case 'reaction': {
-      const now = Date.now();
-      const sigTime = (game && game.signalTime) || now;
-      const reactDelayFromSignal = rand(250, 550);
-      const fromNow = (sigTime - now) + reactDelayFromSignal;
-      return Math.max(50, fromNow);
-    }
-    // Strategy games — thinking time scales with complexity.
-    case 'chess':     return rand(2500, 5500);
-    case 'checkers':  return rand(1800, 4000);
-    case 'reversi':   return rand(1500, 3200);
-    case 'mancala':   return rand(1200, 2800);
-    case 'backgammon':return rand(1800, 3800);
-    case 'connect4':  return rand(1200, 2500);
-    case 'dotsboxes': return rand(1000, 2200);
-    case 'nim':       return rand(900, 2000);
-    case 'hex':       return rand(1500, 3200);
-    case 'morpion':   return rand(1200, 2500);
-    case 'tictactoe': return rand(800, 1800);
-    case 'domino':    return rand(1500, 3000);
-    case 'poker':     return rand(2000, 4500);
-    case 'battleship':return rand(1500, 3500);
-    case 'memory':    return rand(1200, 2600);
-    case 'speed':     return rand(700, 1500);
-    case 'coinflip':
-    default:          return 1000;
+// `agent` is the per-room persona; falls back to neutral skill 3 if absent.
+function getActionDelay(gameType, game, agent, action) {
+  const a = agent || { skill: 3, personality: 'mixed' };
+
+  // Reaction: jitter around signal time using agent's reaction profile.
+  if (gameType === 'reaction') {
+    const now = Date.now();
+    const sigTime = (game && game.signalTime) || now;
+    const reactMs = agents.reactionDelayMs(a);
+    const fromNow = (sigTime - now) + reactMs;
+    return Math.max(50, fromNow);
   }
+
+  // Math Duel: the decideAction step computed a solve-time plan; honor it
+  // so that "skill 5" agents really do answer in ~2s and "skill 1" agents
+  // take ~4-5s. Falls back to thinkingDelay if action wasn't precomputed.
+  if (gameType === 'mathduel' && action && typeof action.__solveTimeMs === 'number') {
+    return action.__solveTimeMs;
+  }
+
+  return agents.thinkingDelay(a, gameType, game);
 }
 
 module.exports = {
@@ -160,4 +171,5 @@ module.exports = {
   decideAction,
   getActionDelay,
   botCanAct,
+  agents,
 };
