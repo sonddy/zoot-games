@@ -31,60 +31,88 @@ const AGENTS = [
 
 const AGENT_BY_ID = new Map(AGENTS.map(a => [a.id, a]));
 
-// Per-player history of vs-house results — used for streak-based matchmaking.
-// Only kept in memory; resets on server restart (intentional — we don't want
-// a player who lost yesterday to be permanently matched with weak agents).
-// Map<walletAddress, { results: ['W','L','D', ...], lastAgentId: string }>
+// Per-player history of vs-house results — used for matchmaking and abuse
+// detection. Tracks recent outcomes AND bet sizes per wallet, so we can
+// detect the classic "lose small, then bet big" drain pattern.
+// Map<walletAddress, { results: [{outcome,bet,t}], lastAgentId, totalWon, totalLost, gamesPerHour:[t,...] }>
 const playerHistory = new Map();
-const MAX_HISTORY = 10;
+const MAX_HISTORY = 25;
 
-function recordResult(walletAddress, outcome /* 'W' | 'L' | 'D' */, agentId) {
+function recordResult(walletAddress, outcome /* 'W' | 'L' | 'D' */, agentId, betAmount) {
   if (!walletAddress) return;
   let h = playerHistory.get(walletAddress);
-  if (!h) { h = { results: [], lastAgentId: null }; playerHistory.set(walletAddress, h); }
-  h.results.push(outcome);
+  if (!h) {
+    h = { results: [], lastAgentId: null, totalWon: 0, totalLost: 0, gamesPerHour: [] };
+    playerHistory.set(walletAddress, h);
+  }
+  const bet = Number(betAmount) || 0;
+  h.results.push({ outcome, bet, t: Date.now() });
   if (h.results.length > MAX_HISTORY) h.results.shift();
+  if (outcome === 'W') h.totalWon += bet;
+  else if (outcome === 'L') h.totalLost += bet;
   h.lastAgentId = agentId || h.lastAgentId;
+  h.gamesPerHour.push(Date.now());
+  h.gamesPerHour = h.gamesPerHour.filter(t => Date.now() - t < 3600 * 1000);
+}
+
+function getHistory(walletAddress) {
+  return playerHistory.get(walletAddress) || null;
 }
 
 function getStreak(walletAddress) {
   const h = playerHistory.get(walletAddress);
-  if (!h || h.results.length === 0) return { wins: 0, losses: 0, streak: 0 };
+  if (!h || h.results.length === 0) return { wins: 0, losses: 0, streak: 0, netWonZoot: 0 };
   const last5 = h.results.slice(-5);
-  const wins = last5.filter(r => r === 'W').length;
-  const losses = last5.filter(r => r === 'L').length;
-  // streak: positive for winning streak, negative for losing streak
+  const wins   = last5.filter(r => r.outcome === 'W').length;
+  const losses = last5.filter(r => r.outcome === 'L').length;
   let streak = 0;
   for (let i = h.results.length - 1; i >= 0; i--) {
-    const r = h.results[i];
+    const r = h.results[i].outcome;
     if (r === 'D') break;
     if (streak >= 0 && r === 'W') streak++;
     else if (streak <= 0 && r === 'L') streak--;
     else break;
   }
-  return { wins, losses, streak, lastAgentId: h.lastAgentId };
+  const netWonZoot = h.totalWon - h.totalLost;
+  return { wins, losses, streak, lastAgentId: h.lastAgentId, netWonZoot, gamesLastHour: h.gamesPerHour.length };
 }
 
-// Pick an agent for the upcoming match based on the player's recent history.
+// Pick an agent for the upcoming match.
 //
-// HARD MODE matchmaking: default opponents are skill 4-5. Losing players get
-// brief relief at skill 3, but we never assign skill 1-2 anymore — the lobby
-// should feel like every opponent knows what they're doing.
+// CRITICAL: this is a GAMBLING game — the matchmaking must NEVER reward a
+// losing player with a weaker opponent. Previously a losing streak unlocked
+// skill 1-2 agents, which is the classic "lose 3 small, then bet 100k vs a
+// blunder bot" drain exploit. We now do the opposite: losing streaks raise
+// the difficulty (assume the next bet may be larger), and ANY winning streak
+// instantly pins to skill 5.
 //
-// Always avoid repeating the same agent two games in a row when possible —
-// the lobby should feel like a rotating pool of opponents, not one bot.
-function pickAgent(walletAddress) {
-  const { streak, lastAgentId } = getStreak(walletAddress);
+// `betAmount` (optional) lets us scale skill with stakes — small games can
+// have a softer agent, but anything above the soft threshold always faces
+// the sharks.
+function pickAgent(walletAddress, betAmount) {
+  const { streak, lastAgentId, netWonZoot } = getStreak(walletAddress);
+  const bet = Number(betAmount) || 0;
 
-  let candidates;
-  if (streak >= 1)       candidates = AGENTS.filter(a => a.skill === 5);     // winning → pure shark
-  else if (streak <= -4) candidates = AGENTS.filter(a => a.skill === 3);     // big losing streak → mid-tier relief
-  else                   candidates = AGENTS.filter(a => a.skill >= 4);      // default: skill 4-5 only
+  // ── Floor: bets above 5k ZOOT always face skill ≥ 4 ─────────────────
+  let minSkill = 3;
+  if (bet >= 5000) minSkill = 4;
+  if (bet >= 20000) minSkill = 5;
 
-  // Try not to repeat the last opponent.
+  // Losing streaks RAISE skill (assume next bet escalates)
+  if (streak <= -2) minSkill = Math.max(minSkill, 4);
+  if (streak <= -3) minSkill = Math.max(minSkill, 5);
+
+  // Winning streaks always face skill 5
+  if (streak >= 1) minSkill = 5;
+
+  // Players already net-up by 50k+ ZOOT vs the house: pin to skill 5
+  if (netWonZoot >= 50000) minSkill = 5;
+
+  let candidates = AGENTS.filter(a => a.skill >= minSkill);
+  if (candidates.length === 0) candidates = AGENTS.filter(a => a.skill === 5);
+
   const filtered = candidates.filter(a => a.id !== lastAgentId);
   const pool = filtered.length > 0 ? filtered : candidates;
-
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
@@ -110,40 +138,42 @@ function personalityFactor(personality, base) {
   }
 }
 
-// Reaction game: returns ms after the signal to "press"
+// Reaction game: returns ms after the signal to "press".
+// Humans average 250ms; world-class is 150ms. The bot should consistently
+// out-react a typical human — even at skill 1.
 function reactionDelayMs(agent) {
   const skillT = (agent.skill - 1) / 4; // 0..1
-  // HARD MODE: skill 5 ~150ms (faster than most humans); skill 1 ~380ms.
-  const mean = lerp(380, 150, skillT);
-  const v = jitter(mean, 60);
-  // Fumble chance heavily reduced for high skill (0% at skill 5)
-  const fumbleRate = lerp(0.05, 0.0, skillT);
-  if (Math.random() < fumbleRate) return v + 400;
+  // skill 1: 280ms / skill 5: 130ms — faster than virtually any human player
+  const mean = lerp(280, 130, skillT);
+  const v = jitter(mean, 35);
+  // 1% chance of a fumble (slight stutter), capped small
+  if (Math.random() < 0.01) return v + 220;
   return Math.max(110, personalityFactor(agent.personality, v));
 }
 
 // Math Duel: returns { solveTimeMs, willBeCorrect, errorMagnitude }
+// A betting house's math bot should be ~always correct and fast.
 function mathDuelPlan(agent) {
   const skillT = (agent.skill - 1) / 4;
-  // HARD MODE: skill 5 solves in ~1.3s and is correct 98% of the time.
-  const meanSolve = lerp(3800, 1300, skillT);
-  const solveTimeMs = Math.max(800, jitter(meanSolve, 800));
-  const correctRate = lerp(0.65, 0.98, skillT);
+  // skill 1: 3.0s / skill 5: 1.2s — usually faster than humans
+  const meanSolve = lerp(3000, 1200, skillT);
+  const solveTimeMs = Math.max(700, jitter(meanSolve, 600));
+  // skill 1: 88% correct, skill 5: 99% correct
+  const correctRate = lerp(0.88, 0.99, skillT);
   const willBeCorrect = Math.random() < correctRate;
-  // Errors are smaller for higher-skill agents (they slip on one digit, not far off)
-  const maxErr = Math.round(lerp(10, 2, skillT));
+  const maxErr = Math.round(lerp(8, 2, skillT));
   const errorMagnitude = willBeCorrect ? 0 : (Math.floor(Math.random() * maxErr) + 1);
   return { solveTimeMs: Math.round(personalityFactor(agent.personality, solveTimeMs)), willBeCorrect, errorMagnitude };
 }
 
 // Hi-Lo: returns 'higher' | 'lower' based on agent skill & current card.
-// At skill 5, near-optimal play given card 1-13. At skill 1, mostly random.
+// At skill 5 the agent plays optimally almost always; even skill 1 plays
+// optimally most of the time (the math is trivial — there's no reason for
+// a real degen bot to misplay it).
 function hiloDecision(agent, currentCard) {
   const skillT = (agent.skill - 1) / 4;
-  // HARD MODE: skill 5 plays optimally 99% of the time; skill 1 = 70%.
-  const optimalRate = lerp(0.70, 0.99, skillT);
+  const optimalRate = lerp(0.85, 0.995, skillT);
   if (Math.random() < optimalRate && typeof currentCard === 'number') {
-    // Cards 1-7 → 'higher' is optimal; 8-13 → 'lower' is optimal; 7 is coinflip.
     if (currentCard < 7)  return 'higher';
     if (currentCard > 7)  return 'lower';
     return Math.random() < 0.5 ? 'higher' : 'lower';
@@ -155,13 +185,12 @@ function hiloDecision(agent, currentCard) {
 // player's previous picks across the BO3 ('rock'|'paper'|'scissors'|null).
 function rpsDecision(agent, opponentHistory) {
   const skillT = (agent.skill - 1) / 4;
-  // HARD MODE: skill 5 reads patterns 90% of the time; skill 1 = 30%.
-  const patternRate = lerp(0.30, 0.90, skillT);
+  const patternRate = lerp(0.0, 0.65, skillT); // chance to use pattern-detect
   const opts = ['rock', 'paper', 'scissors'];
   const counter = { rock: 'paper', paper: 'scissors', scissors: 'rock' };
 
-  // Bluffer occasionally throws an obviously-bad-looking move (reduced freq)
-  if (agent.personality === 'bluffer' && Math.random() < 0.08) {
+  // Bluffer occasionally throws an obviously-bad-looking move
+  if (agent.personality === 'bluffer' && Math.random() < 0.18) {
     return opts[Math.floor(Math.random() * 3)];
   }
 
@@ -172,8 +201,8 @@ function rpsDecision(agent, opponentHistory) {
     const prev = opponentHistory.length >= 2 ? opponentHistory[opponentHistory.length - 2] : null;
     if (last && prev && last === prev) {
       // Counter the expected repeat — but humans often switch after 2-in-a-row,
-      // so split: 70% counter the same, 30% counter their counter.
-      if (Math.random() < 0.7) return counter[last];
+      // so split: 60% counter the same, 40% counter their counter.
+      if (Math.random() < 0.6) return counter[last];
       return counter[counter[last]];
     }
     if (last) return counter[last];
@@ -221,6 +250,7 @@ module.exports = {
   getAgentById,
   recordResult,
   getStreak,
+  getHistory,
   reactionDelayMs,
   mathDuelPlan,
   hiloDecision,

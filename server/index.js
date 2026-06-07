@@ -435,14 +435,14 @@ async function handleGameOver(room, result) {
           try { await persistence.addPendingRefund({ walletAddress: player.walletAddress, currency: 'ZOOT', amount: payout, reason: 'House game payout', retries: 0, lastError: e.message }); } catch (_) {}
         }
       }
-      if (player) houseBot.agents.recordResult(player.walletAddress, 'W', agent && agent.id);
+      if (player) houseBot.agents.recordResult(player.walletAddress, 'W', agent && agent.id, room.betAmount);
       io.to(room.id).emit('game_over', {
         winner: player ? player.displayName : null,
         winnerWallet: player ? player.walletAddress : null,
         payout, currency: 'ZOOT', isDraw: false, resigned: !!result.resigned, vsHouse: true,
       });
     } else if (winnerIdx === 1) {
-      if (player) houseBot.agents.recordResult(player.walletAddress, 'L', agent && agent.id);
+      if (player) houseBot.agents.recordResult(player.walletAddress, 'L', agent && agent.id, room.betAmount);
       io.to(room.id).emit('game_over', {
         winner: houseLabel,
         winnerWallet: houseWallet,
@@ -458,7 +458,7 @@ async function handleGameOver(room, result) {
           socketId: playerSocketId,
         });
       }
-      if (player) houseBot.agents.recordResult(player.walletAddress, 'D', agent && agent.id);
+      if (player) houseBot.agents.recordResult(player.walletAddress, 'D', agent && agent.id, room.betAmount);
       io.to(room.id).emit('game_over', { winner: null, winnerWallet: null, payout: 0, currency: 'ZOOT', isDraw: true, vsHouse: true });
     }
     setTimeout(() => cleanupRoom(room.id), 5000);
@@ -632,6 +632,24 @@ io.on('connection', (socket) => {
       if (!bet || bet <= 0) return socket.emit('error_msg', { msg: 'Invalid bet amount' });
       if (bet > HOUSE_MAX_ZOOT_BET) return socket.emit('error_msg', { msg: 'House bet cannot exceed ' + HOUSE_MAX_ZOOT_BET.toLocaleString() + ' $ZOOT' });
 
+      // ── Anti-drain protections ────────────────────────────────────
+      if (HOUSE_BANNED_WALLETS.has(player.walletAddress)) {
+        return socket.emit('error_msg', { msg: 'House mode is disabled for your wallet. Contact support if you believe this is a mistake.' });
+      }
+      const hist = houseBot.agents.getHistory(player.walletAddress);
+      if (hist) {
+        // Rate limit: max 25 vs-house games per wallet per hour
+        if (hist.gamesPerHour.length >= 25) {
+          return socket.emit('error_msg', { msg: 'You\'ve played a lot of house games recently — please take a short break.' });
+        }
+        // Net cap: once a wallet is net +200k ZOOT vs the house in this server
+        // run, force a cool-down rather than allowing unbounded extraction.
+        const netWon = (hist.totalWon || 0) - (hist.totalLost || 0);
+        if (netWon >= 200000) {
+          return socket.emit('error_msg', { msg: 'You\'re on a great run! House mode has a daily winning cap — try again tomorrow or play vs another player.' });
+        }
+      }
+
       const escrowZoot = await getEscrowZootBalance();
       const exposed = totalCommittedHouseBets();
       const liquidityNeeded = bet * (HOUSE_PAYOUT_MULTIPLIER - 1) + bet * 0.05;
@@ -648,7 +666,7 @@ io.on('connection', (socket) => {
       const room = createRoom(gameType, bet, socket.id, 'ZOOT');
       room.vsHouse = true;
       room.players = [socket.id, houseBot.HOUSE_SOCKET_ID];
-      room.houseAgent = houseBot.agents.pickAgent(player.walletAddress);
+      room.houseAgent = houseBot.agents.pickAgent(player.walletAddress, bet);
       room.state = 'playing';
       player.roomId = room.id;
       socket.join(room.id);
@@ -915,7 +933,7 @@ io.on('connection', (socket) => {
           room.state = 'finished';
           persistence.removeActiveRoom(room.id).catch(()=>{});
           if (player && player.walletAddress) {
-            houseBot.agents.recordResult(player.walletAddress, 'L', room.houseAgent && room.houseAgent.id);
+            houseBot.agents.recordResult(player.walletAddress, 'L', room.houseAgent && room.houseAgent.id, room.betAmount);
           }
           console.log('vsHouse player disconnected — house keeps the bet');
           setTimeout(() => cleanupRoom(room.id), 3000);
@@ -1045,6 +1063,14 @@ function emitGameState(room) {
 const HOUSE_MAX_ZOOT_BET = 100000;
 const HOUSE_PAYOUT_MULTIPLIER = 1.94; // 3% house edge: winner gets 1.94x bet, escrow keeps 0.06x
 const committedHouseBets = new Map(); // roomId -> bet amount
+
+// Wallets blocked from playing vs the house (e.g. confirmed drainers).
+// Add more via the HOUSE_BANNED_WALLETS env var (comma-separated).
+const HOUSE_BANNED_WALLETS = new Set([
+  'ZLWUuLcQwTSYa9yayprVVpAZu9y2jzyy9u5CqUwkw2D', // reported escrow-draining wallet
+  ...(process.env.HOUSE_BANNED_WALLETS || '').split(',').map(s => s.trim()).filter(Boolean),
+]);
+console.log('[house] banned wallets:', HOUSE_BANNED_WALLETS.size, 'entries');
 
 async function getEscrowZootBalance() {
   try {

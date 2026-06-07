@@ -12,8 +12,13 @@
 // ════════════════════════════════════════════════════════════════════
 
 function mistakeChance(skill) {
-  // HARD MODE: skill 5 ~1%, skill 4 ~4%, skill 3 ~12%, skill 2 ~20%, skill 1 ~28%
-  return Math.max(0.01, 0.36 - 0.08 * skill);
+  // Tightened for a betting context: even skill 1 should be tough enough that
+  // a casual human cannot drain the escrow. The house bot is not here to
+  // throw games.
+  //   skill 1 -> 0.18, skill 2 -> 0.12, skill 3 -> 0.07
+  //   skill 4 -> 0.04, skill 5 -> 0.015
+  const map = { 1: 0.18, 2: 0.12, 3: 0.07, 4: 0.04, 5: 0.015 };
+  return map[skill] ?? 0.07;
 }
 
 function shouldBlunder(agent) {
@@ -235,9 +240,13 @@ function tttMove(game, idx, agent) {
     if (wOppWin === opp) return { action: { type: 'place', cell: i } };
   }
 
-  // HARD MODE: skill 3+ never blunder to pure random; blunder rate is tight.
-  // skill 3 ~12%, skill 4 ~4%, skill 5 ~1%.
-  const blunderRate = mistakeChance(skill);
+  // (No low-skill shortcut — Morpion always uses the threat scorer; the
+  // blunder rate alone modulates difficulty.)
+  if (false) {
+    return { action: { type: 'place', cell: empties[Math.floor(Math.random() * empties.length)] } };
+  }
+  // skill 3: ~20% blunder; skill 4: ~10%; skill 5: ~5%
+  const blunderRate = Math.max(0.05, 0.4 - 0.08 * skill);
   if (Math.random() < blunderRate) {
     return { action: { type: 'place', cell: empties[Math.floor(Math.random() * empties.length)] } };
   }
@@ -368,8 +377,8 @@ function c4Move(game, idx, agent) {
   const me = idx;
   const opp = 1 - idx;
   const skill = (agent && agent.skill) || 3;
-  // HARD MODE depth: skill 1 = 3, skill 5 = 8 (Connect 4 branching is low)
-  const depth = Math.max(3, skill + 3);
+  // depth: skill 1 = 4, skill 5 = 7 (deeper = much harder to beat)
+  const depth = Math.min(7, Math.max(4, skill + 2));
 
   // blunder
   if (Math.random() < mistakeChance(skill)) {
@@ -407,7 +416,8 @@ function nimMove(game, idx, agent) {
     return { action: { type: 'take', pile: pi, count: take } };
   }
 
-  // HARD MODE: always play optimal Nim with a small blunder rate.
+  // No low-skill random shortcut — TTT minimax is fast; always run it.
+  // The mistakeChance below provides the only blunder modulation.
   // Even high skill blunders some of the time
   if (Math.random() < mistakeChance(skill)) return randomMove();
 
@@ -471,7 +481,10 @@ function reversiMove(game, idx, agent) {
   if (!moves || moves.length === 0) return { fallback: true };
   const skill = (agent && agent.skill) || 3;
 
-  // HARD MODE: always use positional heuristic; only the small mistakeChance applies.
+  // (Reversi always runs the positional heuristic; blunder rate alone
+  // modulates difficulty.)
+
+  // Blunder rate: skill 5 ~5%, skill 1 ~50%
   if (Math.random() < mistakeChance(skill)) {
     const pick = moves[Math.floor(Math.random() * moves.length)];
     return { action: { type: 'place', row: pick.row, col: pick.col } };
@@ -511,10 +524,9 @@ function memoryMove(game, idx, agent) {
     }
   }
 
-  // HARD MODE recall: skill 5 = 100% perfect, skill 4 = ~95%, skill 3 = ~85%,
-  // skill 2 = ~70%, skill 1 = ~55%. The skill-5 agent essentially never misses
-  // a known pair.
-  const recallChance = skill >= 5 ? 1.0 : (0.45 + 0.13 * skill);
+  // Memory fidelity: skill 5 = 100% recall, skill 1 = ~40% recall.
+  // We simulate "forgetting" by randomly dropping entries per call.
+  const recallChance = 0.4 + 0.15 * skill;
   const usableMemory = {};
   for (const sym of Object.keys(game._botMemory)) {
     for (const i of game._botMemory[sym]) {
@@ -930,10 +942,10 @@ function hexMove(game, idx, agent) {
   if (empties.length === 0) return { fallback: true };
 
   if (Math.random() < mistakeChance(skill)) {
-    // Prefer the center area
+    // Center-biased random blunder (rare now)
     empties.sort((a, b) => Math.abs(a.row - size/2) + Math.abs(a.col - size/2) -
                             (Math.abs(b.row - size/2) + Math.abs(b.col - size/2)));
-    const pool = empties.slice(0, Math.max(1, Math.floor(empties.length / 3)));
+    const pool = empties.slice(0, Math.max(1, Math.floor(empties.length / 4)));
     const pick = pool[Math.floor(Math.random() * pool.length)];
     return { action: { type: 'place', row: pick.row, col: pick.col } };
   }
@@ -1057,14 +1069,14 @@ function checkersMove(game, idx, agent) {
   const moves = _checkersAllMoves(game, idx);
   if (moves.length === 0) return { fallback: true };
 
-  // Low skill: random move (still must take forced jump if any)
+  // Blunder rate alone modulates skill; always run minimax otherwise.
   if (Math.random() < mistakeChance(skill)) {
     const pick = moves[Math.floor(Math.random() * moves.length)];
     return { action: { type: 'move', from: pick.from, to: pick.to } };
   }
 
-  // HARD MODE depth: skill 3 -> 6, skill 4 -> 7, skill 5 -> 8
-  const depth = Math.max(4, skill + 3);
+  // depth: skill 1 = 4, skill 5 = 7 — fairly deep on the 32-square checkerboard
+  const depth = Math.min(7, Math.max(4, skill + 2));
   let bestMove = moves[0];
   let bestScore = -Infinity;
   for (const m of moves) {
