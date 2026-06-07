@@ -2194,7 +2194,7 @@
           <button id="btn-refresh-balance" class="btn btn-wallet-action">&#x21bb; Refresh Balance</button>
           <button id="btn-disconnect-wallet" class="btn btn-wallet-action btn-disconnect">&#128274; Disconnect</button>
         </div>
-        <div id="build-version" style="margin-top:0.6rem;font-size:0.65rem;color:#5c6480;text-align:right;letter-spacing:0.04em;">Build 2026-06-07-d</div>
+        <div id="build-version" style="margin-top:0.6rem;font-size:0.65rem;color:#5c6480;text-align:right;letter-spacing:0.04em;">Build 2026-06-07-e</div>
       </div>
 
       <div class="zootcoin-banner">
@@ -2975,10 +2975,10 @@
             if (/reject|denied|cancel|user/i.test(msgA)) throw errA;
             console.warn('Phantom signAndSend deeplink failed, falling back to signTransaction:', msgA);
             var web3 = window.solanaWeb3;
-            var b58 = await bs58();
+            var b58Mod = await window.__bs58Promise;
             var signedB58 = await PhantomMobile.signTransaction(transaction);
             if (!signedB58) throw errA;
-            var signedBytes = b58.decode(signedB58);
+            var signedBytes = b58Mod.decode(signedB58);
             var signed = web3.Transaction.from(signedBytes);
             return await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false });
           }
