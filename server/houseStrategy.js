@@ -12,8 +12,8 @@
 // ════════════════════════════════════════════════════════════════════
 
 function mistakeChance(skill) {
-  // skill 5 -> 0.05 (5% blunder), skill 1 -> 0.50
-  return Math.max(0.05, 0.60 - 0.11 * skill);
+  // HARD MODE: skill 5 ~1%, skill 4 ~4%, skill 3 ~12%, skill 2 ~20%, skill 1 ~28%
+  return Math.max(0.01, 0.36 - 0.08 * skill);
 }
 
 function shouldBlunder(agent) {
@@ -235,12 +235,9 @@ function tttMove(game, idx, agent) {
     if (wOppWin === opp) return { action: { type: 'place', cell: i } };
   }
 
-  // Low-skill agents play randomly often
-  if (skill <= 2 && Math.random() < 0.6) {
-    return { action: { type: 'place', cell: empties[Math.floor(Math.random() * empties.length)] } };
-  }
-  // skill 3: ~20% blunder; skill 4: ~10%; skill 5: ~5%
-  const blunderRate = Math.max(0.05, 0.4 - 0.08 * skill);
+  // HARD MODE: skill 3+ never blunder to pure random; blunder rate is tight.
+  // skill 3 ~12%, skill 4 ~4%, skill 5 ~1%.
+  const blunderRate = mistakeChance(skill);
   if (Math.random() < blunderRate) {
     return { action: { type: 'place', cell: empties[Math.floor(Math.random() * empties.length)] } };
   }
@@ -371,8 +368,8 @@ function c4Move(game, idx, agent) {
   const me = idx;
   const opp = 1 - idx;
   const skill = (agent && agent.skill) || 3;
-  // depth: skill 1 = 2, skill 5 = 6
-  const depth = Math.max(2, skill + 1);
+  // HARD MODE depth: skill 1 = 3, skill 5 = 8 (Connect 4 branching is low)
+  const depth = Math.max(3, skill + 3);
 
   // blunder
   if (Math.random() < mistakeChance(skill)) {
@@ -410,8 +407,7 @@ function nimMove(game, idx, agent) {
     return { action: { type: 'take', pile: pi, count: take } };
   }
 
-  // Low skill: mostly random
-  if (skill <= 2) return randomMove();
+  // HARD MODE: always play optimal Nim with a small blunder rate.
   // Even high skill blunders some of the time
   if (Math.random() < mistakeChance(skill)) return randomMove();
 
@@ -475,12 +471,7 @@ function reversiMove(game, idx, agent) {
   if (!moves || moves.length === 0) return { fallback: true };
   const skill = (agent && agent.skill) || 3;
 
-  // Low skill: weighted random toward decent moves
-  if (skill <= 2 && Math.random() < 0.5) {
-    return { action: { type: 'place', row: moves[0].row, col: moves[0].col } };
-  }
-
-  // Blunder rate: skill 5 ~5%, skill 1 ~50%
+  // HARD MODE: always use positional heuristic; only the small mistakeChance applies.
   if (Math.random() < mistakeChance(skill)) {
     const pick = moves[Math.floor(Math.random() * moves.length)];
     return { action: { type: 'place', row: pick.row, col: pick.col } };
@@ -520,9 +511,10 @@ function memoryMove(game, idx, agent) {
     }
   }
 
-  // Memory fidelity: skill 5 = 100% recall, skill 1 = ~40% recall.
-  // We simulate "forgetting" by randomly dropping entries per call.
-  const recallChance = 0.4 + 0.15 * skill;
+  // HARD MODE recall: skill 5 = 100% perfect, skill 4 = ~95%, skill 3 = ~85%,
+  // skill 2 = ~70%, skill 1 = ~55%. The skill-5 agent essentially never misses
+  // a known pair.
+  const recallChance = skill >= 5 ? 1.0 : (0.45 + 0.13 * skill);
   const usableMemory = {};
   for (const sym of Object.keys(game._botMemory)) {
     for (const i of game._botMemory[sym]) {
@@ -724,7 +716,7 @@ function mancalaMove(game, idx, agent) {
   for (let i = lo; i <= hi; i++) if (pits[i] > 0) legalPits.push(i);
   if (legalPits.length === 0) return { fallback: true };
 
-  if (skill <= 2 || Math.random() < mistakeChance(skill)) {
+  if (Math.random() < mistakeChance(skill)) {
     const pick = legalPits[Math.floor(Math.random() * legalPits.length)];
     return { action: { type: 'sow', pit: pick } };
   }
@@ -937,7 +929,7 @@ function hexMove(game, idx, agent) {
       if (board[r][c] === null) empties.push({ row: r, col: c });
   if (empties.length === 0) return { fallback: true };
 
-  if (skill <= 2 || Math.random() < mistakeChance(skill)) {
+  if (Math.random() < mistakeChance(skill)) {
     // Prefer the center area
     empties.sort((a, b) => Math.abs(a.row - size/2) + Math.abs(a.col - size/2) -
                             (Math.abs(b.row - size/2) + Math.abs(b.col - size/2)));
@@ -1066,12 +1058,13 @@ function checkersMove(game, idx, agent) {
   if (moves.length === 0) return { fallback: true };
 
   // Low skill: random move (still must take forced jump if any)
-  if (skill <= 2 || Math.random() < mistakeChance(skill)) {
+  if (Math.random() < mistakeChance(skill)) {
     const pick = moves[Math.floor(Math.random() * moves.length)];
     return { action: { type: 'move', from: pick.from, to: pick.to } };
   }
 
-  const depth = Math.max(2, skill + 1); // skill 3 -> 4, skill 5 -> 6
+  // HARD MODE depth: skill 3 -> 6, skill 4 -> 7, skill 5 -> 8
+  const depth = Math.max(4, skill + 3);
   let bestMove = moves[0];
   let bestScore = -Infinity;
   for (const m of moves) {
@@ -1127,7 +1120,7 @@ function chessMove(game, idx, agent) {
   const moves = _chessAllMoves(game, idx);
   if (moves.length === 0) return { fallback: true };
 
-  if (skill <= 2 || Math.random() < mistakeChance(skill)) {
+  if (Math.random() < mistakeChance(skill)) {
     const pick = moves[Math.floor(Math.random() * moves.length)];
     return { action: { type: 'move', from: pick.from, to: pick.to } };
   }
@@ -1188,7 +1181,7 @@ function backgammonMove(game, idx, agent) {
   if (!moves || moves.length === 0) return { fallback: true };
   const skill = (agent && agent.skill) || 3;
 
-  if (skill <= 2 || Math.random() < mistakeChance(skill)) {
+  if (Math.random() < mistakeChance(skill)) {
     const pick = moves[Math.floor(Math.random() * moves.length)];
     return { action: { type: 'move', from: pick.from, to: pick.to, die: pick.die } };
   }
