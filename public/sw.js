@@ -1,4 +1,4 @@
-var CACHE_NAME = 'zg-v3';
+var CACHE_NAME = 'zg-v6-2026-06-07d';
 var ASSETS = [
   '/',
   '/manifest.json',
@@ -33,6 +33,14 @@ self.addEventListener('fetch', function(e) {
   if (e.request.url.indexOf('/socket.io') !== -1) return;
   if (e.request.url.indexOf('cdn.socket.io') !== -1) return;
   if (e.request.method !== 'GET') return;
+
+  var url = e.request.url;
+  // Never cache the main HTML — always pull from network so APK users get
+  // updates immediately after a deploy.
+  if (url.endsWith('/') || url.endsWith('/index.html') || url.indexOf('/index.html?') !== -1) {
+    e.respondWith(fetch(e.request, { cache: 'no-store' }).catch(function(){ return caches.match(e.request); }));
+    return;
+  }
 
   e.respondWith(
     fetch(e.request).then(function(response) {

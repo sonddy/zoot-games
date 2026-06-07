@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>ZG — Zoot Games | Play & Earn Crypto</title>
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#00d4aa" />
@@ -2191,6 +2194,7 @@
           <button id="btn-refresh-balance" class="btn btn-wallet-action">&#x21bb; Refresh Balance</button>
           <button id="btn-disconnect-wallet" class="btn btn-wallet-action btn-disconnect">&#128274; Disconnect</button>
         </div>
+        <div id="build-version" style="margin-top:0.6rem;font-size:0.65rem;color:#5c6480;text-align:right;letter-spacing:0.04em;">Build 2026-06-07-d</div>
       </div>
 
       <div class="zootcoin-banner">
@@ -3107,19 +3111,44 @@
       function buildSignTxUrl(transaction)      { return buildSignDeeplink(transaction, 'signTransaction'); }
 
       async function openPhantomUrl(url) {
-        // NOTE: Do NOT use Capacitor's App.openUrl — in @capacitor/app v8 there
-        // is no openUrl method, but Capacitor's Plugins.App is a Proxy that
-        // returns a wrapper function for any property access. Calling
-        // Plugins.App.openUrl(...) throws "App.openUrl() is not implemented on
-        // android". Instead, just navigate the WebView to the Phantom universal
-        // link — Android intercepts it and opens the Phantom app, leaving our
-        // WebView state intact. Phantom redirects back to zootgames:// which
-        // is dispatched via the appUrlOpen listener and our app is brought back
-        // to the foreground without a reload.
+        // Try multiple methods to launch the Phantom universal link, since
+        // Capacitor's WebView intercepts external https:// navigations and
+        // dispatches them through Android's intent system. Different builds
+        // expose different routes — try each in turn.
+        console.log('[PhantomMobile] opening URL:', url.substring(0, 80) + '...');
+
+        // Method 1: anchor click with target=_blank — Capacitor treats this
+        // as an explicit user gesture and forwards to Intent.ACTION_VIEW.
+        try {
+          var a = document.createElement('a');
+          a.href = url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.style.display = 'none';
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(function(){ try { a.remove(); } catch(_){} }, 200);
+          return;
+        } catch (e1) {
+          console.warn('[PhantomMobile] anchor.click failed:', e1 && e1.message);
+        }
+
+        // Method 2: window.open with _system (Cordova-style external).
+        try {
+          var w = window.open(url, '_system');
+          if (w !== null && w !== undefined) return;
+        } catch (e2) {
+          console.warn('[PhantomMobile] window.open failed:', e2 && e2.message);
+        }
+
+        // Method 3: navigate the WebView. Capacitor's WebViewClient
+        // intercepts external origins and fires Intent.ACTION_VIEW.
         try {
           window.location.href = url;
-        } catch (e) {
-          window.open(url, '_system');
+          return;
+        } catch (e3) {
+          console.error('[PhantomMobile] all open methods failed:', e3 && e3.message);
+          throw new Error("Couldn't open Phantom — please make sure Phantom Mobile is installed.");
         }
       }
 
