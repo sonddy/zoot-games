@@ -2961,7 +2961,23 @@
             var bh = await connection.getLatestBlockhash('confirmed');
             transaction.recentBlockhash = bh.blockhash;
           }
-          return PhantomMobile.signAndSendTransaction(transaction);
+          // Some Phantom mobile builds reject signAndSendTransaction with
+          // "this method is not supported". Fall back to signTransaction +
+          // manual RPC submit so the user can still bet.
+          try {
+            return await PhantomMobile.signAndSendTransaction(transaction);
+          } catch (errA) {
+            var msgA = (errA && errA.message) || '';
+            if (/reject|denied|cancel|user/i.test(msgA)) throw errA;
+            console.warn('Phantom signAndSend deeplink failed, falling back to signTransaction:', msgA);
+            var web3 = window.solanaWeb3;
+            var b58 = await bs58();
+            var signedB58 = await PhantomMobile.signTransaction(transaction);
+            if (!signedB58) throw errA;
+            var signedBytes = b58.decode(signedB58);
+            var signed = web3.Transaction.from(signedBytes);
+            return await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false });
+          }
         }
         if (!provider) provider = getProvider();
         if (!provider) throw new Error('Phantom wallet not found');
@@ -3067,7 +3083,7 @@
         return 'https://phantom.app/ul/v1/connect?' + params.toString();
       }
 
-      async function buildSignAndSendUrl(transaction) {
+      async function buildSignDeeplink(transaction, methodPath) {
         if (!session || !sharedSecret) throw new Error('Phantom not connected');
         var b58 = await bs58();
         var serialized = transaction.serialize({ requireAllSignatures: false, verifySignatures: false });
@@ -3085,8 +3101,10 @@
           redirect_link: REDIRECT_BASE + 'onPhantomSign',
           payload: b58.encode(encrypted),
         });
-        return 'https://phantom.app/ul/v1/signAndSendTransaction?' + params.toString();
+        return 'https://phantom.app/ul/v1/' + methodPath + '?' + params.toString();
       }
+      function buildSignAndSendUrl(transaction) { return buildSignDeeplink(transaction, 'signAndSendTransaction'); }
+      function buildSignTxUrl(transaction)      { return buildSignDeeplink(transaction, 'signTransaction'); }
 
       async function openPhantomUrl(url) {
         if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App && window.Capacitor.Plugins.App.openUrl) {
@@ -3142,7 +3160,10 @@
         if (!pr) return;
         delete pendingRequests.sign;
         if (params.get('errorCode')) {
-          pr.reject(new Error(params.get('errorMessage') || 'Phantom signing rejected'));
+          var em = params.get('errorMessage') || 'Phantom signing rejected';
+          var err = new Error(em);
+          err.code = params.get('errorCode');
+          pr.reject(err);
           return;
         }
         var nonceB58 = params.get('nonce');
@@ -3154,7 +3175,7 @@
         var decrypted = nacl.box.open.after(b58.decode(dataB58), b58.decode(nonceB58), sharedSecret);
         if (!decrypted) { pr.reject(new Error('Failed to decrypt sign response')); return; }
         var json = JSON.parse(new TextDecoder().decode(decrypted));
-        pr.resolve(json.signature);
+        pr.resolve(json);
       }
 
       async function handleIncomingDeeplink(url) {
@@ -3219,7 +3240,25 @@
           }, 120000);
         });
         await openPhantomUrl(url);
-        return promise;
+        var json = await promise;
+        return json && json.signature;
+      }
+
+      async function signTransactionOnly(transaction) {
+        if (!session) throw new Error('Wallet not connected');
+        var url = await buildSignTxUrl(transaction);
+        var promise = new Promise(function(resolve, reject) {
+          pendingRequests.sign = { resolve: resolve, reject: reject };
+          setTimeout(function() {
+            if (pendingRequests.sign) {
+              delete pendingRequests.sign;
+              reject(new Error('Phantom signing timed out'));
+            }
+          }, 120000);
+        });
+        await openPhantomUrl(url);
+        var json = await promise;
+        return json && json.transaction;
       }
 
       function getPublicKey() { return userPubKey; }
@@ -3246,6 +3285,7 @@
         connect: connect,
         disconnect: disconnect,
         signAndSendTransaction: signAndSendTransaction,
+        signTransaction: signTransactionOnly,
         getPublicKey: getPublicKey,
       };
     })();
@@ -6276,6 +6316,28 @@
         }
       }
 
+      async function pollConfirmTransaction(connection, signature, timeoutMs) {
+        timeoutMs = timeoutMs || 90000;
+        var start = Date.now();
+        var lastErr = null;
+        while (Date.now() - start < timeoutMs) {
+          try {
+            var st = await connection.getSignatureStatus(signature, { searchTransactionHistory: true });
+            var v = st && st.value;
+            if (v) {
+              if (v.err) throw new Error('Transaction failed on-chain: ' + JSON.stringify(v.err));
+              if (v.confirmationStatus === 'confirmed' || v.confirmationStatus === 'finalized') return signature;
+              if (typeof v.confirmations === 'number' && v.confirmations >= 1) return signature;
+            }
+          } catch (e) {
+            lastErr = e;
+            if (/Transaction failed on-chain/.test(e.message || '')) throw e;
+          }
+          await new Promise(function(r){ setTimeout(r, 1500); });
+        }
+        throw new Error('Transaction confirmation timed out — check your wallet history' + (lastErr ? ' (' + lastErr.message + ')' : ''));
+      }
+
       async function sendBetPayment(currency, uiAmount, btn) {
         var web3 = window.solanaWeb3;
         if (!web3) throw new Error('Solana library not loaded — refresh page');
@@ -6303,7 +6365,7 @@
         var signature = await PhantomWallet.signAndSend(transaction, solConnection, fromPubkey);
 
         if (btn) btn.textContent = 'Confirming tx...';
-        await solConnection.confirmTransaction(signature, 'confirmed');
+        await pollConfirmTransaction(solConnection, signature, 90000);
         return signature;
       }
 
@@ -7471,7 +7533,7 @@
         var signature = await PhantomWallet.signAndSend(transaction, connection, fromPubkey);
 
         if (btn) btn.textContent = 'Confirming tx...';
-        await connection.confirmTransaction(signature, 'confirmed');
+        await pollConfirmTransaction(connection, signature, 90000);
         return signature;
       }
 
