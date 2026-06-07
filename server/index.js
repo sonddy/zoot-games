@@ -1072,7 +1072,19 @@ function scheduleHouseMove(room) {
     room._houseTimer = null;
     if (!rooms.has(room.id) || room.game.gameOver || room.state !== 'playing') return;
     try {
-      const result = room.game.handleAction(housePlayerIndex, action);
+      let result;
+      if (action && action.type === '__bot_auto') {
+        // Defer to the game's own auto-play (random-legal-move or built-in
+        // heuristic). May return null if the bot can't actually act yet.
+        if (typeof room.game.autoPlayForTimeout !== 'function') {
+          console.warn('houseBot: game has no autoPlayForTimeout:', room.gameType);
+          return;
+        }
+        result = room.game.autoPlayForTimeout(housePlayerIndex);
+        if (!result) return; // bot couldn't move this tick — just wait
+      } else {
+        result = room.game.handleAction(housePlayerIndex, action);
+      }
       if (result && result.error) {
         console.warn('houseBot action rejected:', room.gameType, action, result.error);
         return;

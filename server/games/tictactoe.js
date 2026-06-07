@@ -45,6 +45,31 @@ class TicTacToeGame {
     return { gameOver: false };
   }
 
+  autoPlayForTimeout(playerIndex) {
+    if (this.gameOver) return null;
+    if (this.currentPlayer !== playerIndex) return null;
+    // Smart-ish: take any winning move; otherwise block opponent's winning move;
+    // otherwise center; otherwise random empty cell.
+    const empty = [];
+    for (let i = 0; i < this.board.length; i++) if (this.board[i] === null) empty.push(i);
+    if (empty.length === 0) return null;
+
+    const tryMove = (idx, who) => {
+      const saved = this.board[idx];
+      this.board[idx] = who;
+      const win = this._checkWin(who);
+      this.board[idx] = saved;
+      return win;
+    };
+    for (const i of empty) if (tryMove(i, playerIndex)) return this.handleAction(playerIndex, { type: 'place', cell: i });
+    const opp = 1 - playerIndex;
+    for (const i of empty) if (tryMove(i, opp)) return this.handleAction(playerIndex, { type: 'place', cell: i });
+    const center = Math.floor(this.board.length / 2);
+    if (this.board[center] === null) return this.handleAction(playerIndex, { type: 'place', cell: center });
+    const pick = empty[Math.floor(Math.random() * empty.length)];
+    return this.handleAction(playerIndex, { type: 'place', cell: pick });
+  }
+
   _checkWin(p) {
     const s = this.size;
     const w = this.winLength;

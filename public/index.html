@@ -2194,7 +2194,7 @@
           <button id="btn-refresh-balance" class="btn btn-wallet-action">&#x21bb; Refresh Balance</button>
           <button id="btn-disconnect-wallet" class="btn btn-wallet-action btn-disconnect">&#128274; Disconnect</button>
         </div>
-        <div id="build-version" style="margin-top:0.6rem;font-size:0.65rem;color:#5c6480;text-align:right;letter-spacing:0.04em;">Build 2026-06-07-e</div>
+        <div id="build-version" style="margin-top:0.6rem;font-size:0.65rem;color:#5c6480;text-align:right;letter-spacing:0.04em;">Build 2026-06-07-f</div>
       </div>
 
       <div class="zootcoin-banner">
@@ -2217,7 +2217,7 @@
       </div>
       <div class="house-info" id="house-info" hidden>
         <span class="house-info-icon">&#127919;</span>
-        <span><strong>House mode:</strong> Bet $ZOOT, win <strong>1.94&times;</strong> instantly. Max bet <strong>100,000 $ZOOT</strong>. 6 fast games available.</span>
+        <span><strong>House mode:</strong> Bet $ZOOT, win <strong>1.94&times;</strong> instantly. Max bet <strong>100,000 $ZOOT</strong>. All games available.</span>
       </div>
       <div class="game-category-tabs" id="game-category-tabs">
         <button class="game-category-tab active" data-category="all">All <span class="tab-count">24</span></button>
@@ -6766,7 +6766,12 @@
     // HOUSE MODE TOGGLE
     // ════════════════════════════════════════
     var HouseMode = (function() {
-      var SUPPORTED = ['rps', 'coinflip', 'diceduel', 'hilo', 'reaction', 'mathduel'];
+      var SUPPORTED = [
+        'rps', 'coinflip', 'diceduel', 'hilo', 'reaction', 'mathduel',
+        'tictactoe', 'morpion', 'connect4', 'dotsboxes', 'nim', 'hex',
+        'checkers', 'chess', 'reversi', 'mancala', 'backgammon',
+        'domino', 'war', 'speed', 'memory', 'battleship', 'poker'
+      ];
       var MAX_BET = 100000;
       var active = false;
 
