@@ -1,6 +1,7 @@
 'use strict';
 
 const agents = require('./houseAgents');
+const strategy = require('./houseStrategy');
 
 const HOUSE_SOCKET_ID = '__HOUSE_BOT__';
 // Legacy fallback names — only used if no agent has been assigned to a room.
@@ -130,6 +131,16 @@ function decideAction(game, gameType, housePlayerIndex, agent) {
     }
     case 'war':
       return { type: 'flip' };
+    // Strategy games: route through houseStrategy for skill-aware play.
+    // Falls back to the game's own auto-play if we have no opinion.
+    case 'morpion':
+    case 'tictactoe':
+    case 'connect4':
+    case 'nim': {
+      const res = strategy.strategyMove(gameType, game, idx, a);
+      if (res && res.action) return res.action;
+      return BOT_AUTO;
+    }
     // Everything else defers to the game's own auto-play (random-legal-move
     // or simple heuristic the game already ships with).
     default:
