@@ -60,9 +60,11 @@ function botCanAct(game, gameType, idx) {
     case 'memory':
       return game.currentPlayer === idx;
     case 'battleship':
-      return game.phase === 'shoot' && game.currentPlayer === idx;
+      // BattleshipGame uses phase 'battle' after auto-placement
+      return game.phase === 'battle' && game.currentPlayer === idx;
     case 'backgammon':
-      return game.currentPlayer === idx && !game.awaitingRoll && !game.gameOver;
+      // Bot needs to act to roll the dice when !diceRolled, then to move
+      return game.currentPlayer === idx && !game.gameOver;
     case 'poker':
       return game.currentPlayer === idx && game.phase !== 'showdown' && !game.gameOver;
     case 'domino':
@@ -136,7 +138,16 @@ function decideAction(game, gameType, housePlayerIndex, agent) {
     case 'morpion':
     case 'tictactoe':
     case 'connect4':
-    case 'nim': {
+    case 'nim':
+    case 'reversi':
+    case 'memory':
+    case 'battleship':
+    case 'mancala':
+    case 'dotsboxes':
+    case 'hex':
+    case 'checkers':
+    case 'chess':
+    case 'backgammon': {
       const res = strategy.strategyMove(gameType, game, idx, a);
       if (res && res.action) return res.action;
       return BOT_AUTO;
