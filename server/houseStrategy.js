@@ -12,13 +12,11 @@
 // ════════════════════════════════════════════════════════════════════
 
 function mistakeChance(skill) {
-  // Tightened for a betting context: even skill 1 should be tough enough that
-  // a casual human cannot drain the escrow. The house bot is not here to
-  // throw games.
-  //   skill 1 -> 0.18, skill 2 -> 0.12, skill 3 -> 0.07
-  //   skill 4 -> 0.04, skill 5 -> 0.015
-  const map = { 1: 0.18, 2: 0.12, 3: 0.07, 4: 0.04, 5: 0.015 };
-  return map[skill] ?? 0.07;
+  // SKILL 5: NEVER blunders. vs-house always uses skill 5 now — the house
+  // cannot afford random self-sabotage at the top level.
+  // skill 4 -> 0.05  skill 3 -> 0.16  skill 2 -> 0.27  skill 1 -> 0.38
+  if (skill >= 5) return 0;
+  return Math.max(0, 0.5 - 0.11 * skill);
 }
 
 function shouldBlunder(agent) {
@@ -240,9 +238,8 @@ function tttMove(game, idx, agent) {
     if (wOppWin === opp) return { action: { type: 'place', cell: i } };
   }
 
-  // (No low-skill shortcut — Morpion always uses the threat scorer; the
-  // blunder rate alone modulates difficulty.)
-  if (false) {
+  // Low-skill agents play randomly often
+  if (skill <= 2 && Math.random() < 0.6) {
     return { action: { type: 'place', cell: empties[Math.floor(Math.random() * empties.length)] } };
   }
   // skill 3: ~20% blunder; skill 4: ~10%; skill 5: ~5%
@@ -377,8 +374,8 @@ function c4Move(game, idx, agent) {
   const me = idx;
   const opp = 1 - idx;
   const skill = (agent && agent.skill) || 3;
-  // depth: skill 1 = 4, skill 5 = 7 (deeper = much harder to beat)
-  const depth = Math.min(7, Math.max(4, skill + 2));
+  // depth: skill 1 = 2, skill 5 = 6
+  const depth = Math.max(2, skill + 1);
 
   // blunder
   if (Math.random() < mistakeChance(skill)) {
@@ -416,8 +413,8 @@ function nimMove(game, idx, agent) {
     return { action: { type: 'take', pile: pi, count: take } };
   }
 
-  // No low-skill random shortcut — TTT minimax is fast; always run it.
-  // The mistakeChance below provides the only blunder modulation.
+  // Low skill: mostly random
+  if (skill <= 2) return randomMove();
   // Even high skill blunders some of the time
   if (Math.random() < mistakeChance(skill)) return randomMove();
 
@@ -481,8 +478,10 @@ function reversiMove(game, idx, agent) {
   if (!moves || moves.length === 0) return { fallback: true };
   const skill = (agent && agent.skill) || 3;
 
-  // (Reversi always runs the positional heuristic; blunder rate alone
-  // modulates difficulty.)
+  // Low skill: weighted random toward decent moves
+  if (skill <= 2 && Math.random() < 0.5) {
+    return { action: { type: 'place', row: moves[0].row, col: moves[0].col } };
+  }
 
   // Blunder rate: skill 5 ~5%, skill 1 ~50%
   if (Math.random() < mistakeChance(skill)) {
@@ -728,7 +727,7 @@ function mancalaMove(game, idx, agent) {
   for (let i = lo; i <= hi; i++) if (pits[i] > 0) legalPits.push(i);
   if (legalPits.length === 0) return { fallback: true };
 
-  if (Math.random() < mistakeChance(skill)) {
+  if (skill <= 2 || Math.random() < mistakeChance(skill)) {
     const pick = legalPits[Math.floor(Math.random() * legalPits.length)];
     return { action: { type: 'sow', pit: pick } };
   }
@@ -941,11 +940,11 @@ function hexMove(game, idx, agent) {
       if (board[r][c] === null) empties.push({ row: r, col: c });
   if (empties.length === 0) return { fallback: true };
 
-  if (Math.random() < mistakeChance(skill)) {
-    // Center-biased random blunder (rare now)
+  if (skill <= 2 || Math.random() < mistakeChance(skill)) {
+    // Prefer the center area
     empties.sort((a, b) => Math.abs(a.row - size/2) + Math.abs(a.col - size/2) -
                             (Math.abs(b.row - size/2) + Math.abs(b.col - size/2)));
-    const pool = empties.slice(0, Math.max(1, Math.floor(empties.length / 4)));
+    const pool = empties.slice(0, Math.max(1, Math.floor(empties.length / 3)));
     const pick = pool[Math.floor(Math.random() * pool.length)];
     return { action: { type: 'place', row: pick.row, col: pick.col } };
   }
@@ -1069,14 +1068,13 @@ function checkersMove(game, idx, agent) {
   const moves = _checkersAllMoves(game, idx);
   if (moves.length === 0) return { fallback: true };
 
-  // Blunder rate alone modulates skill; always run minimax otherwise.
-  if (Math.random() < mistakeChance(skill)) {
+  // Low skill: random move (still must take forced jump if any)
+  if (skill <= 2 || Math.random() < mistakeChance(skill)) {
     const pick = moves[Math.floor(Math.random() * moves.length)];
     return { action: { type: 'move', from: pick.from, to: pick.to } };
   }
 
-  // depth: skill 1 = 4, skill 5 = 7 — fairly deep on the 32-square checkerboard
-  const depth = Math.min(7, Math.max(4, skill + 2));
+  const depth = Math.max(2, skill + 1); // skill 3 -> 4, skill 5 -> 6
   let bestMove = moves[0];
   let bestScore = -Infinity;
   for (const m of moves) {
@@ -1132,7 +1130,7 @@ function chessMove(game, idx, agent) {
   const moves = _chessAllMoves(game, idx);
   if (moves.length === 0) return { fallback: true };
 
-  if (Math.random() < mistakeChance(skill)) {
+  if (skill <= 2 || Math.random() < mistakeChance(skill)) {
     const pick = moves[Math.floor(Math.random() * moves.length)];
     return { action: { type: 'move', from: pick.from, to: pick.to } };
   }
@@ -1193,7 +1191,7 @@ function backgammonMove(game, idx, agent) {
   if (!moves || moves.length === 0) return { fallback: true };
   const skill = (agent && agent.skill) || 3;
 
-  if (Math.random() < mistakeChance(skill)) {
+  if (skill <= 2 || Math.random() < mistakeChance(skill)) {
     const pick = moves[Math.floor(Math.random() * moves.length)];
     return { action: { type: 'move', from: pick.from, to: pick.to, die: pick.die } };
   }
@@ -1217,6 +1215,86 @@ function backgammonMove(game, idx, agent) {
 }
 
 // ──────────────────────────────────────────────────────────────
+// SPEED — real-time card play; scan hand for any playable card
+// ──────────────────────────────────────────────────────────────
+
+function _speedIsAdjacent(v1, v2) {
+  const diff = Math.abs(v1 - v2);
+  return diff === 1 || diff === 12; // A wraps with K
+}
+
+function speedMove(game, idx, agent) {
+  if (!game.hands || !game.piles || !game.hands[idx]) return { fallback: true };
+  const hand = game.hands[idx];
+  const piles = game.piles;
+  if (!piles[0] || !piles[1]) return { fallback: true };
+
+  // Scan hand for any playable card. Skill 5 finds it instantly; lower skill
+  // may "miss" a few times (simulated via mistakeChance below).
+  const skill = (agent && agent.skill) || 3;
+  if (Math.random() < mistakeChance(skill)) return null; // "wait" for a beat
+
+  for (let i = 0; i < hand.length; i++) {
+    const c = hand[i];
+    if (_speedIsAdjacent(c.value, piles[0].value)) {
+      return { action: { type: 'play', handIndex: i, pileIndex: 0 } };
+    }
+    if (_speedIsAdjacent(c.value, piles[1].value)) {
+      return { action: { type: 'play', handIndex: i, pileIndex: 1 } };
+    }
+  }
+  return null;
+}
+
+// ──────────────────────────────────────────────────────────────
+// DOMINO — play highest-pip playable tile (reduce hand value)
+// ──────────────────────────────────────────────────────────────
+
+function dominoMove(game, idx, agent) {
+  if (!game.hands || !game.hands[idx]) return { fallback: true };
+  const hand = game.hands[idx];
+  const skill = (agent && agent.skill) || 3;
+
+  if (Math.random() < mistakeChance(skill)) {
+    return { fallback: true }; // defer to game's autoPlay (random-ish)
+  }
+
+  if (hand.length === 0) return { fallback: true };
+
+  // Opening move (empty board): play highest double, else highest pip tile.
+  if (game.board.length === 0) {
+    let bestIdx = 0;
+    let bestScore = -1;
+    for (let i = 0; i < hand.length; i++) {
+      const t = hand[i];
+      const isDouble = t[0] === t[1];
+      const score = (t[0] + t[1]) + (isDouble ? 100 : 0);
+      if (score > bestScore) { bestScore = score; bestIdx = i; }
+    }
+    return { action: { type: 'play', tileIndex: bestIdx, side: 'right' } };
+  }
+
+  // Find all playable tiles and pick highest pip count first (to deplete hand value)
+  const candidates = [];
+  for (let i = 0; i < hand.length; i++) {
+    const t = hand[i];
+    const matchL = t[0] === game.boardLeft || t[1] === game.boardLeft;
+    const matchR = t[0] === game.boardRight || t[1] === game.boardRight;
+    if (matchL) candidates.push({ idx: i, side: 'left',  pip: t[0] + t[1] });
+    if (matchR) candidates.push({ idx: i, side: 'right', pip: t[0] + t[1] });
+  }
+
+  if (candidates.length === 0) {
+    if (game.boneyard.length > 0) return { action: { type: 'auto_draw' } };
+    return { action: { type: 'pass' } };
+  }
+
+  candidates.sort((a, b) => b.pip - a.pip);
+  const best = candidates[0];
+  return { action: { type: 'play', tileIndex: best.idx, side: best.side } };
+}
+
+// ──────────────────────────────────────────────────────────────
 // Dispatch
 // ──────────────────────────────────────────────────────────────
 
@@ -1236,6 +1314,8 @@ function strategyMove(gameType, game, idx, agent) {
       case 'checkers':   return checkersMove(game, idx, agent);
       case 'chess':      return chessMove(game, idx, agent);
       case 'backgammon': return backgammonMove(game, idx, agent);
+      case 'speed':      return speedMove(game, idx, agent);
+      case 'domino':     return dominoMove(game, idx, agent);
       default:           return { fallback: true };
     }
   } catch (e) {

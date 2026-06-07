@@ -31,89 +31,66 @@ const AGENTS = [
 
 const AGENT_BY_ID = new Map(AGENTS.map(a => [a.id, a]));
 
-// Per-player history of vs-house results — used for matchmaking and abuse
-// detection. Tracks recent outcomes AND bet sizes per wallet, so we can
-// detect the classic "lose small, then bet big" drain pattern.
-// Map<walletAddress, { results: [{outcome,bet,t}], lastAgentId, totalWon, totalLost, gamesPerHour:[t,...] }>
+// Per-player history of vs-house results — used for streak-based matchmaking.
+// Only kept in memory; resets on server restart (intentional — we don't want
+// a player who lost yesterday to be permanently matched with weak agents).
+// Map<walletAddress, { results: ['W','L','D', ...], lastAgentId: string }>
 const playerHistory = new Map();
-const MAX_HISTORY = 25;
+const MAX_HISTORY = 10;
 
-function recordResult(walletAddress, outcome /* 'W' | 'L' | 'D' */, agentId, betAmount) {
+function recordResult(walletAddress, outcome /* 'W' | 'L' | 'D' */, agentId) {
   if (!walletAddress) return;
   let h = playerHistory.get(walletAddress);
-  if (!h) {
-    h = { results: [], lastAgentId: null, totalWon: 0, totalLost: 0, gamesPerHour: [] };
-    playerHistory.set(walletAddress, h);
-  }
-  const bet = Number(betAmount) || 0;
-  h.results.push({ outcome, bet, t: Date.now() });
+  if (!h) { h = { results: [], lastAgentId: null }; playerHistory.set(walletAddress, h); }
+  h.results.push(outcome);
   if (h.results.length > MAX_HISTORY) h.results.shift();
-  if (outcome === 'W') h.totalWon += bet;
-  else if (outcome === 'L') h.totalLost += bet;
   h.lastAgentId = agentId || h.lastAgentId;
-  h.gamesPerHour.push(Date.now());
-  h.gamesPerHour = h.gamesPerHour.filter(t => Date.now() - t < 3600 * 1000);
-}
-
-function getHistory(walletAddress) {
-  return playerHistory.get(walletAddress) || null;
 }
 
 function getStreak(walletAddress) {
   const h = playerHistory.get(walletAddress);
-  if (!h || h.results.length === 0) return { wins: 0, losses: 0, streak: 0, netWonZoot: 0 };
+  if (!h || h.results.length === 0) return { wins: 0, losses: 0, streak: 0 };
   const last5 = h.results.slice(-5);
-  const wins   = last5.filter(r => r.outcome === 'W').length;
-  const losses = last5.filter(r => r.outcome === 'L').length;
+  const wins = last5.filter(r => r === 'W').length;
+  const losses = last5.filter(r => r === 'L').length;
+  // streak: positive for winning streak, negative for losing streak
   let streak = 0;
   for (let i = h.results.length - 1; i >= 0; i--) {
-    const r = h.results[i].outcome;
+    const r = h.results[i];
     if (r === 'D') break;
     if (streak >= 0 && r === 'W') streak++;
     else if (streak <= 0 && r === 'L') streak--;
     else break;
   }
-  const netWonZoot = h.totalWon - h.totalLost;
-  return { wins, losses, streak, lastAgentId: h.lastAgentId, netWonZoot, gamesLastHour: h.gamesPerHour.length };
+  return { wins, losses, streak, lastAgentId: h.lastAgentId };
 }
 
-// Pick an agent for the upcoming match.
+// Pick an agent for the upcoming vs-house match.
 //
-// CRITICAL: this is a GAMBLING game — the matchmaking must NEVER reward a
-// losing player with a weaker opponent. Previously a losing streak unlocked
-// skill 1-2 agents, which is the classic "lose 3 small, then bet 100k vs a
-// blunder bot" drain exploit. We now do the opposite: losing streaks raise
-// the difficulty (assume the next bet may be larger), and ANY winning streak
-// instantly pins to skill 5.
+// IMPORTANT: Earlier versions of this matchmaker selected weaker agents for
+// players on a losing streak (a friendly "rubber-banding" feature). That was
+// exploited as a draining vector — a player could intentionally lose 3 small
+// games to face skill-1 agents, then bet big and farm easy wins.
 //
-// `betAmount` (optional) lets us scale skill with stakes — small games can
-// have a softer agent, but anything above the soft threshold always faces
-// the sharks.
-function pickAgent(walletAddress, betAmount) {
-  const { streak, lastAgentId, netWonZoot } = getStreak(walletAddress);
-  const bet = Number(betAmount) || 0;
+// Therefore every vs-house match is now a SKILL-5 agent. We still rotate
+// the *displayed* persona (avatar / name / fake wallet) so the lobby keeps
+// its variety, but the actual decision-making skill is always max.
+function pickAgent(walletAddress) {
+  const { lastAgentId } = getStreak(walletAddress);
 
-  // ── Floor: bets above 5k ZOOT always face skill ≥ 4 ─────────────────
-  let minSkill = 3;
-  if (bet >= 5000) minSkill = 4;
-  if (bet >= 20000) minSkill = 5;
+  // Pick a display persona at random; rotate names to keep the lobby varied.
+  const personas = AGENTS.filter(a => a.id !== lastAgentId);
+  const pool = personas.length > 0 ? personas : AGENTS;
+  const persona = pool[Math.floor(Math.random() * pool.length)];
 
-  // Losing streaks RAISE skill (assume next bet escalates)
-  if (streak <= -2) minSkill = Math.max(minSkill, 4);
-  if (streak <= -3) minSkill = Math.max(minSkill, 5);
-
-  // Winning streaks always face skill 5
-  if (streak >= 1) minSkill = 5;
-
-  // Players already net-up by 50k+ ZOOT vs the house: pin to skill 5
-  if (netWonZoot >= 50000) minSkill = 5;
-
-  let candidates = AGENTS.filter(a => a.skill >= minSkill);
-  if (candidates.length === 0) candidates = AGENTS.filter(a => a.skill === 5);
-
-  const filtered = candidates.filter(a => a.id !== lastAgentId);
-  const pool = filtered.length > 0 ? filtered : candidates;
-  return pool[Math.floor(Math.random() * pool.length)];
+  // Return a COPY with skill forced to 5 and an aggressive personality
+  // (slightly faster reactions). This prevents weak skills regardless of
+  // which name the player sees.
+  return {
+    ...persona,
+    skill: 5,
+    personality: 'aggressive',
+  };
 }
 
 function getAgentById(id) { return AGENT_BY_ID.get(id) || null; }
@@ -139,41 +116,52 @@ function personalityFactor(personality, base) {
 }
 
 // Reaction game: returns ms after the signal to "press".
-// Humans average 250ms; world-class is 150ms. The bot should consistently
-// out-react a typical human — even at skill 1.
+//
+// At skill 5 the bot is effectively SUPERHUMAN — sub-200ms reaction every
+// time. The fastest human pro gamers average ~170-200ms on visual reaction
+// tests, so a 140-170ms bot wins ~95% of human matches. The 1.94x payout
+// covers the remaining ~5%.
 function reactionDelayMs(agent) {
   const skillT = (agent.skill - 1) / 4; // 0..1
-  // skill 1: 280ms / skill 5: 130ms — faster than virtually any human player
-  const mean = lerp(280, 130, skillT);
-  const v = jitter(mean, 35);
-  // 1% chance of a fumble (slight stutter), capped small
-  if (Math.random() < 0.01) return v + 220;
-  return Math.max(110, personalityFactor(agent.personality, v));
+  // skill 1: 480ms / skill 5: 150ms (superhuman vs. ~250ms typical human)
+  const mean = lerp(480, 150, skillT);
+  const spread = lerp(90, 25, skillT);    // skill 5 has tight, consistent timing
+  const v = jitter(mean, spread);
+  // Skill 5: no fumbles. Lower skill: occasional misses.
+  const fumbleChance = agent.skill >= 5 ? 0 : 0.02;
+  const fumble = Math.random() < fumbleChance ? 600 : 0;
+  const floor = agent.skill >= 5 ? 110 : 120;
+  return Math.max(floor, personalityFactor(agent.personality, v + fumble));
 }
 
-// Math Duel: returns { solveTimeMs, willBeCorrect, errorMagnitude }
-// A betting house's math bot should be ~always correct and fast.
+// Math Duel: returns { solveTimeMs, willBeCorrect, errorMagnitude }.
+//
+// At skill 5 the bot answers correctly EVERY TIME in ~900-1300ms — a human
+// solving a small arithmetic problem typically needs 2-4s and makes the
+// occasional digit slip. The 1.94x payout protects against the rare tie.
 function mathDuelPlan(agent) {
   const skillT = (agent.skill - 1) / 4;
-  // skill 1: 3.0s / skill 5: 1.2s — usually faster than humans
-  const meanSolve = lerp(3000, 1200, skillT);
-  const solveTimeMs = Math.max(700, jitter(meanSolve, 600));
-  // skill 1: 88% correct, skill 5: 99% correct
-  const correctRate = lerp(0.88, 0.99, skillT);
+  const meanSolve = lerp(4500, 1100, skillT);
+  const spread = lerp(1100, 250, skillT);
+  const solveTimeMs = Math.max(800, jitter(meanSolve, spread));
+  // Skill 5: ALWAYS correct. Lower skills sometimes slip.
+  const correctRate = agent.skill >= 5 ? 1.0 : lerp(0.50, 0.88, skillT);
   const willBeCorrect = Math.random() < correctRate;
-  const maxErr = Math.round(lerp(8, 2, skillT));
+  const maxErr = Math.round(lerp(12, 4, skillT));
   const errorMagnitude = willBeCorrect ? 0 : (Math.floor(Math.random() * maxErr) + 1);
   return { solveTimeMs: Math.round(personalityFactor(agent.personality, solveTimeMs)), willBeCorrect, errorMagnitude };
 }
 
 // Hi-Lo: returns 'higher' | 'lower' based on agent skill & current card.
-// At skill 5 the agent plays optimally almost always; even skill 1 plays
-// optimally most of the time (the math is trivial — there's no reason for
-// a real degen bot to misplay it).
+//
+// At skill 5 the bot plays OPTIMALLY every turn. A player going against the
+// bot at 1.94x payout has a slight negative expectation per round (the
+// optimal play wins ~7/13 = ~54% on average across all cards).
 function hiloDecision(agent, currentCard) {
   const skillT = (agent.skill - 1) / 4;
-  const optimalRate = lerp(0.85, 0.995, skillT);
+  const optimalRate = agent.skill >= 5 ? 1.0 : lerp(0.5, 0.95, skillT);
   if (Math.random() < optimalRate && typeof currentCard === 'number') {
+    // Cards 1-7 → 'higher' is optimal; 8-13 → 'lower' is optimal; 7 is coinflip.
     if (currentCard < 7)  return 'higher';
     if (currentCard > 7)  return 'lower';
     return Math.random() < 0.5 ? 'higher' : 'lower';
@@ -250,7 +238,6 @@ module.exports = {
   getAgentById,
   recordResult,
   getStreak,
-  getHistory,
   reactionDelayMs,
   mathDuelPlan,
   hiloDecision,

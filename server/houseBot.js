@@ -9,17 +9,23 @@ const HOUSE_SOCKET_ID = '__HOUSE_BOT__';
 const HOUSE_DISPLAY_NAME = 'House';
 const HOUSE_WALLET_DISPLAY = 'HOUSE';
 
-// All 24 games supported in vs-house mode. For games not in CUSTOM_AI below,
-// the bot defers to that game's `autoPlayForTimeout(playerIndex)` method,
-// which already implements a sensible (usually random / heuristic) move
-// picker. The 1.94x payout (vs the fair 2.0x) gives the house ~3% edge on
-// chance-driven games; strategy-heavy games rely on the bot beating
-// less-skilled players plus the same payout edge for skilled ones.
+// Games supported in vs-house mode.
+//
+// EXPLICITLY EXCLUDED (and why):
+//   coinflip, diceduel, war  — pure luck; 3% house edge from 1.94x payout
+//                              is too thin a margin vs automation/variance.
+//   hilo                     — with optimal play on both sides it's ~50/50;
+//                              variance can drain the escrow.
+//   poker                    — bot has no real poker AI and the autoplay
+//                              folds whenever it's facing a bet, which
+//                              guarantees the player wins by just raising.
+//
+// All these games are still available in PvP — players can bet each other.
 const SUPPORTED_GAMES = [
-  'rps', 'coinflip', 'diceduel', 'hilo', 'reaction', 'mathduel',
+  'rps', 'reaction', 'mathduel',
   'tictactoe', 'morpion', 'connect4', 'dotsboxes', 'nim', 'hex',
   'checkers', 'chess', 'reversi', 'mancala', 'backgammon',
-  'domino', 'war', 'speed', 'memory', 'battleship', 'poker',
+  'domino', 'speed', 'memory', 'battleship',
 ];
 
 // Sentinel action that tells server/index.js to call
@@ -147,7 +153,9 @@ function decideAction(game, gameType, housePlayerIndex, agent) {
     case 'hex':
     case 'checkers':
     case 'chess':
-    case 'backgammon': {
+    case 'backgammon':
+    case 'speed':
+    case 'domino': {
       const res = strategy.strategyMove(gameType, game, idx, a);
       if (res && res.action) return res.action;
       return BOT_AUTO;
