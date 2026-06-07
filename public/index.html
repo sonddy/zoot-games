@@ -2970,8 +2970,27 @@
           var bh2 = await connection.getLatestBlockhash('confirmed');
           transaction.recentBlockhash = bh2.blockhash;
         }
-        var signed = await provider.signTransaction(transaction);
-        return connection.sendRawTransaction(signed.serialize());
+
+        // Prefer signAndSendTransaction (Phantom + most modern wallets) — wallets
+        // that don't expose signTransaction throw "this method is not supported".
+        if (typeof provider.signAndSendTransaction === 'function') {
+          try {
+            var resp = await provider.signAndSendTransaction(transaction);
+            if (resp && resp.signature) return resp.signature;
+            if (typeof resp === 'string') return resp;
+            if (resp && resp.publicKey && resp.signature) return resp.signature;
+          } catch (err) {
+            console.warn('signAndSendTransaction failed, falling back:', err && err.message);
+            if (err && /reject|denied|cancel/i.test(err.message || '')) throw err;
+          }
+        }
+
+        if (typeof provider.signTransaction === 'function') {
+          var signed = await provider.signTransaction(transaction);
+          return connection.sendRawTransaction(signed.serialize());
+        }
+
+        throw new Error('Wallet does not support signing — try reconnecting Phantom or use a different wallet');
       }
 
       return {
