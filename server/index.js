@@ -40,6 +40,7 @@ const HexGame = require('./games/hex');
 const ReactionGame = require('./games/reaction');
 const MemoryGame = require('./games/memory');
 const MathDuelGame = require('./games/mathduel');
+const houseBot = require('./houseBot');
 
 const SOLANA_RPC = process.env.SOLANA_RPC || 'https://solana-rpc.publicnode.com';
 const solanaConnection = new Connection(SOLANA_RPC, 'confirmed');
@@ -201,6 +202,7 @@ const players = new Map();
 const matchQueue = new Map();
 const usedSignatures = new Set();
 const sportsBets = new Map();
+const chatBuckets = new Map();
 
 const HOUSE_FEE = 0.10;
 const HOUSE_WALLET = '2LK7yxZsy6YVCkFQ4PrL644ve1fgRj5FuDexj5JgS753';
@@ -393,13 +395,58 @@ async function persistActiveRoom(room) {
 
 async function handleGameOver(room, result) {
   clearTurnTimer(room);
+  if (room._houseTimer) { clearTimeout(room._houseTimer); room._houseTimer = null; }
   room.state = 'finished';
   persistence.removeActiveRoom(room.id).catch(()=>{});
   const winnerIdx = result.winner;
+  const currency = room.currency || 'SOL';
+
+  if (room.vsHouse) {
+    committedHouseBets.delete(room.id);
+    const playerSocketId = room.players[0];
+    const player = players.get(playerSocketId);
+    if (winnerIdx === 0) {
+      const payout = room.betAmount * HOUSE_PAYOUT_MULTIPLIER;
+      if (player && !TEST_MODE) {
+        try {
+          await sendCurrency('ZOOT', player.walletAddress, payout);
+          const sock = io.sockets.sockets.get(playerSocketId);
+          if (sock) sock.emit('balance_update', { refreshWallet: true, msg: 'You won ' + payout.toFixed(2) + ' $ZOOT vs the House!' });
+        } catch (e) {
+          console.error('House payout error, queuing:', e.message);
+          try { await persistence.addPendingRefund({ walletAddress: player.walletAddress, currency: 'ZOOT', amount: payout, reason: 'House game payout', retries: 0, lastError: e.message }); } catch (_) {}
+        }
+      }
+      io.to(room.id).emit('game_over', {
+        winner: player ? player.displayName : null,
+        winnerWallet: player ? player.walletAddress : null,
+        payout, currency: 'ZOOT', isDraw: false, resigned: !!result.resigned, vsHouse: true,
+      });
+    } else if (winnerIdx === 1) {
+      io.to(room.id).emit('game_over', {
+        winner: houseBot.HOUSE_DISPLAY_NAME,
+        winnerWallet: houseBot.HOUSE_WALLET_DISPLAY,
+        payout: 0, currency: 'ZOOT', isDraw: false, resigned: !!result.resigned, vsHouse: true,
+      });
+    } else {
+      if (player && !TEST_MODE) {
+        await refundUser({
+          walletAddress: player.walletAddress,
+          currency: 'ZOOT',
+          amount: room.betAmount,
+          reason: 'Draw vs House',
+          socketId: playerSocketId,
+        });
+      }
+      io.to(room.id).emit('game_over', { winner: null, winnerWallet: null, payout: 0, currency: 'ZOOT', isDraw: true, vsHouse: true });
+    }
+    setTimeout(() => cleanupRoom(room.id), 5000);
+    return;
+  }
+
   const pot = room.betAmount * 2;
   const houseCut = pot * HOUSE_FEE;
   const payout = pot - houseCut;
-  const currency = room.currency || 'SOL';
 
   if (winnerIdx !== null) {
     const winnerSocketId = room.players[winnerIdx];
@@ -446,7 +493,7 @@ async function handleGameOver(room, result) {
   setTimeout(() => cleanupRoom(room.id), 5000);
 }
 
-const TIMER_DELAYS = { domino: 15500, mancala: 20500, checkers: 30500, chess: 60500, morpion: 30500, war: 15500, speed: 20500, poker: 30500, reversi: 30500, connect4: 20500, battleship: 25500, backgammon: 30500, rps: 10500, coinflip: 10500, diceduel: 10500, hilo: 15500, dotsboxes: 20500, nim: 20500, hex: 30500, reaction: 15500, memory: 20500, mathduel: 15500 };
+const TIMER_DELAYS = { domino: 25500, mancala: 30500, checkers: 45500, chess: 120500, morpion: 45500, war: 25500, speed: 30500, poker: 45500, reversi: 45500, connect4: 30500, battleship: 40500, backgammon: 45500, rps: 15500, coinflip: 15500, diceduel: 15500, hilo: 25500, dotsboxes: 30500, nim: 30500, hex: 45500, reaction: 25500, memory: 30500, mathduel: 25500 };
 
 function startTurnTimer(room) {
   clearTurnTimer(room);
@@ -548,6 +595,50 @@ io.on('connection', (socket) => {
       socket.emit('waiting', { msg: 'Waiting for an opponent...', betAmount: bet, gameType, currency: cur });
     }
     broadcastLobby();
+  });
+
+  socket.on('find_match_house', async ({ gameType, betAmount, txSignature }) => {
+    try {
+      const player = players.get(socket.id);
+      if (!player) return socket.emit('error_msg', { msg: 'Register first' });
+      if (player.roomId) return socket.emit('error_msg', { msg: 'You are already in a game' });
+
+      if (!houseBot.isSupportedGame(gameType)) {
+        return socket.emit('error_msg', { msg: 'House mode not available for this game yet' });
+      }
+
+      const bet = parseFloat(betAmount) || 0;
+      if (!bet || bet <= 0) return socket.emit('error_msg', { msg: 'Invalid bet amount' });
+      if (bet > HOUSE_MAX_ZOOT_BET) return socket.emit('error_msg', { msg: 'House bet cannot exceed ' + HOUSE_MAX_ZOOT_BET.toLocaleString() + ' $ZOOT' });
+
+      const escrowZoot = await getEscrowZootBalance();
+      const exposed = totalCommittedHouseBets();
+      const liquidityNeeded = bet * (HOUSE_PAYOUT_MULTIPLIER - 1) + bet * 0.05;
+      if (escrowZoot - exposed < liquidityNeeded) {
+        return socket.emit('error_msg', { msg: 'House is short on $ZOOT for this bet — try a smaller amount or play vs another player' });
+      }
+
+      if (!TEST_MODE) {
+        if (!txSignature) return socket.emit('error_msg', { msg: 'No payment transaction provided' });
+        const verification = await verifyBetPayment(txSignature, bet, 'ZOOT');
+        if (!verification.ok) return socket.emit('error_msg', { msg: verification.error });
+      }
+
+      const room = createRoom(gameType, bet, socket.id, 'ZOOT');
+      room.vsHouse = true;
+      room.players = [socket.id, houseBot.HOUSE_SOCKET_ID];
+      room.state = 'playing';
+      player.roomId = room.id;
+      socket.join(room.id);
+
+      committedHouseBets.set(room.id, bet);
+      persistActiveRoom(room).catch(()=>{});
+      startGame(room);
+      broadcastLobby();
+    } catch (e) {
+      console.error('find_match_house error:', e);
+      socket.emit('error_msg', { msg: 'Failed to start house game: ' + e.message });
+    }
   });
 
   socket.on('cancel_search', async () => {
@@ -731,8 +822,48 @@ io.on('connection', (socket) => {
 
   socket.on('get_lobby', () => broadcastLobby());
 
+  socket.on('chat_message', (data) => {
+    try {
+      const player = players.get(socket.id);
+      if (!player || !player.roomId) return;
+      const room = rooms.get(player.roomId);
+      if (!room || room.state !== 'playing') return;
+
+      let text = String((data && data.text) || '').trim();
+      if (!text) return;
+      if (text.length > 200) text = text.slice(0, 200);
+      text = text.replace(/[<>]/g, '');
+
+      const now = Date.now();
+      let bucket = chatBuckets.get(socket.id) || [];
+      bucket = bucket.filter((t) => now - t < 10000);
+      if (bucket.length >= 6) {
+        socket.emit('chat_message', {
+          from: 'System',
+          text: 'Slow down — too many messages. Try again in a few seconds.',
+          ts: now,
+          system: true,
+        });
+        return;
+      }
+      bucket.push(now);
+      chatBuckets.set(socket.id, bucket);
+
+      io.to(room.id).emit('chat_message', {
+        from: player.displayName,
+        walletAddress: player.walletAddress,
+        text: text,
+        ts: now,
+        socketId: socket.id,
+      });
+    } catch (e) {
+      console.error('chat_message error', e);
+    }
+  });
+
   socket.on('disconnect', async () => {
     console.log(`Disconnected: ${socket.id}`);
+    chatBuckets.delete(socket.id);
     const player = players.get(socket.id);
 
     for (const [key, val] of matchQueue) {
@@ -755,6 +886,18 @@ io.on('connection', (socket) => {
     if (player && player.roomId) {
       const room = rooms.get(player.roomId);
       if (room && room.state === 'playing') {
+        if (room.vsHouse) {
+          if (room._houseTimer) { clearTimeout(room._houseTimer); room._houseTimer = null; }
+          clearTurnTimer(room);
+          committedHouseBets.delete(room.id);
+          room.state = 'finished';
+          persistence.removeActiveRoom(room.id).catch(()=>{});
+          console.log('vsHouse player disconnected — house keeps the bet');
+          setTimeout(() => cleanupRoom(room.id), 3000);
+          players.delete(socket.id);
+          broadcastLobby();
+          return;
+        }
         const remainingIdx = room.players.indexOf(socket.id) === 0 ? 1 : 0;
         const winnerSocketId = room.players[remainingIdx];
         const winnerPlayer = players.get(winnerSocketId);
@@ -845,12 +988,17 @@ function startGame(room) {
     if (sock) {
       const p1 = players.get(room.players[0]);
       const p2 = players.get(room.players[1]);
+      const playerInfo = [
+        { username: p1?.displayName, wallet: p1?.walletAddress },
+        { username: p2?.displayName, wallet: p2?.walletAddress },
+      ];
+      if (room.vsHouse) {
+        playerInfo[1] = { username: houseBot.HOUSE_DISPLAY_NAME, wallet: houseBot.HOUSE_WALLET_DISPLAY };
+      }
       sock.emit('game_start', {
         roomId: room.id, gameType: room.gameType, betAmount: room.betAmount, currency: room.currency || 'SOL', playerIndex: idx,
-        players: [
-          { username: p1?.displayName, wallet: p1?.walletAddress },
-          { username: p2?.displayName, wallet: p2?.walletAddress },
-        ],
+        players: playerInfo,
+        vsHouse: !!room.vsHouse,
       });
     }
   });
@@ -863,6 +1011,65 @@ function emitGameState(room) {
     const sock = io.sockets.sockets.get(sid);
     if (sock) sock.emit('game_state', room.game.getStateForPlayer(idx));
   });
+  if (room.vsHouse) scheduleHouseMove(room);
+}
+
+const HOUSE_MAX_ZOOT_BET = 100000;
+const HOUSE_PAYOUT_MULTIPLIER = 1.94; // 3% house edge: winner gets 1.94x bet, escrow keeps 0.06x
+const committedHouseBets = new Map(); // roomId -> bet amount
+
+async function getEscrowZootBalance() {
+  try {
+    if (!zootEscrowAta) return 0;
+    const bal = await solanaConnection.getTokenAccountBalance(zootEscrowAta);
+    return parseFloat(bal.value.uiAmount) || 0;
+  } catch (e) {
+    console.error('getEscrowZootBalance error:', e.message);
+    return 0;
+  }
+}
+
+function totalCommittedHouseBets() {
+  let sum = 0;
+  for (const v of committedHouseBets.values()) sum += v;
+  return sum;
+}
+
+function scheduleHouseMove(room) {
+  if (!room || !room.vsHouse || !room.game || room.game.gameOver || room.state !== 'playing') return;
+  if (room._houseTimer) return; // already scheduled
+
+  const housePlayerIndex = 1;
+  const action = houseBot.decideAction(room.game, room.gameType, housePlayerIndex);
+  if (!action) {
+    if (room.gameType === 'reaction' && room.game.phase === 'waiting' && room.game.signalTime) {
+      const wait = room.game.signalTime - Date.now() + houseBot.getActionDelay('reaction', room.game);
+      room._houseTimer = setTimeout(() => {
+        room._houseTimer = null;
+        scheduleHouseMove(room);
+      }, Math.max(50, wait));
+    }
+    return;
+  }
+
+  const delay = houseBot.getActionDelay(room.gameType, room.game);
+  room._houseTimer = setTimeout(() => {
+    room._houseTimer = null;
+    if (!rooms.has(room.id) || room.game.gameOver || room.state !== 'playing') return;
+    try {
+      const result = room.game.handleAction(housePlayerIndex, action);
+      if (result && result.error) {
+        console.warn('houseBot action rejected:', room.gameType, action, result.error);
+        return;
+      }
+      emitGameState(room);
+      if (result && result.gameOver) {
+        handleGameOver(room, result);
+      }
+    } catch (e) {
+      console.error('houseBot apply error:', e);
+    }
+  }, delay);
 }
 
 function cleanupRoom(roomId) {

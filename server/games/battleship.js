@@ -1,4 +1,4 @@
-const TURN_TIME_MS = 25000;
+const TURN_TIME_MS = 40000;
 const SIZE = 10;
 const SHIPS = [
   { name: 'Carrier', size: 5 },

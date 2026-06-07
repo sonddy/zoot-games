@@ -1,4 +1,4 @@
-const TURN_TIME_MS = 10000;
+const TURN_TIME_MS = 15000;
 
 class DiceDuelGame {
   constructor() {

@@ -1,4 +1,4 @@
-const TURN_TIME_MS = 10000;
+const TURN_TIME_MS = 15000;
 const CHOICES = ['rock', 'paper', 'scissors'];
 const EMOJIS = { rock: '🪨', paper: '📄', scissors: '✂️' };
 const BEATS = { rock: 'scissors', paper: 'rock', scissors: 'paper' };

@@ -1,4 +1,4 @@
-const TURN_TIME_MS = 30000;
+const TURN_TIME_MS = 45000;
 
 class CheckersGame {
   constructor() {

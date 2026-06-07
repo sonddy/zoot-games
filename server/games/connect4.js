@@ -1,4 +1,4 @@
-const TURN_TIME_MS = 20000;
+const TURN_TIME_MS = 30000;
 const ROWS = 6;
 const COLS = 7;
 

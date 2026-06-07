@@ -172,6 +172,44 @@
       content: ''; display: inline-block; width: 4px; height: 20px;
       background: var(--accent); border-radius: 2px;
     }
+    .opponent-toggle {
+      display: inline-flex; gap: 0.4rem; margin-bottom: 1rem;
+      padding: 0.3rem; background: var(--surface); border: 1px solid var(--surface2);
+      border-radius: 999px; flex-wrap: wrap;
+    }
+    .opp-tab {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      background: transparent; border: none; color: var(--text2);
+      font-family: inherit; font-weight: 700; font-size: 0.85rem;
+      padding: 0.45rem 1rem; border-radius: 999px; cursor: pointer;
+      transition: all 0.2s; position: relative;
+    }
+    .opp-tab:hover { color: var(--text); }
+    .opp-tab.active { background: linear-gradient(135deg, var(--accent), #00897b); color: #fff; box-shadow: 0 4px 12px rgba(0,212,170,0.25); }
+    .opp-tab[data-opp="house"].active { background: linear-gradient(135deg, #ff6b35, #e74c3c); box-shadow: 0 4px 12px rgba(255,107,53,0.3); }
+    .opp-tab .opp-icon { font-size: 1rem; }
+    .opp-tab .opp-badge {
+      background: rgba(0,0,0,0.25); color: #ffe082; font-size: 0.6rem;
+      padding: 0.1rem 0.4rem; border-radius: 999px; font-weight: 800; letter-spacing: 0.5px;
+    }
+    .house-info {
+      display: flex; align-items: center; gap: 0.6rem;
+      background: linear-gradient(135deg, rgba(255,107,53,0.12), rgba(231,76,60,0.08));
+      border: 1px solid rgba(255,107,53,0.3); border-radius: 12px;
+      padding: 0.7rem 1rem; margin-bottom: 1rem; font-size: 0.85rem; color: var(--text);
+    }
+    .house-info-icon { font-size: 1.4rem; }
+    body.house-mode-on .game-category-tabs { display: none; }
+    body.house-mode-on .game-card:not(.house-supported) { display: none !important; }
+    body.house-mode-on .game-card.house-supported { position: relative; }
+    body.house-mode-on .game-card.house-supported::after {
+      content: 'vs HOUSE'; position: absolute; top: 0.7rem; right: 0.7rem;
+      background: linear-gradient(135deg, #ff6b35, #e74c3c); color: #fff;
+      font-size: 0.6rem; font-weight: 800; letter-spacing: 0.7px;
+      padding: 0.2rem 0.55rem; border-radius: 999px; z-index: 5;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+    }
+    body.house-mode-on .currency-select { pointer-events: none; opacity: 0.55; }
     .game-category-tabs {
       display: flex; gap: 0.4rem; margin-bottom: 1.2rem; flex-wrap: wrap;
       border-bottom: 1px solid var(--surface2); padding-bottom: 0.8rem;
@@ -518,6 +556,111 @@
     .turn-indicator.their-turn { background: var(--surface); color: var(--text2); }
     .game-area { flex: 1; display: block; padding: 0; overflow: hidden; position: relative; }
     .game-controls { background: var(--bg2); border-top: 1px solid var(--surface2); padding: 1rem 1.5rem; min-height: 0; }
+
+    /* ═══ IN-GAME CHAT ═══ */
+    .chat-panel {
+      position: fixed; right: 1rem; bottom: 1rem; z-index: 8500;
+      display: flex; flex-direction: column; align-items: flex-end;
+      pointer-events: none;
+    }
+    .chat-panel > * { pointer-events: auto; }
+    .chat-toggle {
+      display: none; align-items: center; gap: 0.5rem;
+      background: linear-gradient(135deg, var(--accent), #00897b); color: #fff;
+      border: none; border-radius: 999px; padding: 0.7rem 1.1rem;
+      font-family: inherit; font-weight: 700; font-size: 0.85rem;
+      cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+      transition: transform 0.15s, box-shadow 0.15s; position: relative;
+    }
+    .chat-toggle:hover { transform: translateY(-1px); box-shadow: 0 8px 26px rgba(0,0,0,0.45); }
+    .chat-toggle .chat-toggle-icon { font-size: 1.1rem; }
+    .chat-toggle .chat-unread {
+      position: absolute; top: -4px; right: -4px;
+      background: var(--red); color: #fff; font-size: 0.65rem; font-weight: 800;
+      min-width: 18px; height: 18px; border-radius: 999px;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 5px; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+    .chat-panel.collapsed .chat-toggle { display: inline-flex; }
+    .chat-panel.collapsed .chat-body { display: none; }
+    .chat-body {
+      width: 320px; max-width: calc(100vw - 2rem);
+      height: 380px; max-height: calc(100vh - 6rem);
+      background: rgba(15,22,35,0.96);
+      border: 1px solid var(--surface2); border-radius: 14px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      display: flex; flex-direction: column; overflow: hidden;
+      animation: chatSlide 0.2s ease;
+    }
+    @keyframes chatSlide { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    .chat-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.6rem 0.9rem; background: rgba(0,212,170,0.08);
+      border-bottom: 1px solid var(--surface2);
+      font-weight: 700; font-size: 0.85rem; color: var(--accent2);
+    }
+    .chat-close {
+      background: none; border: none; color: var(--text2); cursor: pointer;
+      font-size: 1.3rem; line-height: 1; padding: 0 0.2rem;
+    }
+    .chat-close:hover { color: var(--text); }
+    .chat-messages {
+      flex: 1; overflow-y: auto; padding: 0.7rem 0.9rem;
+      display: flex; flex-direction: column; gap: 0.5rem;
+      scrollbar-width: thin; scrollbar-color: var(--surface2) transparent;
+    }
+    .chat-messages::-webkit-scrollbar { width: 6px; }
+    .chat-messages::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 6px; }
+    .chat-empty {
+      text-align: center; color: var(--text2); font-size: 0.78rem;
+      padding: 1.5rem 0.5rem; line-height: 1.5;
+    }
+    .chat-msg {
+      display: flex; flex-direction: column; gap: 0.15rem;
+      max-width: 85%; word-wrap: break-word;
+    }
+    .chat-msg.mine { align-self: flex-end; align-items: flex-end; }
+    .chat-msg.theirs { align-self: flex-start; align-items: flex-start; }
+    .chat-msg .chat-msg-from {
+      font-size: 0.65rem; font-weight: 700; color: var(--accent2);
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .chat-msg.mine .chat-msg-from { color: var(--gold); }
+    .chat-msg .chat-msg-bubble {
+      background: var(--surface); color: var(--text);
+      padding: 0.45rem 0.7rem; border-radius: 12px;
+      font-size: 0.85rem; line-height: 1.35;
+    }
+    .chat-msg.mine .chat-msg-bubble { background: linear-gradient(135deg, var(--accent), #00897b); color: #fff; }
+    .chat-msg.system .chat-msg-bubble {
+      background: rgba(255,107,53,0.12); color: #ffb088; font-style: italic;
+      border: 1px solid rgba(255,107,53,0.3);
+    }
+    .chat-msg.system { align-self: center; }
+    .chat-form {
+      display: flex; gap: 0.4rem; padding: 0.6rem 0.7rem;
+      border-top: 1px solid var(--surface2); background: rgba(0,0,0,0.2);
+    }
+    .chat-input {
+      flex: 1; background: var(--bg2); border: 1px solid var(--surface2);
+      color: var(--text); padding: 0.5rem 0.7rem; border-radius: 999px;
+      font-family: inherit; font-size: 0.85rem; outline: none;
+    }
+    .chat-input:focus { border-color: var(--accent); }
+    .chat-send {
+      background: linear-gradient(135deg, var(--accent), #00897b); color: #fff;
+      border: none; border-radius: 999px; width: 38px; height: 38px;
+      cursor: pointer; font-size: 1rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform 0.15s;
+    }
+    .chat-send:hover { transform: scale(1.05); }
+    .chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+    @media (max-width: 540px) {
+      .chat-panel { right: 0.6rem; bottom: 0.6rem; }
+      .chat-body { width: calc(100vw - 1.2rem); height: 60vh; }
+    }
 
     /* ═══ DOMINO — Plato / Domino King exact replica ═══ */
     .domino-screen {
@@ -2040,6 +2183,19 @@
       </div>
 
       <h2>Choose Your Game</h2>
+      <div class="opponent-toggle" id="opponent-toggle">
+        <button type="button" class="opp-tab active" data-opp="players">
+          <span class="opp-icon">&#128101;</span> vs Players
+        </button>
+        <button type="button" class="opp-tab" data-opp="house">
+          <span class="opp-icon">&#127968;</span> vs House
+          <span class="opp-badge">$ZOOT</span>
+        </button>
+      </div>
+      <div class="house-info" id="house-info" hidden>
+        <span class="house-info-icon">&#127919;</span>
+        <span><strong>House mode:</strong> Bet $ZOOT, win <strong>1.94&times;</strong> instantly. Max bet <strong>100,000 $ZOOT</strong>. 6 fast games available.</span>
+      </div>
       <div class="game-category-tabs" id="game-category-tabs">
         <button class="game-category-tab active" data-category="all">All <span class="tab-count">24</span></button>
         <button class="game-category-tab" data-category="quick">&#9889; Quick <span class="tab-count">4</span></button>
@@ -2552,6 +2708,26 @@
     </header>
     <div id="game-area" class="game-area"></div>
     <div id="game-controls" class="game-controls"></div>
+
+    <!-- IN-GAME CHAT -->
+    <div id="chat-panel" class="chat-panel collapsed">
+      <button id="chat-toggle" class="chat-toggle" type="button" aria-label="Toggle chat">
+        <span class="chat-toggle-icon">&#128172;</span>
+        <span class="chat-toggle-label">Chat</span>
+        <span id="chat-unread" class="chat-unread" hidden>0</span>
+      </button>
+      <div class="chat-body">
+        <div class="chat-header">
+          <span>&#128172; Live chat</span>
+          <button id="chat-close" class="chat-close" type="button" aria-label="Close chat">&times;</button>
+        </div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <form id="chat-form" class="chat-form" autocomplete="off">
+          <input id="chat-input" class="chat-input" type="text" maxlength="200" placeholder="Say something nice..." />
+          <button type="submit" class="chat-send" aria-label="Send">&#10148;</button>
+        </form>
+      </div>
+    </div>
   </div>
 
   <!-- GAME OVER OVERLAY -->
@@ -5848,6 +6024,7 @@
         socket.on('game_start', onGameStart);
         socket.on('game_state', onGameState);
         socket.on('game_over', onGameOver);
+        socket.on('chat_message', function(data) { Chat.receive(data); });
         socket.on('search_cancelled', function() { showScreen('lobby'); });
         socket.on('error_msg', function(d) { showToast(d.msg, 'error'); });
         socket.on('disconnect', function() { showToast('Disconnected from server', 'error'); });
@@ -5898,6 +6075,7 @@
         });
 
         injectCurrencySelectors();
+        HouseMode.init();
 
         // Game cards — bet by signing a Phantom transfer to escrow
         var cards = document.querySelectorAll('.game-card');
@@ -5920,40 +6098,59 @@
               if (!betAmount || betAmount <= 0) { showToast('Enter a bet amount', 'error'); betInput.focus(); return; }
               if (!escrowAddress) { showToast('Server not ready, try again', 'error'); return; }
 
-              var currencySel = card.querySelector('.currency-select');
-              var currency = currencySel ? currencySel.value : 'SOL';
-
               var btn = this;
+              var vsHouse = HouseMode.isActive();
+              var defaultLabel = vsHouse ? 'Play vs House' : 'Find Match';
+
+              if (vsHouse) {
+                if (!HouseMode.isSupported(gameType)) {
+                  showToast('This game is not available vs House yet', 'error');
+                  return;
+                }
+                if (betAmount > HouseMode.MAX_BET) {
+                  showToast('Max house bet is ' + HouseMode.MAX_BET.toLocaleString() + ' $ZOOT', 'error');
+                  return;
+                }
+              }
+
+              var currencySel = card.querySelector('.currency-select');
+              var currency = vsHouse ? 'ZOOT' : (currencySel ? currencySel.value : 'SOL');
+
               btn.disabled = true;
 
               var payload = { gameType: gameType, betAmount: betAmount, currency: currency };
               var activeGrid = card.querySelector('.grid-btn.active');
               if (activeGrid) payload.gridSize = parseInt(activeGrid.dataset.grid);
 
+              var emitEvent = vsHouse ? 'find_match_house' : 'find_match';
+              var emitPayload = vsHouse
+                ? { gameType: gameType, betAmount: betAmount }
+                : payload;
+
               if (isTestMode) {
-                payload.txSignature = 'test_' + Date.now();
-                socket.emit('find_match', payload);
+                emitPayload.txSignature = 'test_' + Date.now();
+                socket.emit(emitEvent, emitPayload);
                 btn.disabled = false;
-                btn.textContent = 'Find Match';
+                btn.textContent = defaultLabel;
                 return;
               }
 
               var balanceNeeded = currency === 'ZOOT' ? currentZootBalance : currentBalance;
-              if (betAmount > balanceNeeded) { showToast('Not enough ' + (currency === 'ZOOT' ? '$ZOOT' : 'SOL') + ' in your wallet!', 'error'); btn.disabled = false; btn.textContent = 'Find Match'; return; }
+              if (betAmount > balanceNeeded) { showToast('Not enough ' + (currency === 'ZOOT' ? '$ZOOT' : 'SOL') + ' in your wallet!', 'error'); btn.disabled = false; btn.textContent = defaultLabel; return; }
 
               btn.textContent = 'Confirm in Phantom...';
 
               try {
                 var signature = await sendBetPayment(currency, betAmount, btn);
-                payload.txSignature = signature;
-                socket.emit('find_match', payload);
+                emitPayload.txSignature = signature;
+                socket.emit(emitEvent, emitPayload);
                 btn.disabled = false;
-                btn.textContent = 'Find Match';
+                btn.textContent = defaultLabel;
                 refreshBalance();
               } catch (err) {
                 showToast(err.message || 'Transaction cancelled', 'error');
                 btn.disabled = false;
-                btn.textContent = 'Find Match';
+                btn.textContent = defaultLabel;
               }
             });
           })(cards[ci]);
@@ -6177,6 +6374,13 @@
         myPlayerIndex = data.playerIndex;
         currentGameData = data;
 
+        Chat.init();
+        var oppIdx = data.playerIndex === 0 ? 1 : 0;
+        var oppName = data.players && data.players[oppIdx] ? data.players[oppIdx].username : null;
+        Chat.reset(oppName);
+        if (data.vsHouse) Chat.disable();
+        else Chat.enable();
+
         var topbar = document.querySelector('.game-topbar');
         var immersive = ['domino', 'mancala', 'checkers', 'chess', 'morpion'];
         if (immersive.indexOf(data.gameType) >= 0) {
@@ -6256,6 +6460,8 @@
       function sendAction(action) { if (socket) socket.emit('game_action', action); }
 
       function onGameOver(data) {
+        Chat.disable();
+        Chat.setOpen(false);
         var overlay = document.getElementById('overlay-gameover');
         var title = document.getElementById('gameover-title');
         var detail = document.getElementById('gameover-detail');
@@ -6348,6 +6554,231 @@
 
       document.addEventListener('DOMContentLoaded', init);
       return { showScreen: showScreen, sendAction: sendAction, acceptBet: acceptBet, showToast: showToast, getEscrow: function() { return escrowAddress; }, isTest: function() { return isTestMode; }, getBalance: function() { return currentBalance; }, getZootBalance: function() { return currentZootBalance; }, getZootMint: function() { return zootMintAddress; }, refreshBalance: refreshBalance, getSocket: function() { return socket; } };
+    })();
+
+    // ════════════════════════════════════════
+    // HOUSE MODE TOGGLE
+    // ════════════════════════════════════════
+    var HouseMode = (function() {
+      var SUPPORTED = ['rps', 'coinflip', 'diceduel', 'hilo', 'reaction', 'mathduel'];
+      var MAX_BET = 100000;
+      var active = false;
+
+      function isActive() { return active; }
+      function isSupported(gameType) { return SUPPORTED.indexOf(gameType) >= 0; }
+
+      function tagSupportedCards() {
+        var cards = document.querySelectorAll('.game-card');
+        for (var i = 0; i < cards.length; i++) {
+          var g = cards[i].dataset.game;
+          if (SUPPORTED.indexOf(g) >= 0) cards[i].classList.add('house-supported');
+        }
+      }
+
+      function applyToCard(card) {
+        if (!card) return;
+        var betInput = card.querySelector('.bet-amount-input');
+        var sel = card.querySelector('.currency-select');
+        var btn = card.querySelector('.btn-play');
+        if (active) {
+          if (sel) {
+            sel.value = 'ZOOT';
+            sel.classList.add('is-zoot');
+            sel.disabled = true;
+          }
+          if (betInput) {
+            betInput.max = MAX_BET;
+            if (parseFloat(betInput.value) > MAX_BET) betInput.value = MAX_BET;
+            if (parseFloat(betInput.value) < 1) betInput.value = 100;
+          }
+          if (btn) btn.textContent = 'Play vs House';
+        } else {
+          if (sel) sel.disabled = false;
+          if (btn) btn.textContent = 'Find Match';
+        }
+      }
+
+      function applyAllCards() {
+        var cards = document.querySelectorAll('.game-card');
+        for (var i = 0; i < cards.length; i++) applyToCard(cards[i]);
+      }
+
+      function setActive(on) {
+        active = !!on;
+        document.body.classList.toggle('house-mode-on', active);
+        var info = document.getElementById('house-info');
+        if (info) info.hidden = !active;
+        var tabs = document.querySelectorAll('#opponent-toggle .opp-tab');
+        for (var i = 0; i < tabs.length; i++) {
+          var isHouse = tabs[i].dataset.opp === 'house';
+          tabs[i].classList.toggle('active', active ? isHouse : !isHouse);
+        }
+        applyAllCards();
+      }
+
+      function init() {
+        tagSupportedCards();
+        var tabs = document.querySelectorAll('#opponent-toggle .opp-tab');
+        for (var i = 0; i < tabs.length; i++) {
+          tabs[i].addEventListener('click', function() {
+            setActive(this.dataset.opp === 'house');
+          });
+        }
+        applyAllCards();
+      }
+
+      return {
+        init: init,
+        isActive: isActive,
+        isSupported: isSupported,
+        applyToCard: applyToCard,
+        MAX_BET: MAX_BET,
+      };
+    })();
+
+    // ════════════════════════════════════════
+    // IN-GAME CHAT
+    // ════════════════════════════════════════
+    var Chat = (function() {
+      var panel, body, msgsEl, inputEl, formEl, toggleBtn, closeBtn, unreadBadge;
+      var unread = 0;
+      var initialized = false;
+      var lastSendAt = 0;
+
+      function escapeHtml(s) {
+        return String(s)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+
+      function setOpen(open) {
+        if (!panel) return;
+        if (open) {
+          panel.classList.remove('collapsed');
+          unread = 0;
+          if (unreadBadge) { unreadBadge.hidden = true; unreadBadge.textContent = '0'; }
+          setTimeout(function() {
+            try { msgsEl.scrollTop = msgsEl.scrollHeight; if (inputEl) inputEl.focus(); } catch(e){}
+          }, 60);
+        } else {
+          panel.classList.add('collapsed');
+        }
+      }
+
+      function isOpen() { return panel && !panel.classList.contains('collapsed'); }
+
+      function bumpUnread() {
+        unread++;
+        if (unreadBadge) {
+          unreadBadge.hidden = false;
+          unreadBadge.textContent = unread > 9 ? '9+' : String(unread);
+        }
+      }
+
+      function appendMessage(opts) {
+        if (!msgsEl) return;
+        var empty = msgsEl.querySelector('.chat-empty');
+        if (empty) empty.remove();
+        var wrap = document.createElement('div');
+        wrap.className = 'chat-msg ' + (opts.system ? 'system' : (opts.mine ? 'mine' : 'theirs'));
+        if (!opts.system) {
+          var fromEl = document.createElement('span');
+          fromEl.className = 'chat-msg-from';
+          fromEl.textContent = opts.mine ? 'You' : (opts.from || 'Player');
+          wrap.appendChild(fromEl);
+        }
+        var bubble = document.createElement('span');
+        bubble.className = 'chat-msg-bubble';
+        bubble.innerHTML = escapeHtml(opts.text);
+        wrap.appendChild(bubble);
+        msgsEl.appendChild(wrap);
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+        if (msgsEl.children.length > 200) {
+          msgsEl.removeChild(msgsEl.firstChild);
+        }
+      }
+
+      function showEmpty(opponentName) {
+        if (!msgsEl) return;
+        msgsEl.innerHTML = '';
+        var empty = document.createElement('div');
+        empty.className = 'chat-empty';
+        var who = opponentName ? escapeHtml(opponentName) : 'your opponent';
+        empty.innerHTML = 'Say hi to <strong>' + who + '</strong>!<br><span style="font-size:0.7rem;opacity:0.7">Be friendly. 200 chars max.</span>';
+        msgsEl.appendChild(empty);
+      }
+
+      function reset(opponentName) {
+        unread = 0;
+        if (unreadBadge) { unreadBadge.hidden = true; unreadBadge.textContent = '0'; }
+        if (panel) panel.classList.add('collapsed');
+        showEmpty(opponentName);
+      }
+
+      function disable() {
+        if (formEl) formEl.querySelectorAll('input,button').forEach(function(el){ el.disabled = true; });
+      }
+
+      function enable() {
+        if (formEl) formEl.querySelectorAll('input,button').forEach(function(el){ el.disabled = false; });
+      }
+
+      function receive(data) {
+        if (!data) return;
+        var mySocketId = (typeof socket !== 'undefined' && socket && socket.id) ? socket.id : null;
+        var mine = !!(mySocketId && data.socketId && data.socketId === mySocketId);
+        appendMessage({
+          text: data.text || '',
+          from: data.from,
+          mine: mine,
+          system: !!data.system,
+        });
+        if (!isOpen() && !mine) bumpUnread();
+      }
+
+      function send(text) {
+        if (typeof socket === 'undefined' || !socket || !socket.connected) return;
+        var trimmed = (text || '').trim();
+        if (!trimmed) return;
+        if (trimmed.length > 200) trimmed = trimmed.slice(0, 200);
+        var now = Date.now();
+        if (now - lastSendAt < 500) return;
+        lastSendAt = now;
+        socket.emit('chat_message', { text: trimmed });
+      }
+
+      function init() {
+        if (initialized) return;
+        panel = document.getElementById('chat-panel');
+        if (!panel) return;
+        body = panel.querySelector('.chat-body');
+        msgsEl = document.getElementById('chat-messages');
+        inputEl = document.getElementById('chat-input');
+        formEl = document.getElementById('chat-form');
+        toggleBtn = document.getElementById('chat-toggle');
+        closeBtn = document.getElementById('chat-close');
+        unreadBadge = document.getElementById('chat-unread');
+
+        toggleBtn.addEventListener('click', function() { setOpen(!isOpen()); });
+        closeBtn.addEventListener('click', function() { setOpen(false); });
+        formEl.addEventListener('submit', function(e) {
+          e.preventDefault();
+          var v = inputEl.value;
+          inputEl.value = '';
+          send(v);
+        });
+        showEmpty();
+        initialized = true;
+      }
+
+      return {
+        init: init,
+        reset: reset,
+        receive: receive,
+        disable: disable,
+        enable: enable,
+        setOpen: setOpen,
+      };
     })();
 
     // ════════════════════════════════════════

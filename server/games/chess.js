@@ -1,4 +1,4 @@
-const TURN_TIME_MS = 60000;
+const TURN_TIME_MS = 120000;
 
 const PIECES = { K: 'king', Q: 'queen', R: 'rook', B: 'bishop', N: 'knight', P: 'pawn' };
 

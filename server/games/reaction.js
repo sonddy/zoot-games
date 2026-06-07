@@ -1,4 +1,4 @@
-const TURN_TIME_MS = 15000;
+const TURN_TIME_MS = 25000;
 
 class ReactionGame {
   constructor() {
