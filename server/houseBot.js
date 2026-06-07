@@ -11,20 +11,21 @@ const HOUSE_WALLET_DISPLAY = 'HOUSE';
 
 // Games supported in vs-house mode.
 //
-// EXPLICITLY EXCLUDED (and why):
-//   coinflip, diceduel, war  — pure luck; 3% house edge from 1.94x payout
-//                              is too thin a margin vs automation/variance.
-//   hilo                     — with optimal play on both sides it's ~50/50;
-//                              variance can drain the escrow.
-//   poker                    — bot has no real poker AI and the autoplay
-//                              folds whenever it's facing a bet, which
-//                              guarantees the player wins by just raising.
+// EXPLICITLY EXCLUDED FROM VS-HOUSE (and why):
+//   coinflip, diceduel, war   — pure luck; razor-thin house edge can't
+//                               outrun variance / scripted abuse.
+//   hilo                      — with optimal play on both sides ~50/50.
+//   poker                     — bot has no real poker AI; bluffing exploits.
+//   chess                     — full chess engine is out of scope; greedy
+//                               heuristic is too weak to defend the escrow.
+//   backgammon                — dice-driven, complex equity; current pip-
+//                               count heuristic is exploitable.
 //
-// All these games are still available in PvP — players can bet each other.
+// All excluded games are still available in PvP (player-vs-player bets).
 const SUPPORTED_GAMES = [
   'rps', 'reaction', 'mathduel',
   'tictactoe', 'morpion', 'connect4', 'dotsboxes', 'nim', 'hex',
-  'checkers', 'chess', 'reversi', 'mancala', 'backgammon',
+  'checkers', 'reversi', 'mancala',
   'domino', 'speed', 'memory', 'battleship',
 ];
 

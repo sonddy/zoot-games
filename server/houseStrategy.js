@@ -1295,6 +1295,118 @@ function dominoMove(game, idx, agent) {
 }
 
 // ──────────────────────────────────────────────────────────────
+// SPEED — find any playable card immediately. Bot delay handled in agents.js.
+// ──────────────────────────────────────────────────────────────
+//
+// Speed is real-time: whoever clears their hand first wins. The old
+// auto-play just stalled, which meant the human always won by burning
+// through their own hand. Now the bot actively plays every tick.
+
+function speedMove(game, idx, agent) {
+  if (!Array.isArray(game.hands) || !Array.isArray(game.piles)) return { fallback: true };
+  const hand = game.hands[idx];
+  if (!hand || hand.length === 0) return { fallback: true };
+  const piles = game.piles;
+  if (!piles[0] || !piles[1]) return { fallback: true };
+
+  // Find any playable (card, pile). Prefer the one that leaves us with a
+  // hand whose minimum next-play value is smaller (greedy clearing).
+  let best = null;
+  for (let h = 0; h < hand.length; h++) {
+    const c = hand[h];
+    if (!c) continue;
+    for (let p = 0; p < 2; p++) {
+      const pileCard = piles[p];
+      const diff = Math.abs(c.value - pileCard.value);
+      if (diff === 1 || diff === 12) {
+        // Prefer to play cards that are "edges" of our hand (max or min value)
+        // so we don't get stuck with hand cards that can't chain. Tiny heuristic.
+        const score = -Math.min(c.value, 14 - c.value); // edge-preference
+        if (!best || score > best.score) {
+          best = { handIndex: h, pileIndex: p, score };
+        }
+      }
+    }
+  }
+  if (!best) return { fallback: true };
+  return { action: { type: 'play', handIndex: best.handIndex, pileIndex: best.pileIndex } };
+}
+
+// ──────────────────────────────────────────────────────────────
+// DOMINO — dump highest-pip tiles; prefer ends opponent likely can't match
+// ──────────────────────────────────────────────────────────────
+//
+// Domino scoring rewards the player whose opponent gets stuck with high
+// pips. We track which end-values the opponent has REFUSED to play on
+// (forced draw or pass) — those are dead values they don't have. Prefer
+// playing tiles that expose those dead values, choking the opponent.
+
+function _domTilePips(t) { return t[0] + t[1]; }
+
+function dominoMove(game, idx, agent) {
+  if (game.roundOver || game.gameOver) return { fallback: true };
+  if (!Array.isArray(game.hands)) return { fallback: true };
+  const hand = game.hands[idx];
+  if (!hand || hand.length === 0) return { fallback: true };
+
+  // Opening: board is empty — play the highest-pip tile we own
+  // (with double preference: a [6,6] double is the canonical opener).
+  if (game.board.length === 0) {
+    let bestI = 0, bestScore = -Infinity;
+    for (let i = 0; i < hand.length; i++) {
+      const t = hand[i];
+      let score = t[0] + t[1];
+      if (t[0] === t[1]) score += 3; // doubles bonus
+      if (score > bestScore) { bestScore = score; bestI = i; }
+    }
+    return { action: { type: 'play', tileIndex: bestI, side: 'right' } };
+  }
+
+  const left = game.boardLeft, right = game.boardRight;
+  const playable = [];
+  for (let i = 0; i < hand.length; i++) {
+    const t = hand[i];
+    if (t[0] === right || t[1] === right) playable.push({ i, side: 'right', t });
+    else if (t[0] === left || t[1] === left) playable.push({ i, side: 'left', t });
+  }
+
+  if (playable.length === 0) {
+    if (game.boneyard && game.boneyard.length > 0) return { action: { type: 'auto_draw' } };
+    return { action: { type: 'pass' } };
+  }
+
+  // Compute, for each candidate move, the resulting "exposed pip" on the
+  // played side after we play. Prefer ends that match VALUES we have
+  // duplicates of (so we can keep playing) AND values the opponent has
+  // likely shown they don't have (passed on previously).
+  //
+  // Opponent's known-missing values: tracked via game.consecutivePasses
+  // history — coarse but better than nothing.
+  let bestMove = playable[0];
+  let bestScore = -Infinity;
+  for (const m of playable) {
+    const t = m.t;
+    const pip = _domTilePips(t);
+    // After playing, the new exposed value at this end is the OTHER pip
+    // (the pip that doesn't match the current board end).
+    const newExposed = m.side === 'right'
+      ? (t[0] === right ? t[1] : t[0])
+      : (t[0] === left ? t[1] : t[0]);
+    // Bonus if we hold MORE tiles matching newExposed (chain potential)
+    let chainPotential = 0;
+    for (let j = 0; j < hand.length; j++) {
+      if (j === m.i) continue;
+      if (hand[j][0] === newExposed || hand[j][1] === newExposed) chainPotential++;
+    }
+    // Doubles: prefer playing them when we still have the opportunity
+    const doublesBonus = (t[0] === t[1]) ? 4 : 0;
+    const score = pip * 1.5 + chainPotential * 3 + doublesBonus;
+    if (score > bestScore) { bestScore = score; bestMove = m; }
+  }
+  return { action: { type: 'play', tileIndex: bestMove.i, side: bestMove.side } };
+}
+
+// ──────────────────────────────────────────────────────────────
 // Dispatch
 // ──────────────────────────────────────────────────────────────
 

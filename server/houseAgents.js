@@ -222,14 +222,22 @@ function thinkingDelay(agent, gameType, game) {
     mancala:    lerp(2600, 1100, skillT),
     backgammon: lerp(3500, 1400, skillT),
     domino:     lerp(2800, 1200, skillT),
-    speed:      lerp(1200, 500,  skillT),
-    memory:     lerp(2600, 1100, skillT),
+    // Speed is real-time — at skill 5 we need to be fast enough to win the
+    // hand-clear race against fast humans (and scripted clients). 180ms per
+    // play clears a 21-card hand in <4s; humans rarely beat 6-8s.
+    speed:      lerp(700,  180,  skillT),
+    // Memory: at skill 5 the bot has perfect recall (see memoryMove). With
+    // ~600ms thinking the bot still has lots of "personality" but won't
+    // be out-paced by a scripted memorizer.
+    memory:     lerp(1800, 600,  skillT),
     battleship: lerp(3000, 1300, skillT),
     poker:      lerp(4000, 1600, skillT),
   };
   const base = baseByGame[gameType] ?? 1200;
   const ms = jitter(base, base * 0.35);
-  return Math.max(300, Math.round(personalityFactor(agent.personality, ms)));
+  // Floor: skill 5 in fast games (speed/memory) can dip to 120ms.
+  const floor = (agent.skill >= 5 && (gameType === 'speed' || gameType === 'memory')) ? 120 : 300;
+  return Math.max(floor, Math.round(personalityFactor(agent.personality, ms)));
 }
 
 module.exports = {

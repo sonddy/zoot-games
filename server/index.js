@@ -438,7 +438,9 @@ async function handleGameOver(room, result) {
       }
       if (player) {
         houseBot.agents.recordResult(player.walletAddress, 'W', agent && agent.id);
-        houseAbuse.recordGameResult(player.walletAddress, 'W');
+        // Net change for the player on a win = payout - bet (they paid the bet
+        // up front into escrow, now receive `payout`).
+        houseAbuse.recordGameResult(player.walletAddress, 'W', payout - room.betAmount);
       }
       io.to(room.id).emit('game_over', {
         winner: player ? player.displayName : null,
@@ -448,7 +450,7 @@ async function handleGameOver(room, result) {
     } else if (winnerIdx === 1) {
       if (player) {
         houseBot.agents.recordResult(player.walletAddress, 'L', agent && agent.id);
-        houseAbuse.recordGameResult(player.walletAddress, 'L');
+        houseAbuse.recordGameResult(player.walletAddress, 'L', -room.betAmount);
       }
       io.to(room.id).emit('game_over', {
         winner: houseLabel,
@@ -467,7 +469,7 @@ async function handleGameOver(room, result) {
       }
       if (player) {
         houseBot.agents.recordResult(player.walletAddress, 'D', agent && agent.id);
-        houseAbuse.recordGameResult(player.walletAddress, 'D');
+        houseAbuse.recordGameResult(player.walletAddress, 'D', 0);
       }
       io.to(room.id).emit('game_over', { winner: null, winnerWallet: null, payout: 0, currency: 'ZOOT', isDraw: true, vsHouse: true });
     }
@@ -637,9 +639,12 @@ io.on('connection', (socket) => {
       // Abuse guard FIRST — before we accept any payment / start any logic.
       // Refuses blacklisted wallets, enforces cooldown, daily caps, and a
       // temp-ban for wallets winning too many recent vs-house games.
-      const guard = houseAbuse.canStartGame(player.walletAddress);
+      const ip = (socket.handshake && (socket.handshake.headers['x-forwarded-for']
+                  || socket.handshake.address)) || null;
+      const ipKey = ip ? String(ip).split(',')[0].trim() : null;
+      const guard = houseAbuse.canStartGame(player.walletAddress, ipKey);
       if (!guard.ok) {
-        console.warn('[abuse] Blocked find_match_house from', player.walletAddress, '-', guard.error);
+        console.warn('[abuse] Blocked find_match_house from', player.walletAddress, ipKey || '', '-', guard.error);
         return socket.emit('error_msg', { msg: guard.error });
       }
 
@@ -673,7 +678,8 @@ io.on('connection', (socket) => {
       socket.join(room.id);
 
       committedHouseBets.set(room.id, bet);
-      houseAbuse.recordGameStart(player.walletAddress);
+      room.houseIp = ipKey;
+      houseAbuse.recordGameStart(player.walletAddress, ipKey);
       persistActiveRoom(room).catch(()=>{});
       startGame(room);
       broadcastLobby();
@@ -936,7 +942,7 @@ io.on('connection', (socket) => {
           persistence.removeActiveRoom(room.id).catch(()=>{});
           if (player && player.walletAddress) {
             houseBot.agents.recordResult(player.walletAddress, 'L', room.houseAgent && room.houseAgent.id);
-            houseAbuse.recordGameResult(player.walletAddress, 'L');
+            houseAbuse.recordGameResult(player.walletAddress, 'L', -(room.betAmount || 0));
           }
           console.log('vsHouse player disconnected — house keeps the bet');
           setTimeout(() => cleanupRoom(room.id), 3000);
@@ -1063,8 +1069,14 @@ function emitGameState(room) {
   if (room.vsHouse) scheduleHouseMove(room);
 }
 
-const HOUSE_MAX_ZOOT_BET = 100000;
-const HOUSE_PAYOUT_MULTIPLIER = 1.94; // 3% house edge: winner gets 1.94x bet, escrow keeps 0.06x
+// Bet size capped tightly to limit single-game escrow exposure. With the old
+// 100k cap, a 5-game lucky streak could drain 470k+ ZOOT before the abuse
+// guard tripped. 10k keeps the worst-case 24h loss bounded.
+const HOUSE_MAX_ZOOT_BET = 10000;
+// Payout multiplier on a player win. 1.80x ⇒ player nets +0.80x bet on win
+// and -1x on loss ⇒ ~10% house edge per game (was 3%). This is the single
+// biggest lever against variance drain.
+const HOUSE_PAYOUT_MULTIPLIER = 1.80;
 const committedHouseBets = new Map(); // roomId -> bet amount
 
 async function getEscrowZootBalance() {
