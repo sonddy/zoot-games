@@ -6767,11 +6767,11 @@
     // ════════════════════════════════════════
     var HouseMode = (function() {
       var SUPPORTED = [
-        // NOTE: coinflip / diceduel / war / hilo / poker are intentionally
-        // PvP-only — the house lacks a safe edge on these games.
+        // war / poker / chess / backgammon remain PvP-only vs house.
+        'coinflip', 'diceduel', 'hilo',
         'rps', 'reaction', 'mathduel',
         'tictactoe', 'morpion', 'connect4', 'dotsboxes', 'nim', 'hex',
-        'checkers', 'chess', 'reversi', 'mancala', 'backgammon',
+        'checkers', 'reversi', 'mancala',
         'domino', 'speed', 'memory', 'battleship'
       ];
       var MAX_BET = 10000;

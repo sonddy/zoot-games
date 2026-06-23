@@ -25,6 +25,35 @@ class DiceDuelGame {
     this.scores = [0, 0];
     this.roundResults = [];
     this.turnStartTime = Date.now();
+    // vs-house rig: pre-pick who is destined to win the match, then steer each
+    // round's dice toward that outcome. Only the SECOND roller's dice are
+    // adjusted, so the first roller's already-shown dice are never altered.
+    this.biased = !!(options.vsHouse && typeof options.playerWinProb === 'number');
+    this.destinedWinner = this.biased ? (Math.random() < options.playerWinProb ? 0 : 1) : null;
+  }
+
+  _dicePairForSum(s) {
+    const lo = Math.max(1, s - 6);
+    const hi = Math.min(6, s - 1);
+    const d1 = lo + Math.floor(Math.random() * (hi - lo + 1));
+    return [d1, s - d1];
+  }
+
+  // Set the second roller's dice so the destined winner takes this round
+  // (relative to the first roller's fixed dice). Falls back to a tie only when
+  // the first roll is an extreme (2 or 12) that blocks the needed direction.
+  _applyBias(second) {
+    const other = 1 - second;
+    const otherSum = this.dice[other][0] + this.dice[other][1];
+    let lo, hi;
+    if (this.destinedWinner === second) { lo = otherSum + 1; hi = 12; }
+    else { lo = 2; hi = otherSum - 1; }
+    if (lo > hi) {
+      this.dice[second] = this._dicePairForSum(otherSum); // forced tie (rare)
+    } else {
+      const target = lo + Math.floor(Math.random() * (hi - lo + 1));
+      this.dice[second] = this._dicePairForSum(target);
+    }
   }
 
   handleAction(playerIndex, action) {
@@ -44,6 +73,8 @@ class DiceDuelGame {
     this.rolled[playerIndex] = true;
 
     if (this.rolled[0] && this.rolled[1]) {
+      // playerIndex is the second roller — rig its dice before resolving.
+      if (this.biased) this._applyBias(playerIndex);
       return this._resolveRound();
     }
 
@@ -68,7 +99,7 @@ class DiceDuelGame {
       this.gameOver = true;
       if (this.scores[0] > this.scores[1]) this.winner = 0;
       else if (this.scores[1] > this.scores[0]) this.winner = 1;
-      else this.winner = null;
+      else this.winner = this.biased ? this.destinedWinner : null;
       return { gameOver: true, winner: this.winner };
     }
 

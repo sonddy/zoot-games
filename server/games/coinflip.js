@@ -19,6 +19,9 @@ class CoinFlipGame {
     this.winner = null;
     this.phase = 'choose';
     this.turnStartTime = Date.now();
+    // vs-house rig: player (index 0) wins only this fraction of the time.
+    this.playerWinProb = (options.vsHouse && typeof options.playerWinProb === 'number')
+      ? options.playerWinProb : null;
   }
 
   handleAction(playerIndex, action) {
@@ -37,12 +40,17 @@ class CoinFlipGame {
       this.choices[0] = action.side;
       this.choices[1] = action.side === 'heads' ? 'tails' : 'heads';
 
-      this.result = Math.random() < 0.5 ? 'heads' : 'tails';
+      if (this.playerWinProb !== null) {
+        // Rigged: decide the winner first, then make the coin land to match.
+        const playerWins = Math.random() < this.playerWinProb;
+        this.winner = playerWins ? 0 : 1;
+        this.result = this.choices[this.winner];
+      } else {
+        this.result = Math.random() < 0.5 ? 'heads' : 'tails';
+        this.winner = (this.result === this.choices[0]) ? 0 : 1;
+      }
       this.phase = 'result';
       this.gameOver = true;
-
-      if (this.result === this.choices[0]) this.winner = 0;
-      else this.winner = 1;
 
       return { gameOver: true, winner: this.winner };
     }

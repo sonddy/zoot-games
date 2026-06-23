@@ -46,18 +46,41 @@ const houseAbuse = require('./houseAbuse');
 const SOLANA_RPC = process.env.SOLANA_RPC || 'https://solana-rpc.publicnode.com';
 const solanaConnection = new Connection(SOLANA_RPC, 'confirmed');
 
+// SECURITY: the escrow key is the most sensitive secret in the system.
+//  - We FAIL CLOSED: if ESCROW_PRIVATE_KEY isn't provided we refuse to start,
+//    rather than silently generating a throwaway hot wallet.
+//  - We NEVER log the private key (or anything derived from secretKey). The
+//    previous code printed the generated key in plaintext to stdout, which on a
+//    hosted log stream is equivalent to publishing it. That is believed to be
+//    how the original escrow key leaked and got swept by an attacker.
 let escrowKeypair;
-if (process.env.ESCROW_PRIVATE_KEY) {
+if (!process.env.ESCROW_PRIVATE_KEY) {
+  console.error('FATAL: ESCROW_PRIVATE_KEY is not set. Refusing to start without a configured escrow wallet.');
+  console.error('Generate a key on a clean machine and set it as the ESCROW_PRIVATE_KEY env var (base64-encoded secret key).');
+  process.exit(1);
+}
+try {
   escrowKeypair = Keypair.fromSecretKey(Buffer.from(process.env.ESCROW_PRIVATE_KEY, 'base64'));
-} else {
-  escrowKeypair = Keypair.generate();
-  console.log('WARNING: No ESCROW_PRIVATE_KEY set. Generated temporary escrow wallet:');
-  console.log('  Address:', escrowKeypair.publicKey.toBase58());
-  console.log('  Private key (base64):', Buffer.from(escrowKeypair.secretKey).toString('base64'));
-  console.log('  Set ESCROW_PRIVATE_KEY env var to persist this wallet across restarts!');
+} catch (e) {
+  console.error('FATAL: ESCROW_PRIVATE_KEY could not be parsed (expected base64-encoded secret key). Refusing to start.');
+  process.exit(1);
 }
 const ESCROW_ADDRESS = escrowKeypair.publicKey.toBase58();
-console.log('Escrow wallet:', ESCROW_ADDRESS);
+
+// SECURITY: hard denylist of escrow wallets that are known-compromised. If the
+// configured key ever derives to one of these, refuse to start — this makes it
+// impossible to accidentally run the games on a drained/leaked wallet again.
+const BLOCKED_ESCROW_ADDRESSES = new Set(
+  (process.env.BLOCKED_ESCROW_ADDRESSES || '7aKmNNy3cbNA4DNEqAyLTwqKqKFLnJ7DntnfozEX945Q')
+    .split(',').map(s => s.trim()).filter(Boolean)
+);
+if (BLOCKED_ESCROW_ADDRESSES.has(ESCROW_ADDRESS)) {
+  console.error('FATAL: ESCROW_PRIVATE_KEY derives to a known-compromised wallet (' + ESCROW_ADDRESS + ').');
+  console.error('This wallet was drained and must never be used again. Set ESCROW_PRIVATE_KEY to a freshly generated key and restart.');
+  process.exit(1);
+}
+
+console.log('Escrow wallet:', ESCROW_ADDRESS); // public address only — never the secret
 
 const ZOOT_MINT_ADDRESS = process.env.ZOOT_MINT || '3max6YL5yL6nrLHN3iHZWqfH1ufoSWFXs6RA4VjLhAtd';
 const ZOOT_MINT = new PublicKey(ZOOT_MINT_ADDRESS);
@@ -224,6 +247,53 @@ const HOUSE_FEE = 0.10;
 const HOUSE_WALLET = '2LK7yxZsy6YVCkFQ4PrL644ve1fgRj5FuDexj5JgS753';
 const TEST_MODE = process.env.TEST_MODE === '1';
 
+// ── Outflow circuit breaker ──
+// A rolling 24h cap on everything the SERVER pays out of the escrow. This is a
+// defense-in-depth backstop against a payout/refund logic exploit. (Note: it
+// CANNOT stop a stolen-key attacker, who signs transfers directly and never
+// touches this code — that is what the key rotation + no-logging fix is for.)
+// Caps are generous by default and overridable via env so legitimate refunds
+// during recovery aren't blocked.
+const OUTFLOW_WINDOW_MS = 24 * 60 * 60 * 1000;
+const MAX_OUTFLOW_24H = {
+  SOL: parseFloat(process.env.MAX_OUTFLOW_SOL || '10'),
+  ZOOT: parseFloat(process.env.MAX_OUTFLOW_ZOOT || '1000000'),
+};
+const outflowLog = []; // [{ t, currency, amount }]
+function _outflow24h(currency) {
+  const cutoff = Date.now() - OUTFLOW_WINDOW_MS;
+  while (outflowLog.length && outflowLog[0].t < cutoff) outflowLog.shift();
+  let sum = 0;
+  for (const e of outflowLog) if (e.currency === currency) sum += e.amount;
+  return sum;
+}
+// Reject deposits whose on-chain timestamp is older than this, so an attacker
+// can't replay a stale (already-spent) deposit signature after a restart wipes
+// the in-memory usedSignatures set.
+const MAX_TX_AGE_MS = 15 * 60 * 1000;
+
+// ── Withdrawal allowlist ──
+// The escrow may ONLY pay addresses that have a real obligation in the system:
+//   - the configured house-fee wallet,
+//   - a wallet that entered a paid game / queue / sports bet (it deposited),
+//   - a wallet we owe a persisted refund to (recovered on restart).
+// Every legitimate payout target is registered via allowPayee() at the moment
+// the obligation is created. A payout to anything else is almost certainly a
+// bug or an injection, so we block it. This is the guard that ensures even a
+// future payout-logic flaw can't redirect escrow funds to an attacker address.
+const payeeAllowlist = new Set([HOUSE_WALLET]);
+// Pre-seed extra trusted addresses (comma-separated) for manual recovery/ops,
+// e.g. EXTRA_ALLOWED_PAYEES=addr1,addr2. The house fee wallet is always allowed.
+for (const a of (process.env.EXTRA_ALLOWED_PAYEES || '').split(',').map(s => s.trim()).filter(Boolean)) {
+  payeeAllowlist.add(a);
+}
+function allowPayee(addr) {
+  if (addr) payeeAllowlist.add(addr);
+}
+function isAllowedPayee(addr) {
+  return payeeAllowlist.has(addr);
+}
+
 async function sendSOL(toAddress, amount) {
   const destPubKey = new PublicKey(toAddress);
   const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
@@ -262,8 +332,24 @@ async function sendZoot(toAddress, amount) {
 }
 
 async function sendCurrency(currency, toAddress, amount) {
-  if (currency === 'ZOOT') return sendZoot(toAddress, amount);
-  return sendSOL(toAddress, amount);
+  const cur = currency === 'ZOOT' ? 'ZOOT' : 'SOL';
+
+  // Allowlist guard: never pay an address that has no obligation in the system.
+  if (!isAllowedPayee(toAddress)) {
+    console.error(`[allowlist] BLOCKED payout of ${amount} ${cur} to non-allowlisted address ${toAddress}. This should never happen in normal play — investigate.`);
+    throw new Error('Payout destination not allowlisted — blocked for safety');
+  }
+
+  // Circuit breaker: cap total escrow outflow per rolling 24h window.
+  const cap = MAX_OUTFLOW_24H[cur];
+  if (cap && (_outflow24h(cur) + amount) > cap) {
+    console.error(`[circuit-breaker] ${cur} outflow cap tripped: attempted ${amount}, 24h total ${_outflow24h(cur)}, cap ${cap}. Blocking payout to ${toAddress}.`);
+    throw new Error('Escrow outflow circuit breaker tripped — payout blocked for safety');
+  }
+
+  const sig = cur === 'ZOOT' ? await sendZoot(toAddress, amount) : await sendSOL(toAddress, amount);
+  outflowLog.push({ t: Date.now(), currency: cur, amount });
+  return sig;
 }
 
 /**
@@ -316,6 +402,9 @@ async function processPendingRefunds() {
   for (const r of list) {
     if ((r.retries || 0) > REFUND_MAX_RETRIES) continue;
     try {
+      // These are our own previously-recorded refund obligations, so the
+      // recipient is trusted — allow it even after a restart cleared the set.
+      allowPayee(r.walletAddress);
       await sendCurrency(r.currency || 'SOL', r.walletAddress, r.amount);
       await persistence.removePendingRefund(r.id);
       console.log('Pending refund cleared:', r.amount, r.currency, '→', r.walletAddress);
@@ -333,12 +422,22 @@ async function processPendingRefunds() {
 }
 setInterval(processPendingRefunds, REFUND_RETRY_INTERVAL_MS);
 
+function _txTooOld(tx) {
+  // tx.blockTime is unix seconds. Reject deposits older than MAX_TX_AGE_MS so a
+  // stale signature can't be replayed after an in-memory set reset.
+  if (typeof tx.blockTime === 'number') {
+    if (Date.now() - tx.blockTime * 1000 > MAX_TX_AGE_MS) return true;
+  }
+  return false;
+}
+
 async function verifySolPayment(signature, expectedAmount) {
   const tx = await solanaConnection.getTransaction(signature, {
     commitment: 'confirmed',
     maxSupportedTransactionVersion: 0,
   });
   if (!tx || tx.meta.err) return { ok: false, error: 'Transaction not found or failed' };
+  if (_txTooOld(tx)) return { ok: false, error: 'Payment transaction is too old — please make a fresh bet' };
 
   const accountKeys = tx.transaction.message.staticAccountKeys || tx.transaction.message.accountKeys;
   const escrowIndex = accountKeys.findIndex(k => k.toBase58() === ESCROW_ADDRESS);
@@ -356,6 +455,7 @@ async function verifyZootPayment(signature, expectedAmount) {
     maxSupportedTransactionVersion: 0,
   });
   if (!tx || tx.meta.err) return { ok: false, error: 'Transaction not found or failed' };
+  if (_txTooOld(tx)) return { ok: false, error: 'Payment transaction is too old — please make a fresh bet' };
 
   const pre = tx.meta.preTokenBalances || [];
   const post = tx.meta.postTokenBalances || [];
@@ -377,12 +477,25 @@ async function verifyZootPayment(signature, expectedAmount) {
 }
 
 async function verifyBetPayment(signature, expectedAmount, currency) {
+  // Fast in-memory reject for replays seen this session.
   if (usedSignatures.has(signature)) return { ok: false, error: 'Transaction already used' };
+
   const useZoot = currency === 'ZOOT';
   const result = useZoot
     ? await verifyZootPayment(signature, expectedAmount)
     : await verifySolPayment(signature, expectedAmount);
-  if (result.ok) usedSignatures.add(signature);
+  if (!result.ok) return result;
+
+  // Atomically claim the signature so it can never be reused — including across
+  // server restarts (in-memory set alone would forget after a restart).
+  usedSignatures.add(signature);
+  const consumed = await persistence.tryConsumeSignature(signature);
+  if (consumed === false) {
+    // Another request/instance already consumed it (or it was used before a
+    // restart): reject as a replay.
+    return { ok: false, error: 'Transaction already used' };
+  }
+  // consumed === true (claimed) or null (store unavailable → in-memory only).
   return result;
 }
 
@@ -616,6 +729,9 @@ io.on('connection', (socket) => {
       persistActiveRoom(room).catch(()=>{});
       startGame(room);
     } else {
+      // Player deposited and is now waiting — allow refunding them if they
+      // leave before a match is found.
+      allowPayee(player.walletAddress);
       const entry = {
         socketId: socket.id,
         walletAddress: player.walletAddress,
@@ -673,6 +789,9 @@ io.on('connection', (socket) => {
       room.vsHouse = true;
       room.players = [socket.id, houseBot.HOUSE_SOCKET_ID];
       room.houseAgent = houseBot.agents.pickAgent(player.walletAddress);
+      // Rig the luck games in the house's favor. The game classes read these
+      // from options and bias their RNG so the human wins PLAYER_WIN_PROB_VS_HOUSE.
+      room.options = { ...(room.options || {}), vsHouse: true, playerWinProb: PLAYER_WIN_PROB_VS_HOUSE };
       room.state = 'playing';
       player.roomId = room.id;
       socket.join(room.id);
@@ -806,6 +925,7 @@ io.on('connection', (socket) => {
     };
     sportsBets.set(betId, sbEntry);
     persistence.saveSportsBet(betId, sbEntry).catch(()=>{});
+    allowPayee(player.walletAddress); // deposited — eligible for refund/payout
 
     socket.emit('sports_bet_created', { betId, betAmount: bet, currency: cur });
     broadcastLobby();
@@ -833,6 +953,7 @@ io.on('connection', (socket) => {
     entry.acceptorWallet = player.walletAddress;
     entry.acceptorName = player.displayName;
     entry.acceptTxSignature = txSignature;
+    allowPayee(player.walletAddress); // deposited — eligible for payout
     entry.acceptorPick = entry.pick === 'home' ? 'away' : (entry.pick === 'away' ? 'home' : 'not-draw');
     entry.matchedAt = Date.now();
     persistence.saveSportsBet(entry.id, entry).catch(()=>{});
@@ -1035,6 +1156,14 @@ function startGame(room) {
   else if (room.gameType === 'mathduel') room.game = new MathDuelGame();
   room.game.init(room.players.length, room.options || {});
 
+  // Register every human in this room as an allowed payout target — they have
+  // a stake in escrow, so they may legitimately receive a win payout or refund.
+  // (The house bot's pseudo-socket has no real wallet, so it's skipped.)
+  for (const sid of room.players) {
+    const p = players.get(sid);
+    if (p && p.walletAddress) allowPayee(p.walletAddress);
+  }
+
   room.players.forEach((sid, idx) => {
     const sock = io.sockets.sockets.get(sid);
     if (sock) {
@@ -1077,6 +1206,13 @@ const HOUSE_MAX_ZOOT_BET = 10000;
 // and -1x on loss ⇒ ~10% house edge per game (was 3%). This is the single
 // biggest lever against variance drain.
 const HOUSE_PAYOUT_MULTIPLIER = 1.80;
+
+// Target house win rate for the rigged luck games (coinflip / diceduel / hilo)
+// in vs-house mode. The player is wired to win exactly (1 - HOUSE_WIN_RATE) of
+// the time. Override via env; clamped to a sane range.
+const HOUSE_WIN_RATE = Math.min(0.95, Math.max(0.5, parseFloat(process.env.HOUSE_WIN_RATE || '0.75')));
+const PLAYER_WIN_PROB_VS_HOUSE = 1 - HOUSE_WIN_RATE;
+
 const committedHouseBets = new Map(); // roomId -> bet amount
 
 async function getEscrowZootBalance() {
@@ -1222,6 +1358,7 @@ async function recoverFromPreviousRun() {
     if (orphanQueue.length) console.log('Found', orphanQueue.length, 'orphaned waiting bet(s) — refunding...');
     for (const entry of orphanQueue) {
       if (entry.walletAddress && entry.bet) {
+        allowPayee(entry.walletAddress);
         await refundUser({
           walletAddress: entry.walletAddress,
           currency: entry.currency || 'SOL',
@@ -1241,6 +1378,7 @@ async function recoverFromPreviousRun() {
       const list = r.players || [];
       for (const p of list) {
         if (p.walletAddress && r.betAmount) {
+          allowPayee(p.walletAddress);
           await refundUser({
             walletAddress: p.walletAddress,
             currency: r.currency || 'SOL',
@@ -1261,10 +1399,12 @@ async function recoverFromPreviousRun() {
       if (sb.status === 'open') {
         sb.creatorSocketId = null;
         sportsBets.set(sb.id, sb);
+        allowPayee(sb.creatorWallet); // may reconnect & cancel for a refund
         restored++;
       } else if (sb.status === 'matched') {
         for (const wallet of [sb.creatorWallet, sb.acceptorWallet]) {
           if (wallet && sb.betAmount) {
+            allowPayee(wallet);
             await refundUser({
               walletAddress: wallet,
               currency: sb.currency || 'SOL',

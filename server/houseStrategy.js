@@ -139,25 +139,95 @@ function morpionMove(game, idx, agent) {
 
   if (!best) return { fallback: true };
 
-  // Hard rules that override the skill-modulated score:
-  //  1. If I can win this turn (>=10000), do it
-  //  2. If opponent has an open 4 (>=10000), block it
-  for (const r of ranked) {
-    if (r.myScore >= 10000) return { action: { type: 'place', cell: r.cell } };
-  }
-  for (const r of ranked) {
-    if (r.oppScore >= 10000) return { action: { type: 'place', cell: r.cell } };
-  }
+  ranked.sort((a, b) => b.total - a.total);
+  const place = (cell) => ({ action: { type: 'place', cell } });
 
-  // Skill-based blunder: pick a sub-optimal move from the top-N occasionally
+  // ── Hard threat-priority ladder (overrides the skill-modulated score). ──
+  // These are the moves that, if missed, lose a game the house should win.
+  // The old code only force-blocked an OPEN FOUR (>=10000) — but an open four
+  // is already an unstoppable double-ended threat (you can only block one end).
+  // By the time the opponent has one it's too late. The fix is to react to
+  // threats *one tier earlier*: take/own forcing fours, and block open threes
+  // BEFORE they mature into an open four.
+  //
+  // Score legend (per _lineScoreAt): five=100000, open-4=10000, half-open-4=1000,
+  // open-3=500, half-open-3=100. myScore/oppScore are summed across directions,
+  // so a cell that creates two open threes ("double-three" fork) scores ~1000+
+  // and is correctly treated as a winning move.
+
+  // 1. Win now: complete five-in-a-row.
+  for (const r of ranked) if (r.myScore >= 100000) return place(r.cell);
+  // 2. Block the opponent's immediate five.
+  for (const r of ranked) if (r.oppScore >= 100000) return place(r.cell);
+  // 3. Make my own open four — unstoppable next turn.
+  for (const r of ranked) if (r.myScore >= 10000) return place(r.cell);
+  // 4. Block the opponent's open four.
+  for (const r of ranked) if (r.oppScore >= 10000) return place(r.cell);
+  // 5. Make a forcing four (or a double-three fork) to seize the initiative.
+  for (const r of ranked) if (r.myScore >= 1000) return place(r.cell);
+  // 6. Block the opponent's forcing four / would-be four.
+  for (const r of ranked) if (r.oppScore >= 1000) return place(r.cell);
+  // 7. Block the opponent's open three before it becomes an open four — unless
+  //    we have an equally-or-more threatening developing move of our own.
+  for (const r of ranked) if (r.oppScore >= 500 && r.myScore < r.oppScore) return place(r.cell);
+
+  // Skill-based blunder: pick a sub-optimal move from the top-N occasionally.
+  // (skill 5 — every vs-house agent — never blunders; mistakeChance(5) === 0.)
   if (shouldBlunder(agent)) {
-    ranked.sort((a, b) => b.total - a.total);
     const topN = Math.min(ranked.length, 6);
     const pick = ranked[Math.floor(Math.random() * topN)];
     return { action: { type: 'place', cell: pick.cell } };
   }
 
-  return { action: { type: 'place', cell: best.cell } };
+  // ── Skill-5 tactical verification (2-ply). ──
+  // The 1-ply score can walk into traps: a move may LOOK strong but hand the
+  // opponent a forcing reply, or miss that a slightly lower-scored cell sets
+  // up an unanswerable double threat. For the top candidates, simulate my
+  // stone, find the opponent's best reply (same scorer), and pick the move
+  // with the best worst-case outcome. Bounded by candidate caps, so cost is
+  // ~16 × 8 cell evaluations — fast.
+  if (skill >= 5 && ranked.length > 1) {
+    const deadline = Date.now() + 250;
+    const myTop = ranked.slice(0, 16);
+    let bestCell = best.cell;
+    let bestVal = -Infinity;
+    for (const cand of myTop) {
+      if (Date.now() > deadline) break;
+      board[cand.cell] = me;
+
+      // Opponent's best reply over cells near the action.
+      let oppBest = 0;     // opponent's strongest attacking reply
+      let myFollow = 0;    // my strongest follow-up if opponent must defend
+      const reply = [];
+      for (const other of myTop) {
+        if (other.cell === cand.cell || board[other.cell] !== null) continue;
+        reply.push(other.cell);
+      }
+      // Also rescore the candidate's neighbors (the move changes local scores).
+      const r0 = Math.floor(cand.cell / size), c0 = cand.cell % size;
+      for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+        const nr = r0 + dr, nc = c0 + dc;
+        if (nr < 0 || nr >= size || nc < 0 || nc >= size) continue;
+        const ni = nr * size + nc;
+        if (board[ni] === null && !reply.includes(ni)) reply.push(ni);
+      }
+      for (const rc of reply.slice(0, 24)) {
+        const s = _cellScore(board, size, rc, opp, me);
+        if (s === -Infinity) continue;
+        if (s.myScore > oppBest) oppBest = s.myScore;   // from opp's perspective
+        if (s.oppScore > myFollow) myFollow = s.oppScore; // my threat they'd have to answer
+      }
+      board[cand.cell] = null;
+
+      // Value: my immediate gain + my follow-up pressure − what I allow the
+      // opponent to build in reply.
+      const val = cand.myScore + cand.oppScore * defensiveWeight + myFollow * 0.45 - oppBest * 0.9;
+      if (val > bestVal) { bestVal = val; bestCell = cand.cell; }
+    }
+    return place(bestCell);
+  }
+
+  return place(best.cell);
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -329,7 +399,9 @@ function _c4Eval(board, me, opp) {
   };
   return score(me) - score(opp);
 }
-function _c4Minimax(board, current, me, opp, depth, alpha, beta) {
+const C4_TIMEOUT = { timeout: true };
+function _c4Minimax(board, current, me, opp, depth, alpha, beta, deadline) {
+  if (deadline && Date.now() > deadline) throw C4_TIMEOUT;
   const w = _c4Winner(board);
   if (w === me)   return { score: 100000 - (10 - depth) }; // prefer faster wins
   if (w === opp)  return { score: -100000 + (10 - depth) };
@@ -345,7 +417,7 @@ function _c4Minimax(board, current, me, opp, depth, alpha, beta) {
     if (row < 0) continue;
     const idx = row * C4_COLS + col;
     board[idx] = current;
-    const nxt = _c4Minimax(board, current === me ? opp : me, me, opp, depth - 1, alpha, beta);
+    const nxt = _c4Minimax(board, current === me ? opp : me, me, opp, depth - 1, alpha, beta, deadline);
     board[idx] = null;
     if (isMax) {
       if (nxt.score > best.score) best = { score: nxt.score, move: col };
@@ -374,8 +446,6 @@ function c4Move(game, idx, agent) {
   const me = idx;
   const opp = 1 - idx;
   const skill = (agent && agent.skill) || 3;
-  // depth: skill 1 = 2, skill 5 = 6
-  const depth = Math.max(2, skill + 1);
 
   // blunder
   if (Math.random() < mistakeChance(skill)) {
@@ -385,9 +455,28 @@ function c4Move(game, idx, agent) {
     return { action: { type: 'drop', col: valid[Math.floor(Math.random() * valid.length)] } };
   }
 
-  const result = _c4Minimax(board, me, me, opp, depth, -Infinity, Infinity);
-  if (result.move === null || result.move === undefined) return { fallback: true };
-  return { action: { type: 'drop', col: result.move } };
+  const validCols = [3, 2, 4, 1, 5, 0, 6].filter(c => _c4DropRow(board, c) >= 0);
+  if (validCols.length === 0) return { fallback: true };
+
+  // Time-budgeted iterative deepening: search depth 1, 2, 3, … keeping the best
+  // move from the last FULLY-completed depth. This makes the house as deep as
+  // it can be (skill 5 routinely reaches depth 9-11) while guaranteeing it never
+  // blocks the single-threaded server for more than ~the budget on any one move.
+  const maxDepth = skill >= 5 ? 16 : Math.max(2, skill + 1);
+  const deadline = Date.now() + (skill >= 5 ? 600 : 250);
+  let bestCol = validCols[0];
+  for (let d = Math.max(2, Math.min(4, maxDepth)); d <= maxDepth; d++) {
+    try {
+      const result = _c4Minimax(board, me, me, opp, d, -Infinity, Infinity, deadline);
+      if (result.move !== null && result.move !== undefined) bestCol = result.move;
+      // Found a forced result (win/loss proven) — no need to search deeper.
+      if (result.score >= 90000 || result.score <= -90000) break;
+    } catch (e) {
+      if (e === C4_TIMEOUT) break; // keep best move from the last completed depth
+      throw e;
+    }
+  }
+  return { action: { type: 'drop', col: bestCol } };
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -472,33 +561,135 @@ const REVERSI_WEIGHTS = [
   [120,-20, 20,  5,  5, 20,-20,120],
 ];
 
+// Self-contained Reversi simulation (so we can do real lookahead without
+// mutating the live game object). Board is a 8x8 array of null|0|1.
+const _REV_DIRS = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+
+function _revFlips(board, row, col, player) {
+  if (board[row][col] !== null) return [];
+  const opp = 1 - player;
+  const all = [];
+  for (const [dr, dc] of _REV_DIRS) {
+    const line = [];
+    let r = row + dr, c = col + dc;
+    while (r >= 0 && r < 8 && c >= 0 && c < 8 && board[r][c] === opp) { line.push([r, c]); r += dr; c += dc; }
+    if (line.length > 0 && r >= 0 && r < 8 && c >= 0 && c < 8 && board[r][c] === player) all.push(...line);
+  }
+  return all;
+}
+
+function _revValidMoves(board, player) {
+  const moves = [];
+  for (let r = 0; r < 8; r++)
+    for (let c = 0; c < 8; c++)
+      if (board[r][c] === null && _revFlips(board, r, c, player).length > 0) moves.push({ row: r, col: c });
+  return moves;
+}
+
+function _revApply(board, row, col, player) {
+  const nb = board.map(r => r.slice());
+  const flips = _revFlips(nb, row, col, player);
+  nb[row][col] = player;
+  for (const [fr, fc] of flips) nb[fr][fc] = player;
+  return nb;
+}
+
+function _revCounts(board) {
+  let c0 = 0, c1 = 0;
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    if (board[r][c] === 0) c0++; else if (board[r][c] === 1) c1++;
+  }
+  return [c0, c1];
+}
+
+function _revEval(board, me) {
+  const opp = 1 - me;
+  let positional = 0, my = 0, op = 0;
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    const v = board[r][c];
+    if (v === null) continue;
+    if (v === me) { positional += REVERSI_WEIGHTS[r][c]; my++; }
+    else { positional -= REVERSI_WEIGHTS[r][c]; op++; }
+  }
+  const empties = 64 - my - op;
+  if (empties <= 8) {
+    // Endgame: discs are what actually win — weight raw count heavily.
+    return (my - op) * 100 + positional;
+  }
+  // Mid-game: positional control + mobility (having more moves than opponent
+  // is the heart of strong Othello play). Disc count barely matters yet.
+  const myMob = _revValidMoves(board, me).length;
+  const opMob = _revValidMoves(board, opp).length;
+  return positional + (myMob - opMob) * 8;
+}
+
+const REV_TIMEOUT = { timeout: true };
+function _revMinimax(board, current, me, depth, alpha, beta, deadline) {
+  if (deadline && Date.now() > deadline) throw REV_TIMEOUT;
+  if (depth === 0) return _revEval(board, me);
+  const moves = _revValidMoves(board, current);
+  if (moves.length === 0) {
+    // No move: pass. If opponent also can't move, the game is over → final count.
+    if (_revValidMoves(board, 1 - current).length === 0) {
+      const [c0, c1] = _revCounts(board);
+      const diff = (me === 0 ? c0 - c1 : c1 - c0);
+      return diff > 0 ? 100000 + diff : diff < 0 ? -100000 + diff : 0;
+    }
+    return _revMinimax(board, 1 - current, me, depth - 1, alpha, beta, deadline);
+  }
+  const isMax = current === me;
+  let best = isMax ? -Infinity : Infinity;
+  for (const m of moves) {
+    const nb = _revApply(board, m.row, m.col, current);
+    const score = _revMinimax(nb, 1 - current, me, depth - 1, alpha, beta, deadline);
+    if (isMax) { if (score > best) best = score; if (best > alpha) alpha = best; }
+    else       { if (score < best) best = score; if (best < beta)  beta  = best; }
+    if (alpha >= beta) break;
+  }
+  return best;
+}
+
 function reversiMove(game, idx, agent) {
-  if (typeof game._getValidMoves !== 'function' || typeof game._getFlips !== 'function') return { fallback: true };
-  const moves = game._getValidMoves(idx);
-  if (!moves || moves.length === 0) return { fallback: true };
+  if (!Array.isArray(game.board)) return { fallback: true };
+  const board = game.board;
+  const moves = _revValidMoves(board, idx);
+  if (moves.length === 0) return { fallback: true };
   const skill = (agent && agent.skill) || 3;
 
-  // Low skill: weighted random toward decent moves
+  // Low skill plays loosely; skill 5 (vs-house) never does.
   if (skill <= 2 && Math.random() < 0.5) {
-    return { action: { type: 'place', row: moves[0].row, col: moves[0].col } };
+    const pick = moves[Math.floor(Math.random() * moves.length)];
+    return { action: { type: 'place', row: pick.row, col: pick.col } };
   }
-
-  // Blunder rate: skill 5 ~5%, skill 1 ~50%
   if (Math.random() < mistakeChance(skill)) {
     const pick = moves[Math.floor(Math.random() * moves.length)];
     return { action: { type: 'place', row: pick.row, col: pick.col } };
   }
 
-  let bestScore = -Infinity;
+  // Time-budgeted iterative deepening. Target depth grows toward an exact
+  // endgame solve (≤10 empties → solve to the end for perfect disc count),
+  // but a wall-clock deadline guarantees we never block the shared server.
+  const empties = 64 - _revCounts(board).reduce((a, b) => a + b, 0);
+  const maxDepth = empties <= 13 ? empties : Math.min(9, Math.max(3, skill + 4));
+  const deadline = Date.now() + (skill >= 5 ? 600 : 300);
+
   let best = moves[0];
-  for (const m of moves) {
-    const flips = game._getFlips(m.row, m.col, idx);
-    const positional = REVERSI_WEIGHTS[m.row][m.col];
-    // Higher skill weights position more heavily; flip count is a secondary
-    // factor (in Reversi having too many discs early can be bad — "mobility").
-    const flipWeight = 1.0; // small weight; positional dominates
-    const score = positional * (1 + skill * 0.3) + flips.length * flipWeight;
-    if (score > bestScore) { bestScore = score; best = m; }
+  for (let d = 2; d <= maxDepth; d++) {
+    let localBest = null, localScore = -Infinity, alpha = -Infinity, aborted = false;
+    for (const m of moves) {
+      let score;
+      try {
+        score = _revMinimax(_revApply(board, m.row, m.col, idx), 1 - idx, idx, d - 1, alpha, Infinity, deadline);
+      } catch (e) {
+        if (e === REV_TIMEOUT) { aborted = true; break; }
+        throw e;
+      }
+      if (score > localScore) { localScore = score; localBest = m; }
+      if (localScore > alpha) alpha = localScore;
+    }
+    if (aborted) break;            // keep best from last completed depth
+    if (localBest) best = localBest;
+    if (localScore >= 100000) break; // proven win
   }
   return { action: { type: 'place', row: best.row, col: best.col } };
 }
@@ -600,19 +791,38 @@ function _bsUnshot(game, idx) {
   return out;
 }
 
+// Known state of each cell on the opponent's board, from what the bot has
+// legitimately learned by firing (NOT by peeking at hidden ships):
+//   'miss'    — fired, empty water
+//   'hit'     — fired, hit a ship that is NOT yet sunk
+//   'sunk'    — part of a fully-sunk ship (its cells are revealed to anyone)
+//   'unknown' — never fired here
+function _bsState(game, idx) {
+  const opp = 1 - idx;
+  const st = Array.from({ length: BS_SIZE }, () => Array(BS_SIZE).fill('unknown'));
+  for (let r = 0; r < BS_SIZE; r++) {
+    for (let c = 0; c < BS_SIZE; c++) {
+      if (!game.shots[idx][r][c]) continue;
+      const v = game.boards[opp][r][c];
+      if (v === null) { st[r][c] = 'miss'; continue; }
+      const ship = game.ships[opp][v];
+      st[r][c] = (ship && ship.sunk) ? 'sunk' : 'hit';
+    }
+  }
+  return st;
+}
+
+// Battleship probability-density targeting — the strongest standard approach.
+// For every remaining (unsunk) ship, count all the ways it could still be
+// placed given known misses/sinks, accumulating a "heat" score per cell.
+// When there are open hits, only count placements that cover them (and weight
+// by how many), which makes the bot extend along a wounded ship optimally.
 function battleshipMove(game, idx, agent) {
-  if (!game.shots || !game.boards) return { fallback: true };
+  if (!game.shots || !game.boards || !game.ships) return { fallback: true };
   const skill = (agent && agent.skill) || 3;
   const opp = 1 - idx;
 
-  // Target mode: are there hits on ships that are NOT yet sunk? Continue
-  // attacking around them.
-  const hits = _bsHits(game, idx).filter(h => {
-    const ship = game.ships[opp][h.shipId];
-    return ship && !ship.sunk;
-  });
-
-  // Skill-based blunder
+  // Skill-based blunder (skill 5 — vs-house — never fires blindly).
   if (Math.random() < mistakeChance(skill)) {
     const all = _bsUnshot(game, idx);
     if (all.length === 0) return { fallback: true };
@@ -620,55 +830,92 @@ function battleshipMove(game, idx, agent) {
     return { action: { type: 'fire', row: pick.r, col: pick.c } };
   }
 
-  if (hits.length > 0) {
-    // If 2+ hits are colinear, infer the ship orientation and extend.
-    const byShip = {};
-    for (const h of hits) {
-      if (!byShip[h.shipId]) byShip[h.shipId] = [];
-      byShip[h.shipId].push(h);
+  const st = _bsState(game, idx);
+  const remaining = game.ships[opp].filter(s => !s.sunk).map(s => s.size);
+  if (remaining.length === 0) {
+    const all = _bsUnshot(game, idx);
+    if (all.length === 0) return { fallback: true };
+    const pick = all[Math.floor(Math.random() * all.length)];
+    return { action: { type: 'fire', row: pick.r, col: pick.c } };
+  }
+
+  const openHits = [];
+  for (let r = 0; r < BS_SIZE; r++)
+    for (let c = 0; c < BS_SIZE; c++)
+      if (st[r][c] === 'hit') openHits.push([r, c]);
+
+  const prob = Array.from({ length: BS_SIZE }, () => Array(BS_SIZE).fill(0));
+  const accumulate = (cells) => {
+    // A placement is only possible if it avoids misses and sunk cells.
+    let hitsCovered = 0;
+    for (const [r, c] of cells) {
+      const s = st[r][c];
+      if (s === 'miss' || s === 'sunk') return;
+      if (s === 'hit') hitsCovered++;
     }
-    for (const shipHits of Object.values(byShip)) {
-      if (shipHits.length >= 2) {
-        const sameRow = shipHits.every(h => h.r === shipHits[0].r);
-        const sameCol = shipHits.every(h => h.c === shipHits[0].c);
-        if (sameRow) {
-          const cs = shipHits.map(h => h.c).sort((a,b)=>a-b);
-          const ends = [{ r: shipHits[0].r, c: cs[0] - 1 }, { r: shipHits[0].r, c: cs[cs.length-1] + 1 }];
-          for (const e of ends) {
-            if (e.c >= 0 && e.c < BS_SIZE && !game.shots[idx][e.r][e.c]) {
-              return { action: { type: 'fire', row: e.r, col: e.c } };
-            }
-          }
-        }
-        if (sameCol) {
-          const rs = shipHits.map(h => h.r).sort((a,b)=>a-b);
-          const ends = [{ r: rs[0] - 1, c: shipHits[0].c }, { r: rs[rs.length-1] + 1, c: shipHits[0].c }];
-          for (const e of ends) {
-            if (e.r >= 0 && e.r < BS_SIZE && !game.shots[idx][e.r][e.c]) {
-              return { action: { type: 'fire', row: e.r, col: e.c } };
-            }
-          }
-        }
+    // In target mode (open hits exist) only consider placements that touch a
+    // hit, and weight strongly by how many hits they line up with.
+    let weight;
+    if (openHits.length > 0) {
+      if (hitsCovered === 0) return;
+      weight = Math.pow(50, hitsCovered);
+    } else {
+      weight = 1;
+    }
+    for (const [r, c] of cells) {
+      if (st[r][c] === 'unknown') prob[r][c] += weight;
+    }
+  };
+
+  for (const L of remaining) {
+    for (let r = 0; r < BS_SIZE; r++) {
+      for (let c = 0; c + L <= BS_SIZE; c++) {
+        const cells = [];
+        for (let i = 0; i < L; i++) cells.push([r, c + i]);
+        accumulate(cells);
       }
     }
-    // Single hit: try 4 neighbors
+    for (let c = 0; c < BS_SIZE; c++) {
+      for (let r = 0; r + L <= BS_SIZE; r++) {
+        const cells = [];
+        for (let i = 0; i < L; i++) cells.push([r + i, c]);
+        accumulate(cells);
+      }
+    }
+  }
+
+  // Fire at the highest-probability unknown cell (random tie-break).
+  let bestVal = -1;
+  let bestCells = [];
+  for (let r = 0; r < BS_SIZE; r++) {
+    for (let c = 0; c < BS_SIZE; c++) {
+      if (st[r][c] !== 'unknown') continue;
+      if (prob[r][c] > bestVal) { bestVal = prob[r][c]; bestCells = [[r, c]]; }
+      else if (prob[r][c] === bestVal) bestCells.push([r, c]);
+    }
+  }
+
+  if (bestVal > 0 && bestCells.length > 0) {
+    const [r, c] = bestCells[Math.floor(Math.random() * bestCells.length)];
+    return { action: { type: 'fire', row: r, col: c } };
+  }
+
+  // Fallback (no placement scored — e.g. degenerate state): adjacent to a hit,
+  // else any remaining cell.
+  if (openHits.length > 0) {
     const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
-    for (const h of hits) {
+    for (const [hr, hc] of openHits) {
       for (const [dr, dc] of dirs) {
-        const nr = h.r + dr, nc = h.c + dc;
-        if (nr >= 0 && nr < BS_SIZE && nc >= 0 && nc < BS_SIZE && !game.shots[idx][nr][nc]) {
+        const nr = hr + dr, nc = hc + dc;
+        if (nr >= 0 && nr < BS_SIZE && nc >= 0 && nc < BS_SIZE && st[nr][nc] === 'unknown') {
           return { action: { type: 'fire', row: nr, col: nc } };
         }
       }
     }
   }
-
-  // Hunt mode: parity grid — shortest ship is size 2, so cells with
-  // (r+c) % 2 === 0 are sufficient to find any ship.
-  const parity = _bsUnshot(game, idx).filter(p => (p.r + p.c) % 2 === 0);
-  const pool = parity.length > 0 ? parity : _bsUnshot(game, idx);
-  if (pool.length === 0) return { fallback: true };
-  const pick = pool[Math.floor(Math.random() * pool.length)];
+  const all = _bsUnshot(game, idx);
+  if (all.length === 0) return { fallback: true };
+  const pick = all[Math.floor(Math.random() * all.length)];
   return { action: { type: 'fire', row: pick.r, col: pick.c } };
 }
 
@@ -717,14 +964,60 @@ function _mancalaScore(pits, playerIndex) {
   return (pits[myStore] - pits[oppStore]) * 4 + mySide * 0.5;
 }
 
+function _mancalaSideEmpty(pits, player) {
+  const [lo, hi] = player === 0 ? [0, 5] : [7, 12];
+  for (let i = lo; i <= hi; i++) if (pits[i] > 0) return false;
+  return true;
+}
+
+// Final score from `me`'s perspective once a side empties: sweep the remaining
+// seeds into each owner's store (matches MancalaGame._collectRemaining) and
+// return the store difference. Large magnitude so wins dominate the search.
+function _mancalaFinal(pits, me) {
+  const p = pits.slice();
+  for (const [lo, hi, store] of [[0, 5, 6], [7, 12, 13]]) {
+    for (let i = lo; i <= hi; i++) { p[store] += p[i]; p[i] = 0; }
+  }
+  const diff = me === 0 ? p[6] - p[13] : p[13] - p[6];
+  return diff >= 0 ? 100000 + diff : -100000 + diff;
+}
+
+function _mancalaLegal(pits, player) {
+  const [lo, hi] = player === 0 ? [0, 5] : [7, 12];
+  const out = [];
+  for (let i = lo; i <= hi; i++) if (pits[i] > 0) out.push(i);
+  return out;
+}
+
+const MANCALA_TIMEOUT = { timeout: true };
+function _mancalaMinimax(pits, current, me, depth, alpha, beta, deadline) {
+  if (deadline && Date.now() > deadline) throw MANCALA_TIMEOUT;
+  if (_mancalaSideEmpty(pits, 0) || _mancalaSideEmpty(pits, 1)) return _mancalaFinal(pits, me);
+  if (depth === 0) return _mancalaScore(pits, me);
+  const legal = _mancalaLegal(pits, current);
+  if (legal.length === 0) return _mancalaFinal(pits, me);
+
+  const isMax = current === me;
+  let best = isMax ? -Infinity : Infinity;
+  for (const pit of legal) {
+    const r = _mancalaApply(pits, current, pit);
+    if (!r) continue;
+    // Extra turn → same player moves again (no turn flip).
+    const next = r.extraTurn ? current : 1 - current;
+    const score = _mancalaMinimax(r.newPits, next, me, depth - 1, alpha, beta, deadline);
+    if (isMax) { if (score > best) best = score; if (best > alpha) alpha = best; }
+    else       { if (score < best) best = score; if (best < beta)  beta  = best; }
+    if (alpha >= beta) break;
+  }
+  return best;
+}
+
 function mancalaMove(game, idx, agent) {
   if (!Array.isArray(game.pits)) return { fallback: true };
   const pits = game.pits;
   const skill = (agent && agent.skill) || 3;
-  const [lo, hi] = idx === 0 ? [0, 5] : [7, 12];
 
-  const legalPits = [];
-  for (let i = lo; i <= hi; i++) if (pits[i] > 0) legalPits.push(i);
+  const legalPits = _mancalaLegal(pits, idx);
   if (legalPits.length === 0) return { fallback: true };
 
   if (skill <= 2 || Math.random() < mistakeChance(skill)) {
@@ -732,18 +1025,32 @@ function mancalaMove(game, idx, agent) {
     return { action: { type: 'sow', pit: pick } };
   }
 
-  // 1-ply lookahead with extra-turn chains
-  let best = null;
-  let bestScore = -Infinity;
-  for (const pit of legalPits) {
-    const r = _mancalaApply(pits, idx, pit);
-    if (!r) continue;
-    let score = _mancalaScore(r.newPits, idx);
-    if (r.extraTurn) score += 8;            // extra turns are very valuable
-    if (r.captured > 0) score += r.captured * 3;
-    if (score > bestScore) { bestScore = score; best = pit; }
+  // Iterative-deepening minimax with extra-turn chains. Branching is ≤6 so we
+  // search very deep cheaply; skill 5 targets 13 plies (near-perfect Kalah)
+  // under a wall-clock deadline that keeps the server responsive.
+  const maxDepth = skill >= 5 ? 13 : Math.max(3, skill + 2);
+  const deadline = Date.now() + (skill >= 5 ? 450 : 200);
+  let best = legalPits[0];
+  for (let d = Math.min(5, maxDepth); d <= maxDepth; d++) {
+    let localBest = null, localScore = -Infinity, alpha = -Infinity, aborted = false;
+    for (const pit of legalPits) {
+      const r = _mancalaApply(pits, idx, pit);
+      if (!r) continue;
+      const next = r.extraTurn ? idx : 1 - idx;
+      let score;
+      try {
+        score = _mancalaMinimax(r.newPits, next, idx, d - 1, alpha, Infinity, deadline);
+      } catch (e) {
+        if (e === MANCALA_TIMEOUT) { aborted = true; break; }
+        throw e;
+      }
+      if (score > localScore) { localScore = score; localBest = pit; }
+      if (localScore > alpha) alpha = localScore;
+    }
+    if (aborted) break;             // keep best from last completed depth
+    if (localBest !== null) best = localBest;
+    if (localScore >= 100000) break; // proven win
   }
-  if (best === null) best = legalPits[0];
   return { action: { type: 'sow', pit: best } };
 }
 
@@ -790,6 +1097,78 @@ function _dbAllLines(game) {
   return out;
 }
 
+// ── Self-contained Dots & Boxes solver (for the decisive endgame). ──
+// State carries line grids + box ownership so we can search to the very end
+// and discover the "double-cross" (declining the last 2 boxes of a chain to
+// keep control) — the single most important winning technique in the game,
+// which the old greedy heuristic never did.
+function _dbFreeLines(h, v, rows, cols) {
+  const out = [];
+  for (let r = 0; r <= rows; r++) for (let c = 0; c < cols; c++) if (h[r][c] === null) out.push({ o: 'h', r, c });
+  for (let r = 0; r < rows; r++) for (let c = 0; c <= cols; c++) if (v[r][c] === null) out.push({ o: 'v', r, c });
+  return out;
+}
+function _dbBoxComplete(h, v, r, c) {
+  return h[r][c] !== null && h[r + 1][c] !== null && v[r][c] !== null && v[r][c + 1] !== null;
+}
+function _dbStep(h, v, boxes, rows, cols, line, current) {
+  // Returns { h, v, boxes, made } after drawing `line` for `current`.
+  const nh = h.map(x => x.slice());
+  const nv = v.map(x => x.slice());
+  const nb = boxes.map(x => x.slice());
+  if (line.o === 'h') nh[line.r][line.c] = current; else nv[line.r][line.c] = current;
+  let made = 0;
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    if (nb[r][c] === null && _dbBoxComplete(nh, nv, r, c)) { nb[r][c] = current; made++; }
+  }
+  return { h: nh, v: nv, boxes: nb, made };
+}
+function _dbSolve(h, v, boxes, current, me, rows, cols, alpha, beta, budget) {
+  if (++budget.n > budget.max) budget.over = true;
+  else if ((budget.n & 1023) === 0 && budget.deadline && Date.now() > budget.deadline) budget.over = true;
+  const free = _dbFreeLines(h, v, rows, cols);
+  if (free.length === 0 || budget.over) {
+    let m = 0, o = 0;
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      if (boxes[r][c] === me) m++; else if (boxes[r][c] === 1 - me) o++;
+    }
+    return m - o;
+  }
+  // Move ordering: try capturing moves first (better pruning). Compute each
+  // line's step ONCE (the old comparator re-simulated per comparison).
+  const stepped = free.map(ln => ({ ln, s: _dbStep(h, v, boxes, rows, cols, ln, current) }));
+  stepped.sort((a, b) => b.s.made - a.s.made);
+  const isMax = current === me;
+  let best = isMax ? -Infinity : Infinity;
+  for (const { s } of stepped) {
+    const next = s.made > 0 ? current : 1 - current; // completing a box → go again
+    const val = _dbSolve(s.h, s.v, s.boxes, next, me, rows, cols, alpha, beta, budget);
+    if (isMax) { if (val > best) best = val; if (best > alpha) alpha = best; }
+    else       { if (val < best) best = val; if (best < beta) beta = best; }
+    if (alpha >= beta || budget.over) break;
+  }
+  return best;
+}
+function _dbExactBestMove(game, me) {
+  const { rows, cols } = game;
+  const h = game.hLines.map(x => x.slice());
+  const v = game.vLines.map(x => x.slice());
+  const boxes = game.boxes.map(x => x.slice());
+  const free = _dbFreeLines(h, v, rows, cols);
+  const budget = { n: 0, max: 300000, over: false, deadline: Date.now() + 500 };
+  let best = null, bestVal = -Infinity, alpha = -Infinity;
+  for (const ln of free) {
+    const s = _dbStep(h, v, boxes, rows, cols, ln, me);
+    const next = s.made > 0 ? me : 1 - me;
+    const val = _dbSolve(s.h, s.v, s.boxes, next, me, rows, cols, alpha, Infinity, budget);
+    if (val > bestVal) { bestVal = val; best = ln; }
+    if (bestVal > alpha) alpha = bestVal;
+    if (budget.over) break;
+  }
+  if (budget.over) return null; // search too big — defer to heuristic
+  return best;
+}
+
 function dotsboxesMove(game, idx, agent) {
   if (!Array.isArray(game.hLines) || !Array.isArray(game.vLines)) return { fallback: true };
   const skill = (agent && agent.skill) || 3;
@@ -800,6 +1179,13 @@ function dotsboxesMove(game, idx, agent) {
   if (Math.random() < mistakeChance(skill)) {
     const pick = lines[Math.floor(Math.random() * lines.length)];
     return { action: { type: 'line', orientation: pick.orientation, row: pick.row, col: pick.col } };
+  }
+
+  // Endgame: once few lines remain, solve EXACTLY (with chain control /
+  // double-cross). This is where Dots & Boxes is actually won or lost.
+  if (skill >= 4 && lines.length <= 16) {
+    const exact = _dbExactBestMove(game, idx);
+    if (exact) return { action: { type: 'line', orientation: exact.o, row: exact.r, col: exact.c } };
   }
 
   // 1) Take any move that completes a box.
@@ -950,22 +1336,69 @@ function hexMove(game, idx, agent) {
   }
 
   // For each empty cell, simulate placing my stone there and compute
-  // my shortest path vs opp's shortest path. Pick the cell that minimizes
-  // (myPath - oppPath).
+  // my shortest connection path vs the opponent's. Pick the cell that most
+  // reduces my path while lengthening theirs.
+  //
+  // The board is small (7x7), so at skill 5 we evaluate EVERY empty cell
+  // (the old 25-cell cap discarded good edge/bridge moves and cost games).
+  // Lower skills keep the cheaper center-biased sample.
   let best = empties[0];
   let bestScore = Infinity;
-  // Limit candidates for performance — top 25 cells near the action
-  const sampled = empties.length <= 25 ? empties :
+  const sampled = (skill >= 5 || empties.length <= 25) ? empties :
     empties.sort((a, b) => Math.abs(a.row - size/2) + Math.abs(a.col - size/2) -
                             (Math.abs(b.row - size/2) + Math.abs(b.col - size/2))).slice(0, 25);
 
-  for (const m of sampled) {
+  const mid = (size - 1) / 2;
+  const eval1 = (m) => {
     board[m.row][m.col] = idx;
     const myDist = _hexShortestPath(board, size, idx);
     const oppDist = _hexShortestPath(board, size, opp);
     board[m.row][m.col] = null;
-    const score = myDist - oppDist * 0.85; // weight my offense slightly more
-    if (score < bestScore) { bestScore = score; best = m; }
+    // Lower is better. Weight my offense slightly more, and add a small
+    // centrality bias so strong central/bridge moves beat weak edge moves on
+    // ties (central play dominates in Hex).
+    const centrality = (Math.abs(m.row - mid) + Math.abs(m.col - mid)) * 0.06;
+    return myDist - oppDist * 0.85 + centrality;
+  };
+
+  const scored = sampled.map(m => ({ m, s: eval1(m) }));
+  scored.sort((a, b) => a.s - b.s);
+
+  // Skill 5: verify the top candidates 2-ply deep — place my stone, let the
+  // opponent make THEIR best reply (same metric from their side), and keep the
+  // move with the best worst-case. Catches the classic Hex trap where a
+  // 1-ply-greedy move can be neutralized by a single strong block.
+  if (skill >= 5 && scored.length > 1) {
+    const deadline = Date.now() + 350;
+    const myTop = scored.slice(0, 10);
+    let bestM = myTop[0].m;
+    let bestVal = Infinity;
+    for (const cand of myTop) {
+      if (Date.now() > deadline) break;
+      board[cand.m.row][cand.m.col] = idx;
+      // Opponent's best reply (their lowest score from their perspective).
+      let oppBest = Infinity;
+      for (let r = 0; r < size; r++) {
+        for (let c = 0; c < size; c++) {
+          if (board[r][c] !== null) continue;
+          board[r][c] = opp;
+          const oDist = _hexShortestPath(board, size, opp);
+          const mDist = _hexShortestPath(board, size, idx);
+          board[r][c] = null;
+          const oScore = oDist - mDist * 0.85; // lower = better for them
+          if (oScore < oppBest) oppBest = oScore;
+        }
+      }
+      board[cand.m.row][cand.m.col] = null;
+      // My value after their best reply: higher oppBest (worse for them) is better for me.
+      const val = cand.s - oppBest * 0.9;
+      if (val < bestVal) { bestVal = val; bestM = cand.m; }
+    }
+    return { action: { type: 'place', row: bestM.row, col: bestM.col } };
+  }
+
+  for (const { m, s } of scored) {
+    if (s < bestScore) { bestScore = s; best = m; }
   }
   return { action: { type: 'place', row: best.row, col: best.col } };
 }
@@ -974,11 +1407,21 @@ function hexMove(game, idx, agent) {
 // CHECKERS — minimax depth 3-5 with material + king bonus
 // ──────────────────────────────────────────────────────────────
 
-function _checkersAllMoves(game, player) {
-  // Build (from, to) candidate single-step moves. Honor mustJumpFrom and
-  // forced captures.
+// `forcedFrom` controls multi-jump continuation state:
+//   undefined → root call: honor the live game.mustJumpFrom
+//   null      → simulated node with no pending jump: ignore the (stale) live state
+//   number    → simulated node mid multi-jump: only that piece may continue jumping
+function _checkersAllMoves(game, player, forcedFrom) {
   const moves = [];
-  if (game.mustJumpFrom !== null) {
+  if (typeof forcedFrom === 'number') {
+    const piece = game.board[forcedFrom];
+    if (piece && piece.player === player) {
+      const jumps = game._getJumps(forcedFrom, piece);
+      for (const j of jumps) moves.push({ from: forcedFrom, to: j.to });
+    }
+    return moves;
+  }
+  if (forcedFrom === undefined && game.mustJumpFrom !== null) {
     const piece = game.board[game.mustJumpFrom];
     if (piece && piece.player === player) {
       const jumps = game._getJumps(game.mustJumpFrom, piece);
@@ -1003,20 +1446,35 @@ function _checkersAllMoves(game, player) {
 
 function _checkersEval(game, me) {
   let myScore = 0, oppScore = 0;
+  let myPieces = 0, oppPieces = 0;
   for (let i = 0; i < 64; i++) {
     const p = game.board[i];
     if (!p) continue;
-    const val = p.king ? 3 : 1;
-    const r = Math.floor(i / 8);
-    // Bonus for advancing toward king row
-    const advance = p.player === 0 ? (7 - r) * 0.05 : r * 0.05;
-    if (p.player === me) myScore += val + advance;
-    else oppScore += val + advance;
+    const r = Math.floor(i / 8), c = i % 8;
+    // A king is worth far more than a man.
+    const val = p.king ? 5.5 : 3;
+    // Advancement toward promotion (men only — kings move both ways).
+    const advance = p.king ? 0 : (p.player === 0 ? (7 - r) : r) * 0.12;
+    // Central files are stronger than the edges.
+    const center = (3.5 - Math.abs(c - 3.5)) * 0.08;
+    // Back-row defense: keeping the home rank stops the opponent promoting.
+    const backRow = (!p.king && ((p.player === 0 && r === 7) || (p.player === 1 && r === 0))) ? 0.4 : 0;
+    const contrib = val + advance + center + backRow;
+    if (p.player === me) { myScore += contrib; myPieces++; }
+    else { oppScore += contrib; oppPieces++; }
   }
-  return myScore - oppScore;
+  // Mobility: more available moves is a real positional edge in checkers.
+  // (pass null: simulated positions must ignore the live game's mustJumpFrom)
+  const myMob = _checkersAllMoves(game, me, null).length;
+  const oppMob = _checkersAllMoves(game, 1 - me, null).length;
+  // When ahead in material, encourage trading down (fewer pieces on board).
+  const tradeBonus = (myPieces - oppPieces) > 0 ? (24 - myPieces - oppPieces) * 0.05 * (myPieces - oppPieces) : 0;
+  return (myScore - oppScore) + (myMob - oppMob) * 0.08 + tradeBonus;
 }
 
-function _checkersMinimax(game, current, me, depth, alpha, beta) {
+const CHECKERS_TIMEOUT = { timeout: true };
+function _checkersMinimax(game, current, me, depth, alpha, beta, deadline, forcedFrom) {
+  if (deadline && Date.now() > deadline) throw CHECKERS_TIMEOUT;
   if (game.gameOver) {
     if (game.winner === me) return 1000;
     if (game.winner === null) return 0;
@@ -1024,7 +1482,7 @@ function _checkersMinimax(game, current, me, depth, alpha, beta) {
   }
   if (depth === 0) return _checkersEval(game, me);
 
-  const moves = _checkersAllMoves(game, current);
+  const moves = _checkersAllMoves(game, current, forcedFrom === undefined ? null : forcedFrom);
   if (moves.length === 0) return current === me ? -1000 : 1000;
 
   const isMax = (current === me);
@@ -1046,14 +1504,24 @@ function _checkersMinimax(game, current, me, depth, alpha, beta) {
       if ((piece.player === 0 && tr === 0) || (piece.player === 1 && tr === 7)) piece.king = true;
     }
 
-    const nextPlayer = isJump && game._getJumps(m.to, piece).length > 0 ? current : 1 - current;
-    const score = _checkersMinimax(game, nextPlayer, me, depth - 1, alpha, beta);
-
-    // Undo
-    game.board[m.from] = piece;
-    game.board[m.to] = null;
-    if (!wasKing) piece.king = false;
-    for (const cap of captured) game.board[cap.pos] = cap.piece;
+    const continuing = isJump && game._getJumps(m.to, piece).length > 0;
+    const nextPlayer = continuing ? current : 1 - current;
+    // Mid multi-jump only the jumping piece may move again — restrict the
+    // child node accordingly (the old code let ANY piece move, which made the
+    // search misjudge forced capture chains).
+    let score;
+    try {
+      score = _checkersMinimax(game, nextPlayer, me, depth - 1, alpha, beta, deadline, continuing ? m.to : null);
+    } finally {
+      // Undo in `finally`: this search mutates the LIVE game board, and the
+      // deadline timeout propagates as an exception. Without the finally, a
+      // timeout would skip the undo in every parent frame and permanently
+      // corrupt the real game state.
+      game.board[m.from] = piece;
+      game.board[m.to] = null;
+      if (!wasKing) piece.king = false;
+      for (const cap of captured) game.board[cap.pos] = cap.piece;
+    }
 
     if (isMax) { if (score > best) best = score; alpha = Math.max(alpha, best); }
     else       { if (score < best) best = score; beta  = Math.min(beta,  best); }
@@ -1074,10 +1542,13 @@ function checkersMove(game, idx, agent) {
     return { action: { type: 'move', from: pick.from, to: pick.to } };
   }
 
-  const depth = Math.max(2, skill + 1); // skill 3 -> 4, skill 5 -> 6
-  let bestMove = moves[0];
-  let bestScore = -Infinity;
-  for (const m of moves) {
+  // Iterative deepening under a wall-clock budget. Skill 5 targets depth 11
+  // (the old fixed depth 6 finished in <100ms — huge headroom was unused);
+  // lower skills keep the shallower fixed target.
+  const maxDepth = skill >= 5 ? 11 : Math.max(2, skill + 1);
+  const deadline = Date.now() + (skill >= 5 ? 500 : 200);
+
+  function scoreMoveAtDepth(m, depth) {
     // Simulate one ply, recurse with remaining depth
     const piece = game.board[m.from];
     const fr = Math.floor(m.from / 8), fc = m.from % 8;
@@ -1090,13 +1561,35 @@ function checkersMove(game, idx, agent) {
     game.board[m.from] = null;
     const wasKing = piece.king;
     if (!piece.king && ((piece.player === 0 && tr === 0) || (piece.player === 1 && tr === 7))) piece.king = true;
-    const nextPlayer = isJump && game._getJumps(m.to, piece).length > 0 ? idx : 1 - idx;
-    const score = _checkersMinimax(game, nextPlayer, idx, depth - 1, -Infinity, Infinity);
+    const continuing = isJump && game._getJumps(m.to, piece).length > 0;
+    const nextPlayer = continuing ? idx : 1 - idx;
+    let score, err = null;
+    try {
+      score = _checkersMinimax(game, nextPlayer, idx, depth - 1, -Infinity, Infinity, deadline, continuing ? m.to : null);
+    } catch (e) { err = e; }
     game.board[m.from] = piece;
     game.board[m.to] = null;
     if (!wasKing) piece.king = false;
     for (const cap of captured) game.board[cap.pos] = cap.piece;
-    if (score > bestScore) { bestScore = score; bestMove = m; }
+    if (err) throw err;
+    return score;
+  }
+
+  let bestMove = moves[0];
+  for (let d = Math.min(4, maxDepth); d <= maxDepth; d++) {
+    let localBest = null, localScore = -Infinity, aborted = false;
+    for (const m of moves) {
+      let score;
+      try { score = scoreMoveAtDepth(m, d); }
+      catch (e) {
+        if (e === CHECKERS_TIMEOUT) { aborted = true; break; }
+        throw e;
+      }
+      if (score > localScore) { localScore = score; localBest = m; }
+    }
+    if (aborted) break;          // keep best from last completed depth
+    if (localBest) bestMove = localBest;
+    if (localScore >= 1000) break; // proven win
   }
   return { action: { type: 'move', from: bestMove.from, to: bestMove.to } };
 }

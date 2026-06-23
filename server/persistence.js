@@ -127,10 +127,29 @@ async function incrementRefundRetry(id, lastError) {
   }), 'incrementRefundRetry');
 }
 
+// ── used_signatures (replay protection that survives restarts) ──────────────
+// Atomically claim a deposit signature. Returns:
+//   true  → newly claimed (caller may proceed)
+//   false → already claimed (replay — caller must reject)
+//   null  → store unavailable / unknown error (caller falls back to in-memory)
+async function tryConsumeSignature(signature) {
+  if (!enabled) return null;
+  try {
+    // .create() fails if the doc already exists → gives us an atomic claim.
+    await colRef('used_signatures').doc(signature).create({ usedAt: Date.now() });
+    return true;
+  } catch (e) {
+    if (e && (e.code === 6 || /already exists/i.test(e.message || ''))) return false;
+    console.error('Persistence tryConsumeSignature:', e.message);
+    return null;
+  }
+}
+
 module.exports = {
   isEnabled,
   saveQueueEntry, removeQueueEntry, loadQueue,
   saveSportsBet, removeSportsBet, loadSportsBets,
   saveActiveRoom, removeActiveRoom, loadActiveRooms,
   addPendingRefund, listPendingRefunds, removePendingRefund, incrementRefundRetry,
+  tryConsumeSignature,
 };
