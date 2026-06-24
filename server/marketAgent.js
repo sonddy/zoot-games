@@ -237,7 +237,7 @@ const fngProvider = {
 // Mirrors trending real-money Polymarket questions onto our P2P board and
 // settles them to match Polymarket's own resolved outcome. No trading, no auth.
 const POLY_ENABLED = process.env.MARKET_AGENT_POLY !== '0';
-const POLY_MAX_OPEN = Number(process.env.MARKET_AGENT_POLY_MAX) || 8;
+const POLY_MAX_OPEN = Number(process.env.MARKET_AGENT_POLY_MAX) || 12;
 const POLY_MIN_VOL24 = Number(process.env.MARKET_AGENT_POLY_MIN_VOL) || 25000;
 const POLY_MAX_DAYS = Number(process.env.MARKET_AGENT_POLY_MAX_DAYS) || 45;
 const POLY_MIN_HOURS = Number(process.env.MARKET_AGENT_POLY_MIN_HOURS) || 6;
@@ -248,13 +248,13 @@ function classifyPoly(q) {
   const has = (arr) => arr.some((w) => s.includes(w));
   if (has(['bitcoin', 'btc', 'ethereum', ' eth ', 'solana', 'crypto', 'dogecoin', 'xrp', 'coinbase', 'binance', 'stablecoin', 'memecoin'])) return 'Crypto';
   if (has(['election', 'president', 'senate', 'congress', 'governor', 'prime minister', 'parliament', 'ballot', 'nominee', 'primary', 'impeach', 'shutdown', 'supreme court', 'cabinet', 'referendum'])) return 'Politics';
+  if (polyLooksLikeSports(q)) return 'Sports';
   if (has(['fed ', 'interest rate', 'rate cut', 'gdp', 'inflation', 'recession', 's&p', 'nasdaq', ' ipo', 'earnings', 'tariff', 'jobs report', 'unemployment'])) return 'Business';
   if (has(['box office', 'oscar', 'grammy', 'album', 'spotify', 'billboard', 'netflix', 'emmy', 'movie', 'rotten tomatoes', 'celebrity'])) return 'Entertainment';
   return 'News';
 }
 
-// Sports questions are already covered deterministically by our ESPN providers,
-// so we skip Polymarket's sports duplicates (match winners, "Will X win on <date>?").
+// Detect sports questions so we tag them with the Sports category.
 function polyLooksLikeSports(q) {
   const s = String(q || '').toLowerCase();
   if (/\bwin on \d{4}-\d{2}-\d{2}/.test(s)) return true;
@@ -304,7 +304,6 @@ const polymarketProvider = {
       if (!end || end < now + POLY_MIN_HOURS * 3600 * 1000 || end > now + POLY_MAX_DAYS * 86400 * 1000) continue;
       const q = String(m.question || '').trim();
       if (!q) continue;
-      if (polyLooksLikeSports(q)) continue; // we already make sports markets ourselves
       const desc = String(m.description || '').replace(/\s+/g, ' ').trim().slice(0, 280);
       out.push({
         question: q,
