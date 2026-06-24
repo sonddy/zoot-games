@@ -159,6 +159,92 @@ app.post('/api/house/maintenance', (req, res) => {
   res.json({ maintenance: houseMaintenance, message: houseMaintenanceMsg });
 });
 
+// ── Prediction Markets (admin-managed, P2P even-money) ──────────────────────
+// Markets are created and resolved by an admin (or an automated agent calling
+// these same endpoints). Players take YES/NO offers against each other; on
+// resolution the winning side is paid 1.8x and the house takes a 10% rake.
+function checkAdmin(req) {
+  const adminToken = process.env.ADMIN_TOKEN;
+  if (!adminToken) return { ok: false, code: 403, error: 'Admin API disabled: set ADMIN_TOKEN to use this.' };
+  const provided = (req.body && req.body.token) || req.query.token || req.get('x-admin-token');
+  if (provided !== adminToken) return { ok: false, code: 401, error: 'Unauthorized' };
+  return { ok: true };
+}
+
+// Public: list markets with their open offers and volume stats.
+app.get('/api/markets', (req, res) => {
+  res.json(buildMarketsPayload());
+});
+
+// Admin: create a market.
+app.post('/api/markets', (req, res) => {
+  const auth = checkAdmin(req); if (!auth.ok) return res.status(auth.code).json({ error: auth.error });
+  const b = req.body || {};
+  const question = String(b.question || '').trim();
+  if (!question) return res.status(400).json({ error: 'question is required' });
+  const id = 'pm_' + uuidv4().slice(0, 8);
+  const market = {
+    id,
+    question,
+    description: String(b.description || '').trim(),
+    category: String(b.category || 'General').trim(),
+    status: 'open',
+    outcome: null,
+    closesAt: b.closesAt ? Number(b.closesAt) : null,
+    resolvesAt: b.resolvesAt ? Number(b.resolvesAt) : null,
+    createdAt: Date.now(),
+    resolvedAt: null,
+  };
+  predictionMarkets.set(id, market);
+  persistence.savePredictionMarket(id, market).catch(()=>{});
+  console.log('[markets] created', id, '-', question);
+  broadcastPredictions();
+  res.json({ ok: true, market });
+});
+
+// Admin: close betting on a market (existing matched bets remain until resolve).
+app.post('/api/markets/:id/close', (req, res) => {
+  const auth = checkAdmin(req); if (!auth.ok) return res.status(auth.code).json({ error: auth.error });
+  const m = predictionMarkets.get(req.params.id);
+  if (!m) return res.status(404).json({ error: 'Market not found' });
+  if (m.status === 'resolved') return res.status(400).json({ error: 'Market already resolved' });
+  m.status = 'closed';
+  persistence.savePredictionMarket(m.id, m).catch(()=>{});
+  broadcastPredictions();
+  res.json({ ok: true, market: m });
+});
+
+// Admin: reopen a closed (not resolved) market for betting.
+app.post('/api/markets/:id/open', (req, res) => {
+  const auth = checkAdmin(req); if (!auth.ok) return res.status(auth.code).json({ error: auth.error });
+  const m = predictionMarkets.get(req.params.id);
+  if (!m) return res.status(404).json({ error: 'Market not found' });
+  if (m.status === 'resolved') return res.status(400).json({ error: 'Market already resolved' });
+  m.status = 'open';
+  persistence.savePredictionMarket(m.id, m).catch(()=>{});
+  broadcastPredictions();
+  res.json({ ok: true, market: m });
+});
+
+// Admin: resolve a market. outcome ∈ YES | NO | CANCEL. Triggers settlement.
+app.post('/api/markets/:id/resolve', async (req, res) => {
+  const auth = checkAdmin(req); if (!auth.ok) return res.status(auth.code).json({ error: auth.error });
+  const m = predictionMarkets.get(req.params.id);
+  if (!m) return res.status(404).json({ error: 'Market not found' });
+  if (m.status === 'resolved') return res.status(400).json({ error: 'Market already resolved' });
+  const outcome = String((req.body && req.body.outcome) || '').toUpperCase();
+  if (!['YES', 'NO', 'CANCEL'].includes(outcome)) {
+    return res.status(400).json({ error: "outcome must be 'YES', 'NO', or 'CANCEL'" });
+  }
+  try {
+    const summary = await settlePredictionMarket(m, outcome);
+    res.json({ ok: true, market: m, settlement: summary });
+  } catch (e) {
+    console.error('[markets] resolve error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 const APK_PATH = path.join(__dirname, '..', 'public', 'downloads', 'zoot-games.apk');
 app.get('/api/app/info', (req, res) => {
   try {
@@ -263,6 +349,8 @@ const players = new Map();
 const matchQueue = new Map();
 const usedSignatures = new Set();
 const sportsBets = new Map();
+const predictionMarkets = new Map(); // marketId -> market
+const predictionBets = new Map();    // betId -> bet (offer/matched/settled)
 const chatBuckets = new Map();
 
 const HOUSE_FEE = 0.10;
@@ -1044,6 +1132,99 @@ io.on('connection', (socket) => {
 
   socket.on('get_lobby', () => broadcastLobby());
 
+  socket.on('get_predictions', () => socket.emit('predictions_update', buildMarketsPayload()));
+
+  // Create a YES/NO offer on a market. Mirrors create_sports_bet.
+  socket.on('create_prediction_bet', async ({ marketId, side, betAmount, txSignature, currency }) => {
+    const player = players.get(socket.id);
+    if (!player) return socket.emit('error_msg', { msg: 'Register first' });
+
+    const market = predictionMarkets.get(marketId);
+    if (!market) return socket.emit('error_msg', { msg: 'Market not found' });
+    if (market.status !== 'open') return socket.emit('error_msg', { msg: 'This market is closed for betting' });
+    if (market.closesAt && Date.now() > market.closesAt) return socket.emit('error_msg', { msg: 'Betting on this market has closed' });
+
+    const pick = String(side || '').toUpperCase();
+    if (pick !== 'YES' && pick !== 'NO') return socket.emit('error_msg', { msg: 'Pick YES or NO' });
+
+    const cur = currency === 'ZOOT' ? 'ZOOT' : 'SOL';
+    const bet = parseFloat(betAmount) || 0;
+    if (!TEST_MODE) {
+      if (!bet || bet <= 0) return socket.emit('error_msg', { msg: 'Invalid bet amount' });
+      if (!txSignature) return socket.emit('error_msg', { msg: 'No payment transaction provided' });
+      const verification = await verifyBetPayment(txSignature, bet, cur);
+      if (!verification.ok) return socket.emit('error_msg', { msg: verification.error });
+    }
+
+    const betId = 'pb_' + uuidv4().slice(0, 8);
+    const entry = {
+      id: betId, marketId, side: pick,
+      betAmount: bet, currency: cur,
+      creatorSocketId: socket.id, creatorWallet: player.walletAddress, creatorName: player.displayName,
+      txSignature, createdAt: Date.now(), status: 'open',
+    };
+    predictionBets.set(betId, entry);
+    persistence.savePredictionBet(betId, entry).catch(()=>{});
+    allowPayee(player.walletAddress);
+
+    socket.emit('prediction_bet_created', { betId, betAmount: bet, currency: cur, side: pick });
+    broadcastPredictions();
+  });
+
+  // Take the opposite side of an open offer. Mirrors accept_sports_bet.
+  socket.on('accept_prediction_bet', async ({ betId, txSignature }) => {
+    const player = players.get(socket.id);
+    if (!player) return socket.emit('error_msg', { msg: 'Register first' });
+
+    const entry = predictionBets.get(betId);
+    if (!entry) return socket.emit('error_msg', { msg: 'This offer is no longer available' });
+    if (entry.status !== 'open') return socket.emit('error_msg', { msg: 'This offer has already been taken' });
+    if (entry.creatorSocketId === socket.id) return socket.emit('error_msg', { msg: 'You cannot accept your own offer' });
+
+    const market = predictionMarkets.get(entry.marketId);
+    if (!market || market.status === 'resolved') return socket.emit('error_msg', { msg: 'This market is no longer available' });
+
+    const bet = entry.betAmount;
+    const cur = entry.currency || 'SOL';
+    if (!TEST_MODE) {
+      if (!txSignature) return socket.emit('error_msg', { msg: 'No payment transaction provided' });
+      const verification = await verifyBetPayment(txSignature, bet, cur);
+      if (!verification.ok) return socket.emit('error_msg', { msg: verification.error });
+    }
+
+    entry.status = 'matched';
+    entry.acceptorSocketId = socket.id;
+    entry.acceptorWallet = player.walletAddress;
+    entry.acceptorName = player.displayName;
+    entry.acceptTxSignature = txSignature;
+    entry.acceptorSide = entry.side === 'YES' ? 'NO' : 'YES';
+    entry.matchedAt = Date.now();
+    allowPayee(player.walletAddress);
+    persistence.savePredictionBet(entry.id, entry).catch(()=>{});
+
+    const pot = bet * 2;
+    const payout = pot - pot * HOUSE_FEE;
+    const creatorSock = io.sockets.sockets.get(entry.creatorSocketId);
+    if (creatorSock) creatorSock.emit('prediction_bet_matched', { betId, acceptorName: entry.acceptorName, payout, currency: cur });
+    socket.emit('prediction_bet_accepted', { betId, payout, currency: cur, side: entry.acceptorSide });
+    broadcastPredictions();
+  });
+
+  // Creator cancels their own still-open offer and gets refunded.
+  socket.on('cancel_prediction_bet', async ({ betId }) => {
+    const player = players.get(socket.id);
+    if (!player) return;
+    const entry = predictionBets.get(betId);
+    if (!entry || entry.creatorSocketId !== socket.id || entry.status !== 'open') return;
+    predictionBets.delete(betId);
+    persistence.removePredictionBet(betId).catch(()=>{});
+    await refundUser({
+      walletAddress: player.walletAddress, currency: entry.currency || 'SOL',
+      amount: entry.betAmount, reason: 'Prediction offer cancelled', socketId: socket.id,
+    });
+    broadcastPredictions();
+  });
+
   socket.on('chat_message', (data) => {
     try {
       const player = players.get(socket.id);
@@ -1392,6 +1573,135 @@ function broadcastLobby() {
   io.emit('lobby_update', { waiting, activeGames, onlineCount: players.size, openSportsBets });
 }
 
+// ── Prediction market helpers ───────────────────────────────────────────────
+function _maskWallet(w) {
+  return w ? w.slice(0, 4) + '…' + w.slice(-4) : '';
+}
+
+// Build the public snapshot: every market plus its open offers and volume stats.
+function buildMarketsPayload() {
+  const byMarket = new Map();
+  for (const [, b] of predictionBets) {
+    if (!byMarket.has(b.marketId)) byMarket.set(b.marketId, []);
+    byMarket.get(b.marketId).push(b);
+  }
+  const markets = [];
+  for (const [, m] of predictionMarkets) {
+    const bets = byMarket.get(m.id) || [];
+    const openOffers = [];
+    let yesVolume = 0, noVolume = 0, matchedVolume = 0, matchedCount = 0;
+    for (const b of bets) {
+      if (b.status === 'open') {
+        if (b.side === 'YES') yesVolume += b.betAmount; else noVolume += b.betAmount;
+        openOffers.push({
+          id: b.id, marketId: b.marketId, side: b.side,
+          betAmount: b.betAmount, currency: b.currency,
+          creatorName: b.creatorName, creatorWallet: _maskWallet(b.creatorWallet),
+          creatorSocketId: b.creatorSocketId, createdAt: b.createdAt,
+        });
+      } else if (b.status === 'matched') {
+        matchedVolume += b.betAmount * 2;
+        matchedCount++;
+      }
+    }
+    openOffers.sort((a, b) => b.createdAt - a.createdAt);
+    markets.push({
+      id: m.id, question: m.question, description: m.description, category: m.category,
+      status: m.status, outcome: m.outcome,
+      closesAt: m.closesAt, resolvesAt: m.resolvesAt, createdAt: m.createdAt, resolvedAt: m.resolvedAt,
+      openOffers,
+      stats: { yesVolume, noVolume, matchedVolume, matchedCount, openCount: openOffers.length },
+    });
+  }
+  // Open/closed first (newest first), resolved markets after (most recently resolved first).
+  markets.sort((a, b) => {
+    const ar = a.status === 'resolved' ? 1 : 0;
+    const br = b.status === 'resolved' ? 1 : 0;
+    if (ar !== br) return ar - br;
+    if (ar) return (b.resolvedAt || 0) - (a.resolvedAt || 0);
+    return b.createdAt - a.createdAt;
+  });
+  return { markets };
+}
+
+function broadcastPredictions() {
+  io.emit('predictions_update', buildMarketsPayload());
+}
+
+// Settle a market: pay the winning side 1.8x, send the house its 10% rake,
+// refund unmatched offers, and (for CANCEL) refund both sides of matched bets.
+async function settlePredictionMarket(market, outcome) {
+  market.status = 'resolved';
+  market.outcome = outcome;
+  market.resolvedAt = Date.now();
+  persistence.savePredictionMarket(market.id, market).catch(()=>{});
+
+  const related = [];
+  for (const [, b] of predictionBets) if (b.marketId === market.id) related.push(b);
+
+  let paid = 0, refunded = 0, houseFees = 0;
+
+  for (const b of related) {
+    const cur = b.currency || 'SOL';
+    try {
+      if (b.status === 'open') {
+        // Unmatched offer — return the creator's stake regardless of outcome.
+        await refundUser({
+          walletAddress: b.creatorWallet, currency: cur, amount: b.betAmount,
+          reason: 'Prediction market resolved — unmatched offer refunded',
+          socketId: b.creatorSocketId,
+        });
+        refunded++;
+      } else if (b.status === 'matched') {
+        if (outcome === 'CANCEL') {
+          for (const side of [['creatorWallet', 'creatorSocketId'], ['acceptorWallet', 'acceptorSocketId']]) {
+            await refundUser({
+              walletAddress: b[side[0]], currency: cur, amount: b.betAmount,
+              reason: 'Prediction market cancelled — stake refunded', socketId: b[side[1]],
+            });
+          }
+          refunded += 2;
+        } else {
+          const creatorWon = b.side === outcome;
+          const winnerWallet = creatorWon ? b.creatorWallet : b.acceptorWallet;
+          const winnerSocketId = creatorWon ? b.creatorSocketId : b.acceptorSocketId;
+          const pot = b.betAmount * 2;
+          const houseCut = pot * HOUSE_FEE;
+          const payout = pot - houseCut;
+          allowPayee(winnerWallet);
+          try {
+            await sendCurrency(cur, winnerWallet, payout);
+            paid++;
+            const ws = winnerSocketId && io.sockets.sockets.get(winnerSocketId);
+            if (ws) ws.emit('balance_update', { refreshWallet: true, msg: 'You won ' + payout + ' ' + cur + ' on "' + market.question + '"!' });
+          } catch (e) {
+            console.error('Prediction payout failed, queuing:', e.message);
+            await enqueueRefund({ walletAddress: winnerWallet, currency: cur, amount: payout, reason: 'Prediction payout', retries: 0, lastError: e.message });
+          }
+          try {
+            await sendCurrency(cur, HOUSE_WALLET, houseCut);
+            houseFees += houseCut;
+          } catch (e) {
+            console.error('Prediction house fee failed, queuing:', e.message);
+            await enqueueRefund({ walletAddress: HOUSE_WALLET, currency: cur, amount: houseCut, reason: 'House fee (prediction)', retries: 0, lastError: e.message });
+          }
+          const ls = (creatorWon ? b.acceptorSocketId : b.creatorSocketId);
+          const lsock = ls && io.sockets.sockets.get(ls);
+          if (lsock) lsock.emit('balance_update', { refreshWallet: true, msg: 'Market "' + market.question + '" resolved ' + outcome + '. Better luck next time!' });
+        }
+      }
+    } catch (e) {
+      console.error('Prediction settlement error for bet', b.id, '-', e.message);
+    }
+    predictionBets.delete(b.id);
+    persistence.removePredictionBet(b.id).catch(()=>{});
+  }
+
+  console.log('[markets] resolved', market.id, outcome, '— paid:', paid, 'refunded:', refunded, 'houseFees:', houseFees);
+  broadcastPredictions();
+  return { outcome, paid, refunded, houseFees };
+}
+
 /**
  * Recover from previous run: anything left in the persistence store is, by
  * definition, orphaned — either a player was waiting for an opponent, or a
@@ -1474,6 +1784,25 @@ async function recoverFromPreviousRun() {
     if (restored) console.log('Restored', restored, 'open sports bet(s).');
     if (refunded) console.log('Refunded', refunded, 'matched sports bet(s) from previous run.');
   } catch (e) { console.error('Recovery (sports bets) error:', e.message); }
+
+  try {
+    const markets = await persistence.loadPredictionMarkets();
+    for (const m of markets) predictionMarkets.set(m.id, m);
+    const pbets = await persistence.loadPredictionBets();
+    let openRestored = 0, matchedRestored = 0;
+    for (const b of pbets) {
+      // Matched prediction bets are KEPT across restarts (unlike sports) — they
+      // settle later when the market is resolved, with funds safe in escrow.
+      b.creatorSocketId = null;
+      if (b.status === 'matched') { b.acceptorSocketId = null; matchedRestored++; }
+      else openRestored++;
+      allowPayee(b.creatorWallet);
+      if (b.acceptorWallet) allowPayee(b.acceptorWallet);
+      predictionBets.set(b.id, b);
+    }
+    if (markets.length) console.log('Restored', markets.length, 'prediction market(s).');
+    if (openRestored || matchedRestored) console.log('Restored prediction bets — open:', openRestored, 'matched:', matchedRestored);
+  } catch (e) { console.error('Recovery (prediction markets) error:', e.message); }
 
   try {
     const pendings = await persistence.listPendingRefunds(100);

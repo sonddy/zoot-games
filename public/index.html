@@ -1492,6 +1492,71 @@
     #screen-sports > .topbar, #screen-lobby > .topbar { z-index: 500; }
     .menu-dropdown-wrap { position: relative; z-index: 600; }
     .menu-dropdown { z-index: 9999 !important; }
+    /* ── Prediction Markets ── */
+    .predictions-main { max-width: 1060px; margin: 0 auto; padding: 2rem 1.5rem; width: 100%; }
+    .predictions-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+    .predictions-header h2 {
+      font-size: 1.3rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem;
+      text-transform: uppercase; letter-spacing: 1px; color: var(--text);
+    }
+    .predictions-header h2::before {
+      content: ''; display: inline-block; width: 4px; height: 24px;
+      background: linear-gradient(180deg, #7c4dff, #b388ff); border-radius: 2px;
+    }
+    .predictions-header .live-badge { color:#fff; font-size:0.65rem; font-weight:800; padding:0.2rem 0.6rem; border-radius:999px; letter-spacing:1px; }
+    .predictions-intro { color: var(--muted); font-size: 0.85rem; line-height: 1.5; margin: 0 0 1.25rem; max-width: 760px; }
+    .pred-filter-tabs { display: flex; gap: 0.4rem; margin-bottom: 1.25rem; flex-wrap: wrap; border-bottom: 1px solid var(--surface2); padding-bottom: 0.8rem; }
+    .pm-card {
+      background: var(--surface); border: 1px solid var(--surface2); border-radius: 14px;
+      padding: 1.1rem 1.2rem; margin-bottom: 1rem; transition: border-color 0.2s;
+    }
+    .pm-card:hover { border-color: rgba(124,77,255,0.4); }
+    .pm-card.resolved { opacity: 0.8; }
+    .pm-top { display: flex; align-items: flex-start; gap: 0.75rem; justify-content: space-between; }
+    .pm-question { font-size: 1.02rem; font-weight: 700; color: var(--text); line-height: 1.35; }
+    .pm-cat { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; color: #b388ff; background: rgba(124,77,255,0.12); padding: 0.18rem 0.5rem; border-radius: 999px; white-space: nowrap; }
+    .pm-desc { color: var(--muted); font-size: 0.82rem; line-height: 1.45; margin: 0.5rem 0 0.75rem; }
+    .pm-stats { display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.72rem; color: var(--muted); margin-bottom: 0.75rem; }
+    .pm-stats b { color: var(--text); }
+    .pm-status { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; padding: 0.18rem 0.5rem; border-radius: 999px; }
+    .pm-status.open { background: rgba(0,200,150,0.15); color: #00d4aa; }
+    .pm-status.closed { background: rgba(255,193,7,0.15); color: var(--gold); }
+    .pm-status.resolved { background: rgba(124,77,255,0.15); color: #b388ff; }
+    .pm-outcome { font-size: 0.72rem; font-weight: 800; }
+    .pm-outcome.YES { color: #00d4aa; }
+    .pm-outcome.NO { color: #ff3d57; }
+    .pm-outcome.CANCEL { color: var(--muted); }
+    .pm-betbar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.5rem 0 0.75rem; padding-top: 0.75rem; border-top: 1px dashed var(--surface2); }
+    .pm-amount-input { width: 110px; background: var(--bg); border: 1px solid var(--surface2); color: var(--text); border-radius: 8px; padding: 0.5rem 0.6rem; font-size: 0.85rem; }
+    .pm-currency { background: var(--bg); border: 1px solid var(--surface2); color: var(--text); border-radius: 8px; padding: 0.5rem; font-size: 0.8rem; }
+    .pm-currency.is-zoot { color: var(--gold); }
+    .pm-btn-yes, .pm-btn-no {
+      border: none; cursor: pointer; font-weight: 800; font-size: 0.8rem; padding: 0.5rem 0.9rem;
+      border-radius: 8px; color: #fff; transition: transform 0.1s, filter 0.15s;
+    }
+    .pm-btn-yes { background: linear-gradient(135deg, #00c896, #00a37a); }
+    .pm-btn-no { background: linear-gradient(135deg, #ff5470, #e0344f); }
+    .pm-btn-yes:hover, .pm-btn-no:hover { filter: brightness(1.08); }
+    .pm-btn-yes:disabled, .pm-btn-no:disabled { opacity: 0.6; cursor: default; }
+    .pm-offers { display: flex; flex-direction: column; gap: 0.5rem; }
+    .pm-offers-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin: 0.25rem 0; }
+    .pm-offer { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; background: var(--bg); border: 1px solid var(--surface2); border-radius: 10px; padding: 0.5rem 0.7rem; }
+    .pm-side { font-size: 0.68rem; font-weight: 800; padding: 0.16rem 0.5rem; border-radius: 999px; }
+    .pm-side.YES { background: rgba(0,200,150,0.15); color: #00d4aa; }
+    .pm-side.NO { background: rgba(255,61,87,0.15); color: #ff3d57; }
+    .pm-offer-amt { font-weight: 700; color: var(--text); font-size: 0.82rem; }
+    .pm-offer-by { font-size: 0.72rem; color: var(--muted); }
+    .pm-offer-act { margin-left: auto; display: flex; gap: 0.4rem; }
+    .pm-accept-btn { border: none; cursor: pointer; font-weight: 800; font-size: 0.75rem; padding: 0.4rem 0.8rem; border-radius: 8px; background: linear-gradient(135deg, #7c4dff, #5e35d6); color: #fff; }
+    .pm-accept-btn:hover { filter: brightness(1.1); }
+    .pm-cancel-btn { border: 1px solid var(--surface2); background: transparent; color: var(--muted); cursor: pointer; font-size: 0.72rem; padding: 0.4rem 0.7rem; border-radius: 8px; }
+    .pm-cancel-btn:hover { color: var(--red); border-color: var(--red); }
+    .pm-empty { text-align: center; color: var(--muted); padding: 2.5rem 1rem; font-size: 0.9rem; }
+    @media (max-width: 640px) {
+      .predictions-main { padding: 1rem 0.7rem; }
+      .pm-offer-act { margin-left: 0; width: 100%; }
+    }
+
     .sports-main { max-width: 1060px; margin: 0 auto; padding: 2rem 1.5rem; width: 100%; }
     .sports-header {
       display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;
@@ -2136,6 +2201,10 @@
               <span class="menu-item-icon">&#9917;</span> Sports Betting <span class="menu-item-badge" style="background:#ff6b35;">LIVE</span>
             </button>
             <div class="menu-dropdown-divider"></div>
+            <button class="menu-dropdown-item" data-menu="predictions">
+              <span class="menu-item-icon">&#128302;</span> Prediction Markets <span class="menu-item-badge" style="background:#7c4dff;">NEW</span>
+            </button>
+            <div class="menu-dropdown-divider"></div>
             <button class="menu-dropdown-item menu-item-download" data-menu="download">
               <span class="menu-item-icon">&#128241;</span> Get Android App
             </button>
@@ -2657,6 +2726,10 @@
               <span class="menu-item-icon">&#9917;</span> Sports Betting <span class="menu-item-badge" style="background:#ff6b35;">LIVE</span>
             </button>
             <div class="menu-dropdown-divider"></div>
+            <button class="menu-dropdown-item" data-menu="predictions">
+              <span class="menu-item-icon">&#128302;</span> Prediction Markets <span class="menu-item-badge" style="background:#7c4dff;">NEW</span>
+            </button>
+            <div class="menu-dropdown-divider"></div>
             <button class="menu-dropdown-item menu-item-download" data-menu="download">
               <span class="menu-item-icon">&#128241;</span> Get Android App
             </button>
@@ -2708,6 +2781,72 @@
           <div class="sports-empty">No open sports bets yet &mdash; pick an event above to create one!</div>
         </div>
       </section>
+    </main>
+  </div>
+
+  <!-- PREDICTION MARKETS SCREEN -->
+  <div id="screen-predictions" class="screen">
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="logo-sm"><span class="logo-sm-mark"><img src="/zootcoin.png" alt="ZG" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" /></span><span><span class="accent">Zoot</span> Games</span></span>
+      </div>
+      <div class="topbar-center"><span id="online-count-predictions" class="badge badge-live">0 online</span></div>
+      <div class="topbar-right">
+        <span id="topbar-balance-predictions" class="badge" style="color:var(--gold);font-weight:700;border-color:rgba(255,193,7,0.2);">0 SOL</span>
+        <span id="topbar-balance-zoot-predictions" class="topbar-balance-zoot"><img src="/zootcoin.png" alt="" onerror="this.style.display='none'" />0 $ZOOT</span>
+        <span id="wallet-display-predictions" class="wallet-badge"></span>
+        <div class="menu-dropdown-wrap">
+          <button class="menu-toggle">&#9776; <span class="menu-arrow">&#9660;</span></button>
+          <div class="menu-dropdown">
+            <button class="menu-dropdown-item" data-menu="games">
+              <span class="menu-item-icon">&#127918;</span> Games <span class="menu-item-badge">24</span>
+            </button>
+            <div class="menu-dropdown-divider"></div>
+            <button class="menu-dropdown-item" data-menu="sports">
+              <span class="menu-item-icon">&#9917;</span> Sports Betting <span class="menu-item-badge" style="background:#ff6b35;">LIVE</span>
+            </button>
+            <div class="menu-dropdown-divider"></div>
+            <button class="menu-dropdown-item active" data-menu="predictions">
+              <span class="menu-item-icon">&#128302;</span> Prediction Markets <span class="menu-item-badge" style="background:#7c4dff;">NEW</span>
+            </button>
+            <div class="menu-dropdown-divider"></div>
+            <button class="menu-dropdown-item menu-item-download" data-menu="download">
+              <span class="menu-item-icon">&#128241;</span> Get Android App
+            </button>
+            <div class="menu-dropdown-divider"></div>
+            <button class="menu-dropdown-item" data-menu="howItWorks">
+              <span class="menu-item-icon">&#9432;</span> How It Works
+            </button>
+            <div class="menu-dropdown-divider"></div>
+            <button class="menu-dropdown-item menu-item-disconnect" data-menu="disconnect">
+              <span class="menu-item-icon">&#128274;</span> Disconnect Wallet
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+    <main class="predictions-main">
+      <div class="predictions-header">
+        <h2>&#128302; Prediction Markets</h2>
+        <span class="live-badge" style="background:#7c4dff;">YES / NO</span>
+        <button class="btn-refresh-sports" id="btn-refresh-predictions" title="Refresh markets">
+          <span class="refresh-icon">&#8635;</span> Refresh
+        </button>
+      </div>
+      <p class="predictions-intro">Back your call on real-world events. Take the <b>YES</b> or <b>NO</b> side of an open offer — winner takes <b>1.8&times;</b> their stake when the market resolves. Markets are created &amp; resolved by Zoot.</p>
+
+      <div class="pred-filter-tabs" id="pred-filter-tabs">
+        <button class="sport-tab active" data-pfilter="open">Open</button>
+        <button class="sport-tab" data-pfilter="resolved">Resolved</button>
+        <button class="sport-tab" data-pfilter="all">All</button>
+      </div>
+
+      <div id="predictions-container">
+        <div class="events-loading">
+          <div class="spinner-sm"></div>
+          Loading markets...
+        </div>
+      </div>
     </main>
   </div>
 
@@ -6015,7 +6154,7 @@
       var zootDecimals = 9;
 
       function showScreen(name) {
-        var all = ['connect','lobby','waiting','game','sports'];
+        var all = ['connect','lobby','waiting','game','sports','predictions'];
         for (var i = 0; i < all.length; i++) document.getElementById('screen-' + all[i]).classList.remove('active');
         document.getElementById('screen-' + name).classList.add('active');
         var bearR = document.getElementById('bear-3d-right');
@@ -6023,6 +6162,7 @@
         if (bearR) bearR.style.display = (name === 'lobby') ? 'block' : 'none';
         if (bearL) bearL.style.display = (name === 'lobby') ? 'block' : 'none';
         if (name === 'sports') SportsBetting.loadEvents();
+        if (name === 'predictions') PredictionMarkets.loadMarkets();
       }
 
       function formatZoot(amt) {
@@ -6037,6 +6177,8 @@
         document.getElementById('topbar-balance').textContent = bal.toFixed(3) + ' SOL';
         var sportsBalance = document.getElementById('topbar-balance-sports');
         if (sportsBalance) sportsBalance.textContent = bal.toFixed(3) + ' SOL';
+        var predBalance = document.getElementById('topbar-balance-predictions');
+        if (predBalance) predBalance.textContent = bal.toFixed(3) + ' SOL';
       }
 
       function updateZootBalanceUI(bal) {
@@ -6047,6 +6189,8 @@
         if (topZ) topZ.innerHTML = '<img src="/zootcoin.png" alt="" onerror="this.style.display=\'none\'" />' + formatZoot(bal) + ' $ZOOT';
         var topZS = document.getElementById('topbar-balance-zoot-sports');
         if (topZS) topZS.innerHTML = '<img src="/zootcoin.png" alt="" onerror="this.style.display=\'none\'" />' + formatZoot(bal) + ' $ZOOT';
+        var topZP = document.getElementById('topbar-balance-zoot-predictions');
+        if (topZP) topZP.innerHTML = '<img src="/zootcoin.png" alt="" onerror="this.style.display=\'none\'" />' + formatZoot(bal) + ' $ZOOT';
       }
 
       async function disconnectWallet() {
@@ -6063,15 +6207,15 @@
           currentBalance = 0;
           currentZootBalance = 0;
           escrowAddress = null;
-          ['topbar-balance', 'topbar-balance-sports'].forEach(function(id) {
+          ['topbar-balance', 'topbar-balance-sports', 'topbar-balance-predictions'].forEach(function(id) {
             var el = document.getElementById(id);
             if (el) el.textContent = '0 SOL';
           });
-          ['topbar-balance-zoot', 'topbar-balance-zoot-sports'].forEach(function(id) {
+          ['topbar-balance-zoot', 'topbar-balance-zoot-sports', 'topbar-balance-zoot-predictions'].forEach(function(id) {
             var el = document.getElementById(id);
             if (el) el.innerHTML = '<img src="/zootcoin.png" alt="" onerror="this.style.display=\'none\'" />0 $ZOOT';
           });
-          ['wallet-display', 'wallet-display-sports'].forEach(function(id) {
+          ['wallet-display', 'wallet-display-sports', 'wallet-display-predictions'].forEach(function(id) {
             var el = document.getElementById(id);
             if (el) el.textContent = '';
           });
@@ -6150,6 +6294,7 @@
         setupGameOverlay();
         setupMenuDropdowns();
         SportsBetting.init();
+        PredictionMarkets.init();
         if (PhantomWallet.isNativeMobile()) tryAutoReconnect();
       }
 
@@ -6182,6 +6327,8 @@
           document.getElementById('wallet-display').textContent = PhantomWallet.shortenAddress(data.walletAddress);
           var wdSports = document.getElementById('wallet-display-sports');
           if (wdSports) wdSports.textContent = PhantomWallet.shortenAddress(data.walletAddress);
+          var wdPred = document.getElementById('wallet-display-predictions');
+          if (wdPred) wdPred.textContent = PhantomWallet.shortenAddress(data.walletAddress);
           showScreen('lobby');
           refreshBalance();
         });
@@ -6428,6 +6575,8 @@
         document.getElementById('online-count').textContent = data.onlineCount + ' online';
         var onlineSports = document.getElementById('online-count-sports');
         if (onlineSports) onlineSports.textContent = data.onlineCount + ' online';
+        var onlinePred = document.getElementById('online-count-predictions');
+        if (onlinePred) onlinePred.textContent = data.onlineCount + ' online';
         var connOnline = document.getElementById('connect-online');
         if (connOnline) connOnline.textContent = data.onlineCount;
 
@@ -6756,6 +6905,7 @@
             }
             if (target === 'games') showScreen('lobby');
             else if (target === 'sports') showScreen('sports');
+            else if (target === 'predictions') showScreen('predictions');
             else if (target === 'howItWorks') document.getElementById('hiw-overlay').classList.add('open');
             else if (target === 'download') DownloadApp.openModal();
             else if (target === 'disconnect') disconnectWallet();
@@ -7146,6 +7296,271 @@
 
   </script>
   <script>
+    // ════════════════════════════════════════
+    // PREDICTION MARKETS MODULE
+    // ════════════════════════════════════════
+    var PredictionMarkets = (function() {
+      var markets = [];
+      var filter = 'open';
+      var loaded = false;
+
+      function init() {
+        setupFilterTabs();
+        setupContainerDelegation();
+        setupRefresh();
+        setupSocketListeners();
+      }
+
+      function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+      function curLabel(c) { return c === 'ZOOT' ? '$ZOOT' : 'SOL'; }
+
+      function setupFilterTabs() {
+        var tabs = document.querySelectorAll('#pred-filter-tabs .sport-tab');
+        for (var i = 0; i < tabs.length; i++) {
+          tabs[i].addEventListener('click', function() {
+            for (var j = 0; j < tabs.length; j++) tabs[j].classList.remove('active');
+            this.classList.add('active');
+            filter = this.dataset.pfilter;
+            render();
+          });
+        }
+      }
+
+      function setupRefresh() {
+        var btn = document.getElementById('btn-refresh-predictions');
+        if (btn) btn.addEventListener('click', loadMarkets);
+      }
+
+      async function loadMarkets() {
+        var container = document.getElementById('predictions-container');
+        if (!loaded && container) container.innerHTML = '<div class="events-loading"><div class="spinner-sm"></div>Loading markets...</div>';
+        try {
+          var resp = await fetch('/api/markets', { cache: 'no-cache' });
+          if (resp.ok) {
+            var data = await resp.json();
+            markets = data.markets || [];
+            loaded = true;
+            render();
+          }
+        } catch (e) {}
+        var sock = App.getSocket();
+        if (sock) sock.emit('get_predictions');
+      }
+
+      function render() {
+        var container = document.getElementById('predictions-container');
+        if (!container) return;
+        var list = markets.filter(function(m) {
+          if (filter === 'open') return m.status !== 'resolved';
+          if (filter === 'resolved') return m.status === 'resolved';
+          return true;
+        });
+        if (!list.length) {
+          container.innerHTML = '<div class="pm-empty">No ' + (filter === 'resolved' ? 'resolved' : 'open') + ' markets right now. Check back soon!</div>';
+          return;
+        }
+        var sock = App.getSocket();
+        var myId = sock ? sock.id : null;
+        var html = '';
+        for (var i = 0; i < list.length; i++) html += renderCard(list[i], myId);
+        container.innerHTML = html;
+      }
+
+      function renderCard(m, myId) {
+        var resolved = m.status === 'resolved';
+        var st = m.stats || { openCount: 0, matchedCount: 0 };
+        var html = '<div class="pm-card' + (resolved ? ' resolved' : '') + '">';
+        html += '<div class="pm-top"><div class="pm-question">' + esc(m.question) + '</div><span class="pm-cat">' + esc(m.category || 'General') + '</span></div>';
+        if (m.description) html += '<div class="pm-desc">' + esc(m.description) + '</div>';
+
+        html += '<div class="pm-stats">';
+        html += '<span class="pm-status ' + m.status + '">' + m.status + '</span>';
+        if (resolved) html += '<span class="pm-outcome ' + (m.outcome || '') + '">Resolved: ' + (m.outcome || '') + '</span>';
+        html += '<span>Open offers: <b>' + st.openCount + '</b></span>';
+        html += '<span>Matched: <b>' + st.matchedCount + '</b></span>';
+        if (m.closesAt) html += '<span>Closes: <b>' + new Date(m.closesAt).toLocaleString() + '</b></span>';
+        html += '</div>';
+
+        if (!resolved && m.status === 'open') {
+          html += '<div class="pm-betbar">';
+          html += '<input type="number" min="0" step="0.01" class="pm-amount-input" placeholder="Amount" />';
+          html += '<select class="pm-currency"><option value="SOL">SOL</option><option value="ZOOT">$ZOOT</option></select>';
+          html += '<button class="pm-btn-yes" data-pm-create="YES" data-market="' + m.id + '">Bet YES</button>';
+          html += '<button class="pm-btn-no" data-pm-create="NO" data-market="' + m.id + '">Bet NO</button>';
+          html += '</div>';
+        }
+
+        if (m.openOffers && m.openOffers.length) {
+          html += '<div class="pm-offers-title">Open offers \u2014 take the opposite side</div>';
+          html += '<div class="pm-offers">';
+          for (var k = 0; k < m.openOffers.length; k++) {
+            var o = m.openOffers[k];
+            var isOwn = o.creatorSocketId === myId;
+            var oppo = o.side === 'YES' ? 'NO' : 'YES';
+            html += '<div class="pm-offer">';
+            html += '<span class="pm-side ' + o.side + '">' + o.side + '</span>';
+            html += '<span class="pm-offer-amt">' + o.betAmount + ' ' + curLabel(o.currency) + '</span>';
+            html += '<span class="pm-offer-by">by ' + esc(o.creatorName || 'anon') + '</span>';
+            html += '<span class="pm-offer-act">';
+            if (isOwn) {
+              html += '<button class="pm-cancel-btn" data-pm-cancel="' + o.id + '">Cancel</button>';
+            } else if (!resolved && m.status === 'open') {
+              html += '<button class="pm-accept-btn" data-pm-accept="' + o.id + '" data-amount="' + o.betAmount + '" data-currency="' + o.currency + '">Take ' + oppo + '</button>';
+            }
+            html += '</span></div>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+        return html;
+      }
+
+      function setupContainerDelegation() {
+        var container = document.getElementById('predictions-container');
+        if (!container) return;
+        container.addEventListener('click', function(e) {
+          var c = e.target.closest('[data-pm-create]');
+          if (c) { handleCreate(c); return; }
+          var a = e.target.closest('[data-pm-accept]');
+          if (a) { handleAccept(a); return; }
+          var x = e.target.closest('[data-pm-cancel]');
+          if (x) { handleCancel(x); return; }
+        });
+      }
+
+      async function handleCreate(btn) {
+        var card = btn.closest('.pm-card');
+        var amountInput = card.querySelector('.pm-amount-input');
+        var currencySel = card.querySelector('.pm-currency');
+        var currency = currencySel ? currencySel.value : 'SOL';
+        var amount = parseFloat(amountInput.value);
+        var side = btn.dataset.pmCreate;
+        var marketId = btn.dataset.market;
+        if (isNaN(amount) || amount <= 0) { App.showToast('Enter a valid amount', 'error'); return; }
+        var sock = App.getSocket();
+        if (!App.getEscrow() || !sock) { App.showToast('Server not ready, try again', 'error'); return; }
+        var walletAddr = (typeof PhantomWallet !== 'undefined') ? PhantomWallet.getPublicKey() : null;
+        if (!walletAddr) { App.showToast('Connect your wallet first!', 'error'); return; }
+        var bal = currency === 'ZOOT' ? App.getZootBalance() : App.getBalance();
+        if (amount > bal) { App.showToast('Not enough ' + curLabel(currency) + ' in your wallet!', 'error'); return; }
+
+        var orig = btn.textContent; btn.disabled = true;
+        var payload = { marketId: marketId, side: side, betAmount: amount, currency: currency };
+        if (App.isTest()) {
+          payload.txSignature = 'test_pred_' + Date.now();
+          sock.emit('create_prediction_bet', payload);
+          btn.textContent = '\u2713'; setTimeout(function() { btn.textContent = orig; btn.disabled = false; }, 2000);
+          return;
+        }
+        btn.textContent = 'Confirm...';
+        try {
+          var sig = await buildAndSendPayment(currency, amount, btn);
+          payload.txSignature = sig;
+          sock.emit('create_prediction_bet', payload);
+          btn.textContent = '\u2713 Placed'; App.refreshBalance();
+          setTimeout(function() { btn.textContent = orig; btn.disabled = false; }, 2500);
+        } catch (err) {
+          var msg = err.message || 'Transaction cancelled';
+          if (msg.indexOf('User rejected') >= 0 || msg.indexOf('cancelled') >= 0) msg = 'You cancelled the transaction';
+          App.showToast(msg, 'error'); btn.disabled = false; btn.textContent = orig;
+        }
+      }
+
+      async function handleAccept(btn) {
+        var betId = btn.dataset.pmAccept;
+        var amount = parseFloat(btn.dataset.amount);
+        var currency = btn.dataset.currency || 'SOL';
+        var sock = App.getSocket();
+        if (!App.getEscrow() || !sock) { App.showToast('Server not ready, try again', 'error'); return; }
+        var walletAddr = (typeof PhantomWallet !== 'undefined') ? PhantomWallet.getPublicKey() : null;
+        if (!walletAddr) { App.showToast('Connect your wallet first!', 'error'); return; }
+        var bal = currency === 'ZOOT' ? App.getZootBalance() : App.getBalance();
+        if (amount > bal) { App.showToast('Not enough ' + curLabel(currency) + ' in your wallet!', 'error'); return; }
+        var orig = btn.textContent; btn.disabled = true; btn.textContent = 'Joining...';
+        var onErr = function(d) { btn.disabled = false; btn.textContent = orig; App.showToast(d.msg, 'error'); };
+        sock.once('error_msg', onErr);
+        sock.once('prediction_bet_accepted', function() { sock.off('error_msg', onErr); });
+        if (App.isTest()) { sock.emit('accept_prediction_bet', { betId: betId, txSignature: 'test_acc_pred_' + Date.now() }); btn.textContent = '\u2713'; return; }
+        try {
+          var sig = await buildAndSendPayment(currency, amount, btn);
+          sock.emit('accept_prediction_bet', { betId: betId, txSignature: sig });
+          btn.textContent = '\u2713 Matched'; App.refreshBalance();
+        } catch (err) {
+          sock.off('error_msg', onErr);
+          var msg = err.message || 'Transaction failed';
+          if (msg.indexOf('User rejected') >= 0 || msg.indexOf('cancelled') >= 0) msg = 'You cancelled the transaction';
+          btn.disabled = false; btn.textContent = orig; App.showToast(msg, 'error');
+        }
+      }
+
+      function handleCancel(btn) {
+        var betId = btn.dataset.pmCancel;
+        var sock = App.getSocket();
+        if (!sock) return;
+        sock.emit('cancel_prediction_bet', { betId: betId });
+        btn.disabled = true; btn.textContent = 'Cancelling...';
+      }
+
+      function setupSocketListeners() {
+        var check = setInterval(function() {
+          var sock = App.getSocket();
+          if (!sock) return;
+          clearInterval(check);
+          sock.on('predictions_update', function(data) {
+            markets = (data && data.markets) || [];
+            loaded = true;
+            var scr = document.getElementById('screen-predictions');
+            if (scr && scr.classList.contains('active')) render();
+          });
+          sock.on('prediction_bet_created', function(d) {
+            var cur = curLabel(d.currency);
+            App.showToast('Your ' + d.side + ' offer of ' + d.betAmount + ' ' + cur + ' is live. Waiting for someone to take the other side...', 'info');
+          });
+          sock.on('prediction_bet_accepted', function(d) {
+            var cur = curLabel(d.currency); var p = d.payout ? d.payout.toFixed(3) : '?';
+            App.showToast('Matched! You are on ' + d.side + '. Winner gets ' + p + ' ' + cur + '.', 'info');
+            App.refreshBalance();
+          });
+          sock.on('prediction_bet_matched', function(d) {
+            var cur = curLabel(d.currency); var p = d.payout ? d.payout.toFixed(3) : '?';
+            App.showToast(d.acceptorName + ' took the other side of your offer! Winner gets ' + p + ' ' + cur + '.', 'info');
+          });
+        }, 500);
+      }
+
+      async function buildAndSendPayment(currency, uiAmount, btn) {
+        var escrowAddr = App.getEscrow();
+        var web3 = window.solanaWeb3;
+        if (!web3) throw new Error('Solana library not loaded \u2014 refresh page');
+        var walletPk = PhantomWallet.getPublicKey();
+        if (!walletPk) throw new Error('Wallet not connected \u2014 reconnect Phantom');
+        var fromPubkey = new web3.PublicKey(walletPk);
+        var connection = new web3.Connection(PhantomWallet.getRpcUrl(), 'confirmed');
+
+        var transaction;
+        if (currency === 'ZOOT') {
+          if (!App.getZootMint()) throw new Error('$ZOOT not initialized \u2014 please refresh');
+          transaction = await SplToken.buildTransferTransaction(connection, fromPubkey, escrowAddr, uiAmount);
+        } else {
+          var toPubkey = new web3.PublicKey(escrowAddr);
+          var lamports = Math.floor(uiAmount * web3.LAMPORTS_PER_SOL);
+          transaction = new web3.Transaction().add(
+            web3.SystemProgram.transfer({ fromPubkey: fromPubkey, toPubkey: toPubkey, lamports: lamports })
+          );
+        }
+        transaction.feePayer = fromPubkey;
+        if (btn) btn.textContent = PhantomWallet.isNativeMobile() ? 'Opening Phantom...' : 'Sign in Phantom...';
+
+        var signature = await PhantomWallet.signAndSend(transaction, connection, fromPubkey);
+
+        if (btn) btn.textContent = 'Confirming tx...';
+        await pollConfirmTransaction(connection, signature, 90000);
+        return signature;
+      }
+
+      return { init: init, loadMarkets: loadMarkets };
+    })();
+
     // ════════════════════════════════════════
     // SPORTS BETTING MODULE
     // ════════════════════════════════════════

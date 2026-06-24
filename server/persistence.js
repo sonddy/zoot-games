@@ -152,6 +152,42 @@ async function incrementRefundRetry(id, lastError) {
   }), 'incrementRefundRetry');
 }
 
+// ── prediction_markets ─────────────────────────────────────────────────────
+async function savePredictionMarket(id, market) {
+  if (!enabled) return;
+  await safe(colRef('prediction_markets').doc(id).set({ ...market, _updated: Date.now() }), 'savePredictionMarket');
+}
+async function removePredictionMarket(id) {
+  if (!enabled) return;
+  await safe(colRef('prediction_markets').doc(id).delete(), 'removePredictionMarket');
+}
+async function loadPredictionMarkets() {
+  if (!enabled) return [];
+  const snap = await safe(colRef('prediction_markets').get(), 'loadPredictionMarkets');
+  if (!snap) return [];
+  const out = [];
+  snap.forEach(d => out.push({ id: d.id, ...d.data() }));
+  return out;
+}
+
+// ── prediction_bets ────────────────────────────────────────────────────────
+async function savePredictionBet(id, bet) {
+  if (!enabled) return;
+  await safe(colRef('prediction_bets').doc(id).set({ ...bet, _updated: Date.now() }), 'savePredictionBet');
+}
+async function removePredictionBet(id) {
+  if (!enabled) return;
+  await safe(colRef('prediction_bets').doc(id).delete(), 'removePredictionBet');
+}
+async function loadPredictionBets() {
+  if (!enabled) return [];
+  const snap = await safe(colRef('prediction_bets').get(), 'loadPredictionBets');
+  if (!snap) return [];
+  const out = [];
+  snap.forEach(d => out.push({ id: d.id, ...d.data() }));
+  return out;
+}
+
 // ── used_signatures (replay protection that survives restarts) ──────────────
 // Atomically claim a deposit signature. Returns:
 //   true  → newly claimed (caller may proceed)
@@ -177,4 +213,6 @@ module.exports = {
   saveActiveRoom, removeActiveRoom, loadActiveRooms,
   addPendingRefund, listPendingRefunds, removePendingRefund, incrementRefundRetry,
   tryConsumeSignature,
+  savePredictionMarket, removePredictionMarket, loadPredictionMarkets,
+  savePredictionBet, removePredictionBet, loadPredictionBets,
 };
