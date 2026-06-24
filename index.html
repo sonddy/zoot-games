@@ -1543,6 +1543,14 @@
     .pm-cat { font-size: 0.6rem; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; color: #b388ff; background: rgba(124,77,255,0.14); padding: 0.2rem 0.5rem; border-radius: 6px; }
     .pm-cat[data-cat="Crypto"] { color:#ffce6b; background: rgba(255,193,7,0.14); }
     .pm-cat[data-cat="Sports"] { color:#74d2ff; background: rgba(0,160,255,0.14); }
+    .pm-cat[data-cat="Weather"] { color:#9fd3ff; background: rgba(80,160,255,0.14); }
+    .pm-cat[data-cat="Markets"] { color:#ff9e7a; background: rgba(255,120,80,0.14); }
+    .pm-cat[data-cat="Politics"] { color:#ff9bce; background: rgba(255,80,160,0.14); }
+    .pm-cat[data-cat="World"] { color:#8fe3c2; background: rgba(0,200,150,0.12); }
+    .pm-cat[data-cat="Tech"] { color:#bda7ff; background: rgba(124,77,255,0.16); }
+    .pm-cat[data-cat="Business"] { color:#ffd27f; background: rgba(255,193,7,0.12); }
+    .pm-cat[data-cat="Entertainment"] { color:#ff9bce; background: rgba(255,80,160,0.12); }
+    .pm-cat[data-cat="News"] { color:#ffd27f; background: rgba(255,180,60,0.14); }
     .pm-auto { display:inline-flex; align-items:center; gap:0.28rem; font-size:0.58rem; font-weight:800; letter-spacing:0.5px; color:#7fe7d0; background:rgba(0,212,170,0.12); padding:0.2rem 0.45rem; border-radius:6px; }
     .pm-status { font-size: 0.58rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; padding: 0.2rem 0.45rem; border-radius: 6px; margin-left: auto; }
     .pm-status.open { background: rgba(0,200,150,0.15); color: #00d4aa; }
@@ -2891,6 +2899,9 @@
         <button class="sport-tab active" data-pcat="all">All</button>
         <button class="sport-tab" data-pcat="Crypto">&#129689; Crypto</button>
         <button class="sport-tab" data-pcat="Sports">&#9917; Sports</button>
+        <button class="sport-tab" data-pcat="Weather">&#127780; Weather</button>
+        <button class="sport-tab" data-pcat="Markets">&#128200; Markets</button>
+        <button class="sport-tab" data-pcat="News">&#128240; News &amp; Politics</button>
       </div>
 
       <div id="predictions-container" class="pm-grid">
@@ -7432,9 +7443,11 @@
       function render() {
         var container = document.getElementById('predictions-container');
         if (!container) return;
+        var feedCats = ['Crypto', 'Sports', 'Weather', 'Markets'];
         var list = markets.filter(function(m) {
           var statusOk = filter === 'all' ? true : (filter === 'resolved' ? m.status === 'resolved' : m.status !== 'resolved');
-          var catOk = catFilter === 'all' ? true : (m.category === catFilter);
+          var catOk = catFilter === 'all' ? true
+            : (catFilter === 'News' ? feedCats.indexOf(m.category) < 0 : m.category === catFilter);
           return statusOk && catOk;
         });
         if (!list.length) {

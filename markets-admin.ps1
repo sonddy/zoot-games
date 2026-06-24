@@ -19,6 +19,9 @@ param(
   [string]$Description,
   [string]$Category = 'General',
   [string]$ClosesAt,
+  [ValidateSet('manual', 'llm')]
+  [string]$Resolver = 'manual',
+  [string]$ResolveAt,
   [ValidateSet('YES', 'NO', 'CANCEL')]
   [string]$Outcome,
 
@@ -60,7 +63,14 @@ switch ($Action) {
       $ms = [DateTimeOffset]::Parse($ClosesAt).ToUnixTimeMilliseconds()
       $body.closesAt = $ms
     }
-    $resp = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/markets" -ContentType 'application/json' -Body ($body | ConvertTo-Json)
+    if ($Resolver -eq 'llm') {
+      if (-not $ResolveAt) { throw 'For -Resolver llm, provide -ResolveAt "YYYY-MM-DDTHH:MM" (when the agent should settle it from the web)' }
+      $rms = [DateTimeOffset]::Parse($ResolveAt).ToUnixTimeMilliseconds()
+      $body.auto = @{ provider = 'llm'; resolveAt = $rms; criteria = $Description }
+      if (-not $ClosesAt) { $body.closesAt = $rms }
+      Write-Host "(LLM-resolved market — the agent will settle it from web sources after $ResolveAt)" -ForegroundColor DarkCyan
+    }
+    $resp = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/markets" -ContentType 'application/json' -Body ($body | ConvertTo-Json -Depth 6)
     Write-Host "Created market:" -ForegroundColor Green
     Write-Host ("  id: {0}" -f $resp.market.id)
     Write-Host ("  {0}" -f $resp.market.question)

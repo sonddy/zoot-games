@@ -58,36 +58,66 @@ function roundPrice(n) {
   return Math.round(n * 10000) / 10000;
 }
 
-// ── Crypto provider (CoinGecko, free, no key) ───────────────────────────────
+// ── Crypto provider (multi-source, free, no key) ────────────────────────────
+// CoinGecko's free API frequently rate-limits datacenter IPs (Render), so we
+// fetch from Coinbase first (US-datacenter friendly), then Kraken, then
+// CoinGecko as a last resort.
 const CRYPTO_COINS = [
-  { id: 'bitcoin', sym: 'BTC' },
-  { id: 'ethereum', sym: 'ETH' },
-  { id: 'solana', sym: 'SOL' },
+  { sym: 'BTC' },
+  { sym: 'ETH' },
+  { sym: 'SOL' },
 ];
 const CRYPTO_HORIZON_MS = Number(process.env.MARKET_AGENT_CRYPTO_HORIZON_MS) || 3 * 60 * 60 * 1000;
+
+async function getCryptoUsd(sym) {
+  // 1) Coinbase spot
+  try {
+    const d = await fetchJson('https://api.coinbase.com/v2/prices/' + sym + '-USD/spot');
+    const p = d && d.data && parseFloat(d.data.amount);
+    if (p) return p;
+  } catch (e) { /* fall through */ }
+  // 2) Kraken
+  try {
+    const pairMap = { BTC: 'XBTUSD', ETH: 'ETHUSD', SOL: 'SOLUSD' };
+    const d = await fetchJson('https://api.kraken.com/0/public/Ticker?pair=' + pairMap[sym]);
+    const res = d && d.result;
+    if (res) {
+      const k = Object.keys(res)[0];
+      const p = res[k] && res[k].c && parseFloat(res[k].c[0]);
+      if (p) return p;
+    }
+  } catch (e) { /* fall through */ }
+  // 3) CoinGecko
+  try {
+    const idMap = { BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana' };
+    const id = idMap[sym];
+    const d = await fetchJson('https://api.coingecko.com/api/v3/simple/price?ids=' + id + '&vs_currencies=usd');
+    const p = d[id] && d[id].usd;
+    if (p) return p;
+  } catch (e) { /* fall through */ }
+  return null;
+}
 
 const cryptoProvider = {
   id: 'crypto',
   enabled: process.env.MARKET_AGENT_CRYPTO !== '0',
   async generate(openAuto) {
-    const have = new Set(openAuto.filter((m) => m.auto.provider === 'crypto').map((m) => m.auto.coinId));
-    const need = CRYPTO_COINS.filter((c) => !have.has(c.id));
+    const have = new Set(openAuto.filter((m) => m.auto.provider === 'crypto').map((m) => m.auto.sym));
+    const need = CRYPTO_COINS.filter((c) => !have.has(c.sym));
     if (!need.length) return [];
-    const ids = need.map((c) => c.id).join(',');
-    const data = await fetchJson('https://api.coingecko.com/api/v3/simple/price?ids=' + ids + '&vs_currencies=usd');
     const out = [];
     const resolveAt = Date.now() + CRYPTO_HORIZON_MS;
     for (const c of need) {
-      const price = data[c.id] && data[c.id].usd;
+      const price = await getCryptoUsd(c.sym);
       if (!price) continue;
       const target = roundPrice(price);
       const tStr = '$' + target.toLocaleString('en-US');
       out.push({
         question: 'Will ' + c.sym + ' be above ' + tStr + ' at ' + fmtUTC(resolveAt) + '?',
-        description: c.sym + ' is $' + price.toLocaleString('en-US') + ' right now. Resolves YES if the CoinGecko ' +
+        description: c.sym + ' is $' + price.toLocaleString('en-US') + ' right now. Resolves YES if the ' +
           c.sym + '/USD price is strictly above ' + tStr + ' at the listed time, otherwise NO.',
         category: 'Crypto',
-        auto: { provider: 'crypto', coinId: c.id, sym: c.sym, target, resolveAt },
+        auto: { provider: 'crypto', sym: c.sym, target, resolveAt },
       });
     }
     return out;
@@ -95,10 +125,108 @@ const cryptoProvider = {
   async resolve(market) {
     const a = market.auto;
     if (Date.now() < a.resolveAt) return null;
-    const data = await fetchJson('https://api.coingecko.com/api/v3/simple/price?ids=' + a.coinId + '&vs_currencies=usd');
-    const price = data[a.coinId] && data[a.coinId].usd;
+    const price = await getCryptoUsd(a.sym);
     if (!price) return null;
     return price > a.target ? 'YES' : 'NO';
+  },
+};
+
+// ── Weather provider (Open-Meteo, free, no key) ─────────────────────────────
+const WEATHER_CITIES = [
+  { name: 'New York', lat: 40.71, lon: -74.01 },
+  { name: 'London', lat: 51.51, lon: -0.13 },
+  { name: 'Tokyo', lat: 35.68, lon: 139.69 },
+  { name: 'Paris', lat: 48.85, lon: 2.35 },
+  { name: 'Dubai', lat: 25.2, lon: 55.27 },
+  { name: 'Sydney', lat: -33.87, lon: 151.21 },
+];
+const WEATHER_MAX_OPEN = Number(process.env.MARKET_AGENT_WEATHER_MAX) || 3;
+
+const weatherProvider = {
+  id: 'weather',
+  enabled: process.env.MARKET_AGENT_WEATHER !== '0',
+  async generate(openAuto) {
+    const openW = openAuto.filter((m) => m.auto.provider === 'weather');
+    if (openW.length >= WEATHER_MAX_OPEN) return [];
+    const haveCities = new Set(openW.map((m) => m.auto.name));
+    const out = [];
+    for (const city of WEATHER_CITIES) {
+      if (openW.length + out.length >= WEATHER_MAX_OPEN) break;
+      if (haveCities.has(city.name)) continue;
+      let data;
+      try {
+        data = await fetchJson('https://api.open-meteo.com/v1/forecast?latitude=' + city.lat + '&longitude=' + city.lon +
+          '&daily=temperature_2m_max&timezone=UTC&forecast_days=2');
+      } catch (e) { continue; }
+      const days = data && data.daily;
+      if (!days || !days.time || days.time.length < 2) continue;
+      const date = days.time[1];
+      const forecastMax = days.temperature_2m_max[1];
+      if (forecastMax == null) continue;
+      const threshold = Math.round(forecastMax);
+      const dayStart = new Date(date + 'T00:00:00Z').getTime();
+      const resolveAt = dayStart + 28 * 60 * 60 * 1000; // ~04:00 UTC the following day
+      out.push({
+        question: 'Will ' + city.name + "'s high beat " + threshold + '\u00B0C on ' + date + '?',
+        description: 'Forecast high for ' + city.name + ' on ' + date + ' (UTC) is ~' + Math.round(forecastMax) +
+          '\u00B0C. Resolves YES if the actual daily high is strictly above ' + threshold + '\u00B0C.',
+        category: 'Weather',
+        closesAt: dayStart,
+        auto: { provider: 'weather', name: city.name, lat: city.lat, lon: city.lon, date, threshold, resolveAt },
+      });
+    }
+    return out;
+  },
+  async resolve(market) {
+    const a = market.auto;
+    if (Date.now() < a.resolveAt) return null;
+    let data;
+    try {
+      data = await fetchJson('https://api.open-meteo.com/v1/forecast?latitude=' + a.lat + '&longitude=' + a.lon +
+        '&daily=temperature_2m_max&timezone=UTC&past_days=3&forecast_days=1');
+    } catch (e) { return null; }
+    const days = data && data.daily;
+    if (!days || !days.time) return null;
+    const idx = days.time.indexOf(a.date);
+    if (idx < 0) return null;
+    const actual = days.temperature_2m_max[idx];
+    if (actual == null) return null;
+    return actual > a.threshold ? 'YES' : 'NO';
+  },
+};
+
+// ── Markets provider — Crypto Fear & Greed (alternative.me, free) ────────────
+const fngProvider = {
+  id: 'fng',
+  enabled: process.env.MARKET_AGENT_FNG !== '0',
+  async generate(openAuto) {
+    const open = openAuto.filter((m) => m.auto.provider === 'fng');
+    if (open.length >= 1) return [];
+    let data;
+    try { data = await fetchJson('https://api.alternative.me/fng/?limit=1'); } catch (e) { return []; }
+    const cur = data && data.data && data.data[0];
+    const val = cur && parseInt(cur.value, 10);
+    if (!val && val !== 0) return [];
+    // resolve just after the index refreshes (daily ~00:00 UTC)
+    const now = new Date();
+    const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 1, 0, 0));
+    return [{
+      question: 'Will the Crypto Fear & Greed Index show Greed (\u2265 55) tomorrow?',
+      description: 'The index is ' + val + ' (' + (cur.value_classification || '') + ') right now. Resolves YES if the ' +
+        'next daily reading is 55 or higher, otherwise NO.',
+      category: 'Markets',
+      auto: { provider: 'fng', threshold: 55, resolveAt: next.getTime() },
+    }];
+  },
+  async resolve(market) {
+    const a = market.auto;
+    if (Date.now() < a.resolveAt) return null;
+    let data;
+    try { data = await fetchJson('https://api.alternative.me/fng/?limit=1'); } catch (e) { return null; }
+    const cur = data && data.data && data.data[0];
+    const val = cur && parseInt(cur.value, 10);
+    if (!val && val !== 0) return null;
+    return val >= a.threshold ? 'YES' : 'NO';
   },
 };
 
@@ -200,7 +328,137 @@ const sportsProvider = {
   },
 };
 
-const PROVIDERS = [cryptoProvider, sportsProvider].filter((p) => p.enabled);
+// ── LLM provider (web-search resolver for free-form markets) ────────────────
+// Creates and resolves arbitrary news/politics/world/tech/business markets by
+// asking a web-search LLM. Uses Perplexity (built for online search) if a key
+// is present, otherwise OpenAI. Stays OFF entirely until a key is configured.
+//
+//   PERPLEXITY_API_KEY   preferred (model defaults to "sonar")
+//   OPENAI_API_KEY       fallback (model defaults to "gpt-4o-search-preview")
+//   LLM_MODEL            override the model name
+//   LLM_AGENT=0          disable the whole LLM provider
+//   LLM_AGENT_GENERATE=0 keep auto-resolution but stop auto-creating markets
+//   LLM_MAX_OPEN         max concurrent open LLM markets (default 4)
+//   LLM_CONFIDENCE       min confidence to auto-settle (default 0.75)
+const LLM_PERPLEXITY_KEY = process.env.PERPLEXITY_API_KEY;
+const LLM_OPENAI_KEY = process.env.OPENAI_API_KEY;
+const LLM_ENABLED = process.env.LLM_AGENT !== '0' && !!(LLM_PERPLEXITY_KEY || LLM_OPENAI_KEY);
+const LLM_GENERATE = process.env.LLM_AGENT_GENERATE !== '0';
+const LLM_MAX_OPEN = Number(process.env.LLM_MAX_OPEN) || 4;
+const LLM_CONFIDENCE = Number(process.env.LLM_CONFIDENCE) || 0.75;
+const LLM_RECHECK_MS = 30 * 60 * 1000;
+
+async function llmChat(messages, timeoutMs = 45000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    let url, key, model;
+    if (LLM_PERPLEXITY_KEY) {
+      url = 'https://api.perplexity.ai/chat/completions';
+      key = LLM_PERPLEXITY_KEY;
+      model = process.env.LLM_MODEL || 'sonar';
+    } else {
+      url = 'https://api.openai.com/v1/chat/completions';
+      key = LLM_OPENAI_KEY;
+      model = process.env.LLM_MODEL || 'gpt-4o-search-preview';
+    }
+    const r = await fetch(url, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' },
+      body: JSON.stringify({ model, messages, temperature: 0.1 }),
+    });
+    if (!r.ok) throw new Error('LLM HTTP ' + r.status);
+    const d = await r.json();
+    return d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+function parseJsonLoose(text) {
+  if (!text) return null;
+  let t = String(text).trim();
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) t = fence[1].trim();
+  const s = t.search(/[[{]/);
+  if (s > 0) t = t.slice(s);
+  try { return JSON.parse(t); } catch (e) { /* try trimming */ }
+  const lastB = Math.max(t.lastIndexOf('}'), t.lastIndexOf(']'));
+  if (lastB > 0) { try { return JSON.parse(t.slice(0, lastB + 1)); } catch (e) { /* give up */ } }
+  return null;
+}
+
+const llmProvider = {
+  id: 'llm',
+  enabled: LLM_ENABLED,
+  async generate(openAuto) {
+    if (!LLM_GENERATE) return [];
+    const openLlm = openAuto.filter((m) => m.auto.provider === 'llm');
+    const slots = LLM_MAX_OPEN - openLlm.length;
+    if (slots <= 0) return [];
+    const existing = openLlm.map((m) => '- ' + m.question).join('\n') || '(none)';
+    const nowISO = new Date().toISOString();
+    const prompt =
+      'Today is ' + nowISO + '. Propose ' + slots + ' binary YES/NO prediction markets about real, upcoming, ' +
+      'newsworthy events (politics, world affairs, technology, business, entertainment) that will be OBJECTIVELY ' +
+      'resolvable within the next 2 to 7 days. Each must have an unambiguous resolution criterion and a specific ' +
+      'resolution date. Avoid crypto prices and routine sports scores (handled elsewhere). Avoid anything similar to:\n' +
+      existing + '\n\nReturn ONLY a JSON array, no prose: ' +
+      '[{"question":"...","category":"Politics|World|Tech|Business|Entertainment","criteria":"exact condition that resolves YES","resolutionDate":"YYYY-MM-DD"}]';
+    let txt;
+    try { txt = await llmChat([{ role: 'user', content: prompt }]); } catch (e) { console.error('[agent] llm generate error:', e.message); return []; }
+    const arr = parseJsonLoose(txt);
+    if (!Array.isArray(arr)) return [];
+    const out = [];
+    const now = Date.now();
+    const maxFuture = now + 10 * 24 * 60 * 60 * 1000;
+    for (const it of arr) {
+      if (out.length >= slots) break;
+      if (!it || !it.question || !it.resolutionDate) continue;
+      const day = new Date(it.resolutionDate + 'T00:00:00Z').getTime();
+      if (isNaN(day) || day < now || day > maxFuture) continue;
+      const resolveAt = day + 18 * 60 * 60 * 1000; // evening UTC on the resolution day
+      out.push({
+        question: String(it.question).slice(0, 180),
+        description: (it.criteria ? 'Resolves YES if: ' + String(it.criteria).slice(0, 300) + ' ' : '') +
+          '(Resolution date ' + it.resolutionDate + ', settled automatically from web sources.)',
+        category: String(it.category || 'News').slice(0, 20),
+        closesAt: day,
+        auto: { provider: 'llm', resolveAt, criteria: String(it.criteria || it.question).slice(0, 300) },
+      });
+    }
+    return out;
+  },
+  async resolve(market) {
+    const a = market.auto;
+    if (Date.now() < a.resolveAt) return null;
+    if (a._lastCheck && Date.now() - a._lastCheck < LLM_RECHECK_MS) return null;
+    a._lastCheck = Date.now();
+    const prompt =
+      'You are resolving a binary prediction market. Today is ' + new Date().toISOString() + '. Using current, ' +
+      'verifiable web information, decide whether the statement has resolved YES or NO.\n\n' +
+      'QUESTION: ' + market.question + '\n' +
+      'RESOLUTION CRITERIA: ' + (a.criteria || market.description || market.question) + '\n\n' +
+      'Rules: Only answer YES or NO if you are confident based on verifiable facts that have already occurred. ' +
+      'If the event has not happened yet, is ambiguous, or cannot be verified, answer UNKNOWN. ' +
+      'Respond with ONLY JSON: {"status":"YES|NO|UNKNOWN","confidence":0.0-1.0,"explanation":"one sentence with the key fact and date"}.';
+    let txt;
+    try { txt = await llmChat([{ role: 'user', content: prompt }]); } catch (e) { console.error('[agent] llm resolve error:', e.message); return null; }
+    const j = parseJsonLoose(txt);
+    if (!j) return null;
+    const status = String(j.status || j.outcome || '').toUpperCase();
+    const conf = Number(j.confidence || 0);
+    if ((status === 'YES' || status === 'NO') && conf >= LLM_CONFIDENCE) {
+      console.log('[agent] llm resolved', market.id, status, '(conf ' + conf + '):', String(j.explanation || '').slice(0, 140));
+      return status;
+    }
+    console.log('[agent] llm undecided for', market.id, '- status', status, 'conf', conf, '— leaving for admin/retry');
+    return null;
+  },
+};
+
+const PROVIDERS = [cryptoProvider, sportsProvider, weatherProvider, fngProvider, llmProvider].filter((p) => p.enabled);
 
 function start(deps) {
   const { createMarket, resolveMarket, listMarkets } = deps;
@@ -244,4 +502,4 @@ function start(deps) {
   setInterval(tickResolve, RESOLVE_INTERVAL_MS);
 }
 
-module.exports = { start, fetchJson, _providers: { cryptoProvider, sportsProvider } };
+module.exports = { start, fetchJson, _providers: { cryptoProvider, sportsProvider, weatherProvider, fngProvider, llmProvider } };
