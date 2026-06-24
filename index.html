@@ -190,6 +190,8 @@
     .opp-tab:hover { color: var(--text); }
     .opp-tab.active { background: linear-gradient(135deg, var(--accent), #00897b); color: #fff; box-shadow: 0 4px 12px rgba(0,212,170,0.25); }
     .opp-tab[data-opp="house"].active { background: linear-gradient(135deg, #ff6b35, #e74c3c); box-shadow: 0 4px 12px rgba(255,107,53,0.3); }
+    .opp-tab.maintenance { opacity: 0.55; }
+    .opp-tab.maintenance::after { content: "🔧"; font-size: 0.7rem; margin-left: 0.3rem; }
     .opp-tab .opp-icon { font-size: 1rem; }
     .opp-tab .opp-badge {
       background: rgba(0,0,0,0.25); color: #ffe082; font-size: 0.6rem;
@@ -6202,6 +6204,9 @@
         socket.on('chat_message', function(data) { Chat.receive(data); });
         socket.on('search_cancelled', function() { showScreen('lobby'); });
         socket.on('error_msg', function(d) { showToast(d.msg, 'error'); });
+        socket.on('house_maintenance', function(d) {
+          if (typeof HouseMode !== 'undefined' && HouseMode.setMaintenance) HouseMode.setMaintenance(true, d && d.msg);
+        });
         socket.on('disconnect', function() { showToast('Disconnected from server', 'error'); });
       }
 
@@ -6776,9 +6781,36 @@
       ];
       var MAX_BET = 10000;
       var active = false;
+      var maintenance = false;
+      var maintenanceMsg = '';
 
       function isActive() { return active; }
       function isSupported(gameType) { return SUPPORTED.indexOf(gameType) >= 0; }
+      function isMaintenance() { return maintenance; }
+
+      function reflectMaintenance() {
+        var houseTab = document.querySelector('#opponent-toggle .opp-tab[data-opp="house"]');
+        if (houseTab) {
+          houseTab.classList.toggle('maintenance', maintenance);
+          houseTab.title = maintenance ? (maintenanceMsg || 'The House is under maintenance') : '';
+        }
+        if (maintenance && active) setActive(false);
+      }
+
+      function setMaintenance(on, msg) {
+        maintenance = !!on;
+        if (typeof msg === 'string' && msg) maintenanceMsg = msg;
+        reflectMaintenance();
+      }
+
+      function fetchStatus() {
+        try {
+          fetch('/api/house/status', { cache: 'no-cache' })
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(d) { if (d) setMaintenance(d.maintenance, d.message); })
+            .catch(function() {});
+        } catch (e) {}
+      }
 
       function tagSupportedCards() {
         var cards = document.querySelectorAll('.game-card');
@@ -6817,6 +6849,10 @@
       }
 
       function setActive(on) {
+        if (on && maintenance) {
+          try { showToast(maintenanceMsg || 'The House is under maintenance — try playing vs another player.', 'error'); } catch (e) {}
+          on = false;
+        }
         active = !!on;
         document.body.classList.toggle('house-mode-on', active);
         var info = document.getElementById('house-info');
@@ -6838,12 +6874,15 @@
           });
         }
         applyAllCards();
+        fetchStatus();
       }
 
       return {
         init: init,
         isActive: isActive,
         isSupported: isSupported,
+        isMaintenance: isMaintenance,
+        setMaintenance: setMaintenance,
         applyToCard: applyToCard,
         MAX_BET: MAX_BET,
       };

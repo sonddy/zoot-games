@@ -137,6 +137,28 @@ app.get('/api/escrow', (req, res) => {
   res.json({ escrowAddress: ESCROW_ADDRESS });
 });
 
+// Public: lets the client know whether the House is open or under maintenance.
+app.get('/api/house/status', (req, res) => {
+  res.json({ maintenance: houseMaintenance, message: houseMaintenance ? houseMaintenanceMsg : '' });
+});
+
+// Admin: flip House maintenance on/off at runtime (no redeploy). Requires
+// ADMIN_TOKEN to be set in the environment and supplied in the request.
+//   curl -X POST .../api/house/maintenance -H 'content-type: application/json' \
+//        -d '{"token":"<ADMIN_TOKEN>","on":true,"message":"optional custom text"}'
+app.post('/api/house/maintenance', (req, res) => {
+  const adminToken = process.env.ADMIN_TOKEN;
+  if (!adminToken) return res.status(403).json({ error: 'Admin toggle disabled: set ADMIN_TOKEN to use this.' });
+  const provided = (req.body && req.body.token) || req.query.token;
+  if (provided !== adminToken) return res.status(401).json({ error: 'Unauthorized' });
+  houseMaintenance = !!(req.body && req.body.on);
+  if (req.body && typeof req.body.message === 'string' && req.body.message.trim()) {
+    houseMaintenanceMsg = req.body.message.trim();
+  }
+  console.log('[house] maintenance set to', houseMaintenance, 'via admin endpoint');
+  res.json({ maintenance: houseMaintenance, message: houseMaintenanceMsg });
+});
+
 const APK_PATH = path.join(__dirname, '..', 'public', 'downloads', 'zoot-games.apk');
 app.get('/api/app/info', (req, res) => {
   try {
@@ -246,6 +268,14 @@ const chatBuckets = new Map();
 const HOUSE_FEE = 0.10;
 const HOUSE_WALLET = '2LK7yxZsy6YVCkFQ4PrL644ve1fgRj5FuDexj5JgS753';
 const TEST_MODE = process.env.TEST_MODE === '1';
+
+// ── House maintenance switch ──
+// When on, the server refuses to start any new vs-house games and tells clients
+// the house is down for maintenance (PvP play is unaffected). Seeded from env
+// and toggleable at runtime via POST /api/house/maintenance (needs ADMIN_TOKEN).
+let houseMaintenance = process.env.HOUSE_MAINTENANCE === '1';
+let houseMaintenanceMsg = process.env.HOUSE_MAINTENANCE_MSG
+  || 'The House is temporarily down for maintenance. You can still play against other players — please check back soon.';
 
 // ── Outflow circuit breaker ──
 // A rolling 24h cap on everything the SERVER pays out of the escrow. This is a
@@ -767,6 +797,13 @@ io.on('connection', (socket) => {
       const player = players.get(socket.id);
       if (!player) return socket.emit('error_msg', { msg: 'Register first' });
       if (player.roomId) return socket.emit('error_msg', { msg: 'You are already in a game' });
+
+      // House closed for maintenance — reject before any payment/logic. PvP is
+      // unaffected (this only gates vs-house games).
+      if (houseMaintenance) {
+        socket.emit('house_maintenance', { msg: houseMaintenanceMsg });
+        return socket.emit('error_msg', { msg: houseMaintenanceMsg });
+      }
 
       // Abuse guard FIRST — before we accept any payment / start any logic.
       // Refuses blacklisted wallets, enforces cooldown, daily caps, and a
