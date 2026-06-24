@@ -232,12 +232,17 @@ const fngProvider = {
 
 // ── Sports provider (ESPN scoreboard, free, no key) ─────────────────────────
 const SPORTS_LEAGUES = [
+  { sport: 'soccer', league: 'fifa.world', label: 'World Cup' },
+  { sport: 'soccer', league: 'eng.1', label: 'Premier League' },
+  { sport: 'soccer', league: 'esp.1', label: 'La Liga' },
+  { sport: 'soccer', league: 'ita.1', label: 'Serie A' },
+  { sport: 'soccer', league: 'fra.1', label: 'Ligue 1' },
+  { sport: 'soccer', league: 'ger.1', label: 'Bundesliga' },
   { sport: 'basketball', league: 'nba', label: 'NBA' },
   { sport: 'baseball', league: 'mlb', label: 'MLB' },
-  { sport: 'soccer', league: 'eng.1', label: 'Premier League' },
   { sport: 'hockey', league: 'nhl', label: 'NHL' },
 ];
-const SPORTS_MAX_OPEN = Number(process.env.MARKET_AGENT_SPORTS_MAX) || 6;
+const SPORTS_MAX_OPEN = Number(process.env.MARKET_AGENT_SPORTS_MAX) || 8;
 
 function ymd(d) {
   return d.getUTCFullYear() + String(d.getUTCMonth() + 1).padStart(2, '0') + String(d.getUTCDate()).padStart(2, '0');
@@ -325,6 +330,166 @@ const sportsProvider = {
     const as = parseInt(p.away.score, 10);
     if (isNaN(hs) || isNaN(as)) return null;
     return hs > as ? 'YES' : 'NO';
+  },
+};
+
+// ── Soccer player-goals provider (ESPN, free) ───────────────────────────────
+// "Will <star> score (1+/2+) vs <opp>?" — resolved from match goal events.
+const GOALS_MAX_OPEN = Number(process.env.MARKET_AGENT_GOALS_MAX) || 10;
+const GOALS_LEAGUES = SPORTS_LEAGUES.filter((l) => l.sport === 'soccer');
+
+// Curated star strikers/attackers per team. Keys are normalized team names so
+// lookup is tolerant of ESPN's exact spelling. Names need only be close enough
+// for the accent-insensitive surname match used at resolution time.
+const SUPERSTARS = {
+  // National teams (World Cup)
+  brazil: ['Vinicius Junior', 'Rodrygo'],
+  argentina: ['Lionel Messi', 'Julian Alvarez'],
+  france: ['Kylian Mbappe', 'Ousmane Dembele'],
+  england: ['Harry Kane', 'Bukayo Saka'],
+  portugal: ['Cristiano Ronaldo', 'Bruno Fernandes'],
+  spain: ['Lamine Yamal', 'Alvaro Morata'],
+  netherlands: ['Memphis Depay', 'Cody Gakpo'],
+  germany: ['Kai Havertz', 'Jamal Musiala'],
+  belgium: ['Romelu Lukaku', 'Kevin De Bruyne'],
+  mexico: ['Santiago Gimenez', 'Raul Jimenez'],
+  canada: ['Jonathan David', 'Alphonso Davies'],
+  morocco: ['Youssef En-Nesyri', 'Hakim Ziyech'],
+  'south korea': ['Son Heung-Min'],
+  switzerland: ['Breel Embolo'],
+  uruguay: ['Darwin Nunez'],
+  croatia: ['Andrej Kramaric'],
+  poland: ['Robert Lewandowski'],
+  nigeria: ['Victor Osimhen'],
+  egypt: ['Mohamed Salah'],
+  norway: ['Erling Haaland'],
+  scotland: ['Scott McTominay', 'John McGinn'],
+  czechia: ['Patrik Schick'],
+  ecuador: ['Enner Valencia'],
+  'ivory coast': ['Sebastien Haller'],
+  colombia: ['Luis Diaz'],
+  senegal: ['Sadio Mane'],
+  'united states': ['Christian Pulisic'],
+  usa: ['Christian Pulisic'],
+  // Clubs
+  'real madrid': ['Kylian Mbappe', 'Vinicius Junior'],
+  barcelona: ['Robert Lewandowski', 'Lamine Yamal'],
+  'atletico madrid': ['Julian Alvarez', 'Antoine Griezmann'],
+  'inter milan': ['Lautaro Martinez'],
+  'ac milan': ['Rafael Leao'],
+  juventus: ['Dusan Vlahovic'],
+  napoli: ['Romelu Lukaku'],
+  'paris saint-germain': ['Ousmane Dembele', 'Bradley Barcola'],
+  'manchester city': ['Erling Haaland'],
+  arsenal: ['Bukayo Saka'],
+  liverpool: ['Mohamed Salah'],
+  'manchester united': ['Bruno Fernandes'],
+  tottenham: ['Son Heung-Min'],
+  chelsea: ['Cole Palmer'],
+  'bayern munich': ['Harry Kane'],
+  'bayer leverkusen': ['Patrik Schick'],
+  'borussia dortmund': ['Serhou Guirassy'],
+};
+
+function normName(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function nameMatch(a, b) {
+  const p = normName(a), q = normName(b);
+  if (!p || !q) return false;
+  if (p === q) return true;
+  const pl = p.split(' '), ql = q.split(' ');
+  const ps = pl[pl.length - 1], qs = ql[ql.length - 1];
+  return ps === qs && pl[0][0] === ql[0][0]; // same surname + same first initial
+}
+function lookupStars(teamDisplayName) {
+  const n = normName(teamDisplayName);
+  if (!n) return [];
+  if (SUPERSTARS[n]) return SUPERSTARS[n];
+  for (const key of Object.keys(SUPERSTARS)) {
+    if (n.includes(key) || key.includes(n)) return SUPERSTARS[key];
+  }
+  return [];
+}
+
+const soccerGoalsProvider = {
+  id: 'goals',
+  enabled: process.env.MARKET_AGENT_GOALS !== '0',
+  async generate(openAuto) {
+    const open = openAuto.filter((m) => m.auto.provider === 'goals');
+    if (open.length >= GOALS_MAX_OPEN) return [];
+    const have = new Set(open.map((m) => m.auto.eventId + '|' + m.auto.player + '|' + m.auto.threshold));
+    const out = [];
+    const now = Date.now();
+    const windowMs = 48 * 60 * 60 * 1000;
+    const datesParam = ymd(new Date(now)) + '-' + ymd(new Date(now + windowMs));
+    for (const lg of GOALS_LEAGUES) {
+      if (open.length + out.length >= GOALS_MAX_OPEN) break;
+      let data;
+      try { data = await fetchScoreboard(lg, datesParam); } catch (e) { continue; }
+      for (const ev of (data && data.events) || []) {
+        if (open.length + out.length >= GOALS_MAX_OPEN) break;
+        const state = ev.status && ev.status.type && ev.status.type.state;
+        if (state !== 'pre') continue;
+        const start = ev.date ? new Date(ev.date).getTime() : 0;
+        if (!start || start < now || start > now + windowMs) continue;
+        const p = parseCompetitors(ev);
+        if (!p) continue;
+        for (const side of [p.home, p.away]) {
+          const other = side === p.home ? p.away : p.home;
+          const teamName = side.team && (side.team.displayName || side.team.name);
+          const oppName = other.team && (other.team.displayName || other.team.name);
+          if (!teamName || !oppName) continue;
+          const stars = lookupStars(teamName);
+          for (const star of stars) {
+            for (const thr of [1, 2]) {
+              if (open.length + out.length >= GOALS_MAX_OPEN) break;
+              if (have.has(ev.id + '|' + star + '|' + thr)) continue;
+              const q = thr === 1
+                ? 'Will ' + star + ' score for ' + teamName + ' vs ' + oppName + '?'
+                : 'Will ' + star + ' score ' + thr + '+ goals (brace) vs ' + oppName + '?';
+              out.push({
+                question: q,
+                description: lg.label + ': ' + teamName + ' vs ' + oppName + '. Starts ' + fmtUTC(start) +
+                  '. Resolves YES if ' + star + ' scores ' + (thr === 1 ? 'at least once' : thr + ' or more goals') +
+                  ' (own goals excluded).',
+                category: 'Sports',
+                closesAt: start,
+                auto: { provider: 'goals', sport: lg.sport, league: lg.league, eventId: ev.id, player: star, threshold: thr, startAt: start },
+              });
+            }
+          }
+        }
+      }
+    }
+    return out;
+  },
+  async resolve(market) {
+    const a = market.auto;
+    // wait until the match should be over (kickoff + ~2.5h) to avoid early reads
+    if (Date.now() < a.startAt + 150 * 60 * 1000) return null;
+    let sb;
+    const datesParam = ymd(new Date(a.startAt)) + '-' + ymd(new Date(a.startAt + 24 * 60 * 60 * 1000));
+    try { sb = await fetchScoreboard({ sport: a.sport, league: a.league }, datesParam); } catch (e) { return null; }
+    const ev = ((sb && sb.events) || []).find((e) => e.id === a.eventId);
+    if (!ev) return null;
+    const st = ev.status && ev.status.type;
+    if (!st || !st.completed) return null;
+    let sd;
+    try {
+      sd = await fetchJson('https://site.api.espn.com/apis/site/v2/sports/' + a.sport + '/' + a.league + '/summary?event=' + a.eventId);
+    } catch (e) { return null; }
+    const events = (sd && sd.keyEvents) || [];
+    if (!events.length) return null; // goal data not in yet — retry next tick
+    let goals = 0;
+    for (const k of events) {
+      if (!k.scoringPlay) continue;
+      if (/own goal/i.test((k.type && k.type.text) || '')) continue;
+      const names = (k.participants || []).map((pp) => pp.athlete && pp.athlete.displayName).filter(Boolean);
+      if (names.some((nm) => nameMatch(nm, a.player))) goals++;
+    }
+    return goals >= a.threshold ? 'YES' : 'NO';
   },
 };
 
@@ -458,7 +623,7 @@ const llmProvider = {
   },
 };
 
-const PROVIDERS = [cryptoProvider, sportsProvider, weatherProvider, fngProvider, llmProvider].filter((p) => p.enabled);
+const PROVIDERS = [cryptoProvider, sportsProvider, soccerGoalsProvider, weatherProvider, fngProvider, llmProvider].filter((p) => p.enabled);
 
 function start(deps) {
   const { createMarket, resolveMarket, listMarkets } = deps;
@@ -502,4 +667,4 @@ function start(deps) {
   setInterval(tickResolve, RESOLVE_INTERVAL_MS);
 }
 
-module.exports = { start, fetchJson, _providers: { cryptoProvider, sportsProvider, weatherProvider, fngProvider, llmProvider } };
+module.exports = { start, fetchJson, _providers: { cryptoProvider, sportsProvider, soccerGoalsProvider, weatherProvider, fngProvider, llmProvider } };
