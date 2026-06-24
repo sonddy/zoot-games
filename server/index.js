@@ -17,6 +17,7 @@ const {
   TOKEN_PROGRAM_ID,
 } = require('@solana/spl-token');
 const persistence = require('./persistence');
+const marketAgent = require('./marketAgent');
 const DominoGame = require('./games/domino');
 const TicTacToeGame = require('./games/tictactoe');
 const MancalaGame = require('./games/mancala');
@@ -176,30 +177,43 @@ app.get('/api/markets', (req, res) => {
   res.json(buildMarketsPayload());
 });
 
-// Admin: create a market.
-app.post('/api/markets', (req, res) => {
-  const auth = checkAdmin(req); if (!auth.ok) return res.status(auth.code).json({ error: auth.error });
-  const b = req.body || {};
-  const question = String(b.question || '').trim();
-  if (!question) return res.status(400).json({ error: 'question is required' });
+// Shared market creation used by both the admin REST endpoint and the
+// automated market agent. Throws on invalid input.
+function createPredictionMarket(opts) {
+  const o = opts || {};
+  const question = String(o.question || '').trim();
+  if (!question) throw new Error('question is required');
   const id = 'pm_' + uuidv4().slice(0, 8);
+  const auto = o.auto || null;
   const market = {
     id,
     question,
-    description: String(b.description || '').trim(),
-    category: String(b.category || 'General').trim(),
+    description: String(o.description || '').trim(),
+    category: String(o.category || 'General').trim(),
     status: 'open',
     outcome: null,
-    closesAt: b.closesAt ? Number(b.closesAt) : null,
-    resolvesAt: b.resolvesAt ? Number(b.resolvesAt) : null,
+    closesAt: o.closesAt ? Number(o.closesAt) : (auto && auto.resolveAt ? Number(auto.resolveAt) : null),
+    resolvesAt: o.resolvesAt ? Number(o.resolvesAt) : (auto && auto.resolveAt ? Number(auto.resolveAt) : null),
+    auto,
     createdAt: Date.now(),
     resolvedAt: null,
   };
   predictionMarkets.set(id, market);
   persistence.savePredictionMarket(id, market).catch(()=>{});
-  console.log('[markets] created', id, '-', question);
+  console.log('[markets] created', id, auto ? '(auto:' + auto.provider + ')' : '', '-', question);
   broadcastPredictions();
-  res.json({ ok: true, market });
+  return market;
+}
+
+// Admin: create a market.
+app.post('/api/markets', (req, res) => {
+  const auth = checkAdmin(req); if (!auth.ok) return res.status(auth.code).json({ error: auth.error });
+  try {
+    const market = createPredictionMarket(req.body || {});
+    res.json({ ok: true, market });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 // Admin: close betting on a market (existing matched bets remain until resolve).
@@ -1609,6 +1623,7 @@ function buildMarketsPayload() {
       id: m.id, question: m.question, description: m.description, category: m.category,
       status: m.status, outcome: m.outcome,
       closesAt: m.closesAt, resolvesAt: m.resolvesAt, createdAt: m.createdAt, resolvedAt: m.resolvedAt,
+      isAuto: !!m.auto, autoProvider: m.auto ? m.auto.provider : null,
       openOffers,
       stats: { yesVolume, noVolume, matchedVolume, matchedCount, openCount: openOffers.length },
     });
@@ -1818,6 +1833,28 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', async () => {
   console.log(`ZG (Zoot Games) running on http://localhost:${PORT}`);
   try { await recoverFromPreviousRun(); } catch (e) { console.error('Recovery failed:', e.message); }
+
+  // Smart agent: auto-open prediction markets from free live feeds and
+  // auto-resolve them from the same feeds. P2P even-money, so no house risk.
+  marketAgent.start({
+    createMarket: (opts) => createPredictionMarket(opts),
+    listMarkets: () => Array.from(predictionMarkets.values()),
+    resolveMarket: async (id, outcome) => {
+      const m = predictionMarkets.get(id);
+      if (!m || m.status === 'resolved') return;
+      // If nobody participated, retire it quietly so the "Resolved" tab only
+      // shows markets people actually traded.
+      let hasBets = false;
+      for (const [, b] of predictionBets) { if (b.marketId === id) { hasBets = true; break; } }
+      if (!hasBets) {
+        predictionMarkets.delete(id);
+        persistence.removePredictionMarket(id).catch(() => {});
+        broadcastPredictions();
+        return;
+      }
+      return settlePredictionMarket(m, outcome);
+    },
+  });
 });
 
 app.get('/api/refunds/pending', async (req, res) => {
