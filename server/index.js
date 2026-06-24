@@ -377,7 +377,7 @@ async function refundUser({ walletAddress, currency, amount, reason, socketId })
   } catch (e) {
     console.error('Refund failed, queuing for retry:', e.message);
     try {
-      await persistence.addPendingRefund({
+      await enqueueRefund({
         walletAddress, currency: cur, amount,
         reason: reason || 'refund',
         retries: 0,
@@ -392,13 +392,28 @@ async function refundUser({ walletAddress, currency, amount, reason, socketId })
   }
 }
 
-const REFUND_RETRY_INTERVAL_MS = 20000;
+const REFUND_RETRY_INTERVAL_MS = 60000;
 const REFUND_MAX_RETRIES = 30;
+
+// Best-effort count of refunds awaiting retry. Lets the retry loop skip the
+// Firestore read entirely when there is nothing to do, so we don't burn the
+// daily quota polling an empty collection every minute. Seeded at startup
+// recovery and kept in sync as refunds are queued/cleared.
+let knownPendingRefunds = 0;
+
+async function enqueueRefund(refund) {
+  const id = await persistence.addPendingRefund(refund);
+  if (id) knownPendingRefunds++;
+  return id;
+}
 
 async function processPendingRefunds() {
   if (!persistence.isEnabled()) return;
+  if (knownPendingRefunds <= 0) return;
   let list = [];
   try { list = await persistence.listPendingRefunds(25); } catch (_) { return; }
+  // The fetched list is the source of truth; resync our counter to it.
+  knownPendingRefunds = list.length;
   for (const r of list) {
     if ((r.retries || 0) > REFUND_MAX_RETRIES) continue;
     try {
@@ -407,6 +422,7 @@ async function processPendingRefunds() {
       allowPayee(r.walletAddress);
       await sendCurrency(r.currency || 'SOL', r.walletAddress, r.amount);
       await persistence.removePendingRefund(r.id);
+      knownPendingRefunds = Math.max(0, knownPendingRefunds - 1);
       console.log('Pending refund cleared:', r.amount, r.currency, '→', r.walletAddress);
       for (const [sid, p] of players) {
         if (p.walletAddress === r.walletAddress) {
@@ -546,7 +562,7 @@ async function handleGameOver(room, result) {
           if (sock) sock.emit('balance_update', { refreshWallet: true, msg: 'You beat ' + houseLabel + ' for ' + payout.toFixed(2) + ' $ZOOT!' });
         } catch (e) {
           console.error('House payout error, queuing:', e.message);
-          try { await persistence.addPendingRefund({ walletAddress: player.walletAddress, currency: 'ZOOT', amount: payout, reason: 'House game payout', retries: 0, lastError: e.message }); } catch (_) {}
+          try { await enqueueRefund({ walletAddress: player.walletAddress, currency: 'ZOOT', amount: payout, reason: 'House game payout', retries: 0, lastError: e.message }); } catch (_) {}
         }
       }
       if (player) {
@@ -604,14 +620,14 @@ async function handleGameOver(room, result) {
         if (winSock) winSock.emit('balance_update', { refreshWallet: true, msg: 'You won ' + payout.toFixed(3) + ' ' + currency + '!' });
       } catch (e) {
         console.error('Payout error, queuing for retry:', e.message);
-        try { await persistence.addPendingRefund({ walletAddress: winnerPlayer.walletAddress, currency, amount: payout, reason: 'Game payout', retries: 0, lastError: e.message }); } catch (_) {}
+        try { await enqueueRefund({ walletAddress: winnerPlayer.walletAddress, currency, amount: payout, reason: 'Game payout', retries: 0, lastError: e.message }); } catch (_) {}
       }
       try {
         await sendCurrency(currency, HOUSE_WALLET, houseCut);
         console.log('House fee sent:', houseCut.toFixed(4), currency, 'to', HOUSE_WALLET);
       } catch (e) {
         console.error('House fee transfer error, queuing:', e.message);
-        try { await persistence.addPendingRefund({ walletAddress: HOUSE_WALLET, currency, amount: houseCut, reason: 'House fee', retries: 0, lastError: e.message }); } catch (_) {}
+        try { await enqueueRefund({ walletAddress: HOUSE_WALLET, currency, amount: houseCut, reason: 'House fee', retries: 0, lastError: e.message }); } catch (_) {}
       }
     }
     io.to(room.id).emit('game_over', {
@@ -1087,14 +1103,14 @@ io.on('connection', (socket) => {
             if (winSock) winSock.emit('balance_update', { refreshWallet: true, msg: 'Opponent left — you won ' + payout.toFixed(3) + ' ' + currency + '!' });
           } catch (e) {
             console.error('Payout on disconnect, queuing:', e.message);
-            try { await persistence.addPendingRefund({ walletAddress: winnerPlayer.walletAddress, currency, amount: payout, reason: 'Opponent disconnect payout', retries: 0, lastError: e.message }); } catch (_) {}
+            try { await enqueueRefund({ walletAddress: winnerPlayer.walletAddress, currency, amount: payout, reason: 'Opponent disconnect payout', retries: 0, lastError: e.message }); } catch (_) {}
           }
           try {
             await sendCurrency(currency, HOUSE_WALLET, houseCut);
             console.log('House fee sent:', houseCut.toFixed(4), currency, 'to', HOUSE_WALLET);
           } catch (e) {
             console.error('House fee on disconnect, queuing:', e.message);
-            try { await persistence.addPendingRefund({ walletAddress: HOUSE_WALLET, currency, amount: houseCut, reason: 'House fee', retries: 0, lastError: e.message }); } catch (_) {}
+            try { await enqueueRefund({ walletAddress: HOUSE_WALLET, currency, amount: houseCut, reason: 'House fee', retries: 0, lastError: e.message }); } catch (_) {}
           }
         }
 
@@ -1424,6 +1440,7 @@ async function recoverFromPreviousRun() {
 
   try {
     const pendings = await persistence.listPendingRefunds(100);
+    knownPendingRefunds = pendings.length;
     if (pendings.length) console.log('Found', pendings.length, 'pending refund(s) from previous run — will retry automatically.');
   } catch (_) {}
 

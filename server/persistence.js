@@ -30,9 +30,34 @@ function isEnabled() { return enabled; }
 
 function colRef(name) { return db.collection(name); }
 
+// Firestore quota errors (RESOURCE_EXHAUSTED, gRPC code 8) can fire on every
+// single call once the daily free-tier cap is hit. Without throttling they bury
+// the logs (hundreds of identical lines). Collapse them to one line per window.
+const QUOTA_LOG_WINDOW_MS = 5 * 60 * 1000;
+let _lastQuotaLogAt = 0;
+let _quotaSuppressed = 0;
+
+function _isQuotaError(e) {
+  return !!e && (e.code === 8 || /RESOURCE_EXHAUSTED|quota exceeded/i.test(e.message || ''));
+}
+
+function logPersistenceError(label, e) {
+  if (_isQuotaError(e)) {
+    _quotaSuppressed++;
+    const now = Date.now();
+    if (now - _lastQuotaLogAt < QUOTA_LOG_WINDOW_MS) return;
+    const extra = _quotaSuppressed > 1 ? ' (+' + (_quotaSuppressed - 1) + ' similar suppressed in last 5m)' : '';
+    console.error('Persistence: Firestore quota exceeded — operations failing until quota resets. Last at ' + label + extra);
+    _lastQuotaLogAt = now;
+    _quotaSuppressed = 0;
+    return;
+  }
+  console.error('Persistence ' + label + ':', e.message);
+}
+
 async function safe(promise, label) {
   try { return await promise; }
-  catch (e) { console.error('Persistence ' + label + ':', e.message); return null; }
+  catch (e) { logPersistenceError(label, e); return null; }
 }
 
 // ── match_queue ────────────────────────────────────────────────────────────
@@ -140,7 +165,7 @@ async function tryConsumeSignature(signature) {
     return true;
   } catch (e) {
     if (e && (e.code === 6 || /already exists/i.test(e.message || ''))) return false;
-    console.error('Persistence tryConsumeSignature:', e.message);
+    logPersistenceError('tryConsumeSignature', e);
     return null;
   }
 }
