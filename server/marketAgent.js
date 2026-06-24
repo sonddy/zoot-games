@@ -17,6 +17,9 @@
  *   MARKET_AGENT=0                 disable the whole agent
  *   MARKET_AGENT_CRYPTO=0          disable the crypto provider
  *   MARKET_AGENT_SPORTS=0          disable the sports provider
+ *   MARKET_AGENT_GOALS=0          disable soccer player-goal markets
+ *   MARKET_AGENT_POLY=0           disable the Polymarket mirror provider
+ *   MARKET_AGENT_POLY_MAX         max concurrent mirrored markets (default 8)
  *   MARKET_AGENT_CREATE_MS         how often to open new markets (default 30m)
  *   MARKET_AGENT_RESOLVE_MS        how often to check for resolutions (default 2m)
  *   MARKET_AGENT_CRYPTO_HORIZON_MS crypto market lifetime (default 3h)
@@ -227,6 +230,105 @@ const fngProvider = {
     const val = cur && parseInt(cur.value, 10);
     if (!val && val !== 0) return null;
     return val >= a.threshold ? 'YES' : 'NO';
+  },
+};
+
+// ── Polymarket mirror provider (Gamma API, free, read-only) ─────────────────
+// Mirrors trending real-money Polymarket questions onto our P2P board and
+// settles them to match Polymarket's own resolved outcome. No trading, no auth.
+const POLY_ENABLED = process.env.MARKET_AGENT_POLY !== '0';
+const POLY_MAX_OPEN = Number(process.env.MARKET_AGENT_POLY_MAX) || 8;
+const POLY_MIN_VOL24 = Number(process.env.MARKET_AGENT_POLY_MIN_VOL) || 25000;
+const POLY_MAX_DAYS = Number(process.env.MARKET_AGENT_POLY_MAX_DAYS) || 45;
+const POLY_MIN_HOURS = Number(process.env.MARKET_AGENT_POLY_MIN_HOURS) || 6;
+const POLY_GAMMA = 'https://gamma-api.polymarket.com';
+
+function classifyPoly(q) {
+  const s = String(q || '').toLowerCase();
+  const has = (arr) => arr.some((w) => s.includes(w));
+  if (has(['bitcoin', 'btc', 'ethereum', ' eth ', 'solana', 'crypto', 'dogecoin', 'xrp', 'coinbase', 'binance', 'stablecoin', 'memecoin'])) return 'Crypto';
+  if (has(['election', 'president', 'senate', 'congress', 'governor', 'prime minister', 'parliament', 'ballot', 'nominee', 'primary', 'impeach', 'shutdown', 'supreme court', 'cabinet', 'referendum'])) return 'Politics';
+  if (has(['fed ', 'interest rate', 'rate cut', 'gdp', 'inflation', 'recession', 's&p', 'nasdaq', ' ipo', 'earnings', 'tariff', 'jobs report', 'unemployment'])) return 'Business';
+  if (has(['box office', 'oscar', 'grammy', 'album', 'spotify', 'billboard', 'netflix', 'emmy', 'movie', 'rotten tomatoes', 'celebrity'])) return 'Entertainment';
+  return 'News';
+}
+
+// Sports questions are already covered deterministically by our ESPN providers,
+// so we skip Polymarket's sports duplicates (match winners, "Will X win on <date>?").
+function polyLooksLikeSports(q) {
+  const s = String(q || '').toLowerCase();
+  if (/\bwin on \d{4}-\d{2}-\d{2}/.test(s)) return true;
+  if (/\bvs\.?\b/.test(s)) return true;
+  return ['world cup', 'super bowl', ' nba', ' nfl', ' mlb', ' nhl', 'premier league', 'la liga',
+    'serie a', 'champions league', 'ufc', 'fifa', 'playoff', 'grand prix', 'formula 1', ' f1 ',
+    'tennis', 'golf', 'olympic', 'win the match', 'win the game'].some((w) => s.includes(w));
+}
+
+function parseJsonArr(v) {
+  if (Array.isArray(v)) return v;
+  try { const a = JSON.parse(v); return Array.isArray(a) ? a : []; } catch (e) { return []; }
+}
+
+const polymarketProvider = {
+  id: 'polymarket',
+  enabled: POLY_ENABLED,
+  async generate(openAuto) {
+    const open = openAuto.filter((m) => m.auto.provider === 'polymarket');
+    if (open.length >= POLY_MAX_OPEN) return [];
+    const have = new Set(open.map((m) => m.auto.conditionId || m.auto.id));
+    // Pull both "trending now" (24h volume) and big standing markets (all-time volume).
+    const rows = [];
+    for (const order of ['volume24hr', 'volumeNum']) {
+      try {
+        const d = await fetchJson(POLY_GAMMA + '/markets?closed=false&active=true&archived=false&order=' + order + '&ascending=false&limit=60');
+        if (Array.isArray(d)) rows.push(...d);
+      } catch (e) { /* ignore one source failing */ }
+    }
+    const now = Date.now();
+    const out = [];
+    const seen = new Set();
+    for (const m of rows) {
+      if (open.length + out.length >= POLY_MAX_OPEN) break;
+      if (!m || m.closed || m.active === false || m.archived) continue;
+      const key = m.conditionId || String(m.id);
+      if (!key || have.has(key) || seen.has(key)) continue;
+      seen.add(key);
+      const outcomes = parseJsonArr(m.outcomes).map((o) => String(o).toLowerCase());
+      if (outcomes.length !== 2 || outcomes[0] !== 'yes' || outcomes[1] !== 'no') continue;
+      const prices = parseJsonArr(m.outcomePrices).map(Number);
+      const yes = prices[0];
+      if (!isFinite(yes) || yes > 0.95 || yes < 0.05) continue; // skip near-decided
+      const vol24 = Number(m.volume24hr) || 0;
+      if (vol24 < POLY_MIN_VOL24) continue;
+      const end = Date.parse(m.endDateIso || m.endDate || '');
+      if (!end || end < now + POLY_MIN_HOURS * 3600 * 1000 || end > now + POLY_MAX_DAYS * 86400 * 1000) continue;
+      const q = String(m.question || '').trim();
+      if (!q) continue;
+      if (polyLooksLikeSports(q)) continue; // we already make sports markets ourselves
+      const desc = String(m.description || '').replace(/\s+/g, ' ').trim().slice(0, 280);
+      out.push({
+        question: q,
+        description: (desc ? desc + ' ' : '') + '\n\nMirrored from Polymarket (implied YES ' + Math.round(yes * 100) +
+          '%, 24h volume $' + Math.round(vol24).toLocaleString('en-US') + '). Resolves to match Polymarket\u2019s official outcome.',
+        category: classifyPoly(q),
+        closesAt: end,
+        auto: { provider: 'polymarket', id: String(m.id), conditionId: m.conditionId || null, slug: m.slug || null, endDate: end },
+      });
+      have.add(key);
+    }
+    return out;
+  },
+  async resolve(market) {
+    const a = market.auto;
+    let md;
+    try { md = await fetchJson(POLY_GAMMA + '/markets/' + a.id); } catch (e) { return null; }
+    if (!md || !md.closed) return null; // wait until Polymarket itself resolves
+    const prices = parseJsonArr(md.outcomePrices).map(Number);
+    const yes = prices[0];
+    if (!isFinite(yes)) return null;
+    if (yes >= 0.99) return 'YES';
+    if (yes <= 0.01) return 'NO';
+    return null; // voided / ambiguous — leave for admin
   },
 };
 
@@ -623,7 +725,7 @@ const llmProvider = {
   },
 };
 
-const PROVIDERS = [cryptoProvider, sportsProvider, soccerGoalsProvider, weatherProvider, fngProvider, llmProvider].filter((p) => p.enabled);
+const PROVIDERS = [cryptoProvider, sportsProvider, soccerGoalsProvider, weatherProvider, fngProvider, polymarketProvider, llmProvider].filter((p) => p.enabled);
 
 function start(deps) {
   const { createMarket, resolveMarket, listMarkets } = deps;
@@ -667,4 +769,4 @@ function start(deps) {
   setInterval(tickResolve, RESOLVE_INTERVAL_MS);
 }
 
-module.exports = { start, fetchJson, _providers: { cryptoProvider, sportsProvider, soccerGoalsProvider, weatherProvider, fngProvider, llmProvider } };
+module.exports = { start, fetchJson, _providers: { cryptoProvider, sportsProvider, soccerGoalsProvider, weatherProvider, fngProvider, polymarketProvider, llmProvider } };
