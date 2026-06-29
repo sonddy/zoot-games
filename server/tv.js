@@ -120,17 +120,88 @@ async function loadPlaylist() {
   }
 }
 
-async function getChannels() {
+// ── Health checking ─────────────────────────────────────────────────────────
+// We probe every HLS stream from the server. Because all playback is proxied
+// (server -> stream), a server-side probe is an exact predictor of whether a
+// channel will play for users. Dead and geo-blocked-for-us channels get hidden.
+const HEALTH_MS = Number(process.env.TV_HEALTH_MS) || 30 * 60 * 1000;
+const HEALTH_CONC = Number(process.env.TV_HEALTH_CONC) || 30;
+const health = new Map(); // url -> { ok, fails, t }
+let healthRunning = false;
+let healthDone = false;
+
+async function probeStream(url) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 7000);
+  try {
+    let u;
+    try { u = new URL(url); } catch (e) { return false; }
+    const r = await fetch(url, {
+      redirect: 'follow',
+      signal: ctrl.signal,
+      headers: { 'user-agent': UA, accept: '*/*', referer: u.origin + '/' },
+    });
+    if (!r.ok) return false;
+    const ct = r.headers.get('content-type') || '';
+    const txt = await r.text();
+    return /#EXTM3U/.test(txt) || /mpegurl|vnd\.apple/i.test(ct);
+  } catch (e) {
+    return false;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function runHealthCheck() {
+  if (healthRunning || !channels.length) return;
+  healthRunning = true;
+  const started = Date.now();
+  try {
+    const targets = channels.filter((c) => c.kind === 'hls');
+    let i = 0;
+    async function worker() {
+      while (i < targets.length) {
+        const c = targets[i++];
+        const ok = await probeStream(c.url);
+        const cur = health.get(c.url) || { fails: 0 };
+        health.set(c.url, ok ? { ok: true, fails: 0, t: Date.now() } : { ok: false, fails: (cur.fails || 0) + 1, t: Date.now() });
+      }
+    }
+    const workers = [];
+    for (let w = 0; w < HEALTH_CONC; w++) workers.push(worker());
+    await Promise.all(workers);
+    healthDone = true;
+    const okN = targets.filter((c) => { const h = health.get(c.url); return h && h.ok; }).length;
+    console.log('[tv] health check done:', okN, '/', targets.length, 'HLS channels online (' + Math.round((Date.now() - started) / 1000) + 's)');
+  } finally {
+    healthRunning = false;
+  }
+}
+
+// A channel is shown unless we've confirmed it dead/blocked at least twice in a
+// row (avoids flapping). Non-HLS channels open externally, so always shown.
+function isLive(c) {
+  if (c.kind !== 'hls') return true;
+  const h = health.get(c.url);
+  if (!h) return true;
+  if (h.ok) return true;
+  return h.fails < 2;
+}
+
+async function getChannels(opts) {
+  opts = opts || {};
   if (!channels.length || Date.now() - lastLoaded > REFRESH_MS) {
     if (!loadingPromise) loadingPromise = loadPlaylist().finally(() => { loadingPromise = null; });
     if (!channels.length) await loadingPromise; // first call must wait
   }
+  if (opts.liveOnly && healthDone) return channels.filter(isLive);
   return channels;
 }
 
 function init() {
-  loadPlaylist();
-  setInterval(loadPlaylist, REFRESH_MS).unref();
+  loadPlaylist().then(() => runHealthCheck());
+  setInterval(() => { loadPlaylist().then(() => runHealthCheck()); }, REFRESH_MS).unref();
+  setInterval(runHealthCheck, HEALTH_MS).unref();
 }
 
 // ── SSRF / open-relay protection ────────────────────────────────────────────
@@ -278,4 +349,4 @@ async function proxyHandler(req, res) {
   }
 }
 
-module.exports = { init, getChannels, proxyHandler, _parsePlaylist: parsePlaylist };
+module.exports = { init, getChannels, proxyHandler, _parsePlaylist: parsePlaylist, _probeStream: probeStream };

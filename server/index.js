@@ -331,7 +331,7 @@ app.get('/api/sports/:sport/:league/scoreboard', async (req, res) => {
 app.get('/api/tv/channels', async (req, res) => {
   if (process.env.TV_DISABLE === '1') return res.status(404).json({ error: 'Live TV disabled' });
   try {
-    const all = await tv.getChannels();
+    const all = await tv.getChannels({ liveOnly: req.query.all !== '1' });
     let list = all;
     if (req.query.sport === '1') list = list.filter((c) => c.sport);
     res.set('Cache-Control', 'public, max-age=300');
