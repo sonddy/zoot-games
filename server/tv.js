@@ -42,6 +42,9 @@ const SOURCES = [
   { url: 'https://iptv-org.github.io/iptv/countries/es.m3u', forceSport: true, sportsOnly: true, country: 'ES' },
   { url: 'https://iptv-org.github.io/iptv/countries/br.m3u', forceSport: true, sportsOnly: true, country: 'BR' },
   { url: 'https://iptv-org.github.io/iptv/categories/sports.m3u', forceSport: true },
+  // Haitian channels + free movie channels (Pluto/FAST etc.)
+  { url: 'https://iptv-org.github.io/iptv/countries/ht.m3u', country: 'HT' },
+  { url: 'https://iptv-org.github.io/iptv/categories/movies.m3u', forceMovie: true },
 ].concat((process.env.IPTV_EXTRA_SOURCES || '').split(',').map((s) => s.trim()).filter(Boolean).map((url) => ({ url, forceSport: false })));
 
 let channels = [];
@@ -93,7 +96,19 @@ function parsePlaylist(text, opts) {
       const re = /([a-zA-Z0-9-]+)="([^"]*)"/g;
       let m;
       while ((m = re.exec(line))) attrs[m[1]] = m[2];
-      const name = line.indexOf(',') >= 0 ? line.slice(line.indexOf(',') + 1).trim() : '';
+      // Display name is the text after the attribute section. Some entries embed
+      // commas inside attribute values (e.g. user-agent), so take the text after
+      // the last quote to avoid grabbing attribute fragments.
+      let name;
+      const lastQuote = line.lastIndexOf('"');
+      if (lastQuote >= 0) {
+        const after = line.slice(lastQuote + 1);
+        const ci = after.indexOf(',');
+        name = ci >= 0 ? after.slice(ci + 1).trim() : '';
+      } else {
+        const ci = line.indexOf(',');
+        name = ci >= 0 ? line.slice(ci + 1).trim() : '';
+      }
       cur = {
         name: cleanName(name) || cleanName(attrs['tvg-name']) || 'Channel',
         logo: attrs['tvg-logo'] || '',
@@ -104,11 +119,13 @@ function parsePlaylist(text, opts) {
     } else if (!line.startsWith('#')) {
       if (cur) {
         const isSport = /sport/i.test(cur.group) || SPORT_RE.test(cur.name) || SPORT_RE.test(cur.tvgId);
+        const isMovie = !!o.forceMovie || /\bmovies?\b|\bcinema\b/i.test(cur.group);
         // For country lists we only want their Sports-category channels.
         if (o.sportsOnly && !isSport) { cur = null; continue; }
         cur.url = line;
         cur.kind = classifyKind(line);
         cur.sport = !!o.forceSport || isSport;
+        cur.movie = isMovie;
         delete cur.tvgId;
         try { hosts.add(new URL(line).hostname.toLowerCase()); } catch (e) { /* skip */ }
         out.push(cur);
@@ -144,6 +161,7 @@ async function loadPlaylist() {
         if (ex) {
           if (!ex.country && c.country) ex.country = c.country; // enrich missing country
           if (!ex.sport && c.sport) ex.sport = true;
+          if (!ex.movie && c.movie) ex.movie = true;
           continue;
         }
         byUrl.set(c.url, c);
@@ -188,7 +206,7 @@ async function getChannelList(opts) {
     const h = health.get(c.url);
     return {
       id: c.id, name: c.name, logo: c.logo, country: c.country,
-      group: c.group, kind: c.kind, sport: c.sport, url: c.url,
+      group: c.group, kind: c.kind, sport: c.sport, movie: !!c.movie, url: c.url,
       ok: h ? h.ok : null,
     };
   });

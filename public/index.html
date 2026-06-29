@@ -1520,6 +1520,7 @@
     .tv-meta { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; justify-content: center; }
     .tv-flag { font-size: 0.6rem; color: var(--text2); background: rgba(255,255,255,0.06); padding: 0.1rem 0.35rem; border-radius: 5px; letter-spacing: 0.4px; }
     .tv-sport-chip { font-size: 0.55rem; font-weight: 800; color: #00d4aa; background: rgba(0,212,170,0.14); padding: 0.1rem 0.35rem; border-radius: 5px; letter-spacing: 0.4px; }
+    .tv-movie-chip { font-size: 0.55rem; font-weight: 800; color: #b388ff; background: rgba(124,77,255,0.16); padding: 0.1rem 0.35rem; border-radius: 5px; letter-spacing: 0.4px; }
     .tv-kind-chip { font-size: 0.55rem; font-weight: 800; color: #ffce6b; background: rgba(255,193,7,0.14); padding: 0.1rem 0.35rem; border-radius: 5px; }
     .tv-more { grid-column: 1 / -1; text-align: center; color: var(--text2); font-size: 0.8rem; padding: 0.8rem; }
     .tv-empty { grid-column: 1 / -1; text-align: center; padding: 2.5rem 1rem; color: var(--text2); }
@@ -3032,7 +3033,7 @@
             <span class="refresh-icon">&#8635;</span> Refresh
           </button>
         </div>
-        <p>Watch <b>free over-the-air channels</b> from around the world &mdash; sports, news and more. Streams are third-party public feeds; some may be offline or geo-restricted. If one won't load, try another.</p>
+        <p>Watch <b>free over-the-air channels</b> from around the world &mdash; sports, movies, news and more. Streams are third-party public feeds; some may be offline or geo-restricted. If one won't load, try another.</p>
       </div>
 
       <div class="tv-controls">
@@ -8829,8 +8830,10 @@
         channels.forEach(function(c) { if (c.country) counts[c.country] = (counts[c.country] || 0) + 1; });
         var countries = Object.keys(counts).sort(function(a, b) { return counts[b] - counts[a]; });
         var sportN = channels.filter(function(c) { return c.sport; }).length;
+        var movieN = channels.filter(function(c) { return c.movie; }).length;
         var html = '';
         html += '<button class="sport-tab' + (activeCat === 'sport' ? ' active' : '') + '" data-tvcat="sport">\u26BD Sports (' + sportN + ')</button>';
+        html += '<button class="sport-tab' + (activeCat === 'movie' ? ' active' : '') + '" data-tvcat="movie">\uD83C\uDFAC Movies (' + movieN + ')</button>';
         html += '<button class="sport-tab' + (activeCat === 'all' ? ' active' : '') + '" data-tvcat="all">All (' + channels.length + ')</button>';
         countries.forEach(function(cc) {
           html += '<button class="sport-tab' + (activeCat === cc ? ' active' : '') + '" data-tvcat="' + cc + '">' + flagEmoji(cc) + ' ' + esc(cc) + ' (' + counts[cc] + ')</button>';
@@ -8849,6 +8852,7 @@
 
       function matchCat(c) {
         if (activeCat === 'sport') return c.sport;
+        if (activeCat === 'movie') return c.movie;
         if (activeCat === 'all') return true;
         return c.country === activeCat;
       }
@@ -8879,6 +8883,7 @@
         var meta = '';
         if (c.country) meta += '<span class="tv-flag">' + flagEmoji(c.country) + ' ' + esc(c.country) + '</span>';
         if (c.sport) meta += '<span class="tv-sport-chip">SPORT</span>';
+        if (c.movie) meta += '<span class="tv-movie-chip">MOVIE</span>';
         if (c.kind && c.kind !== 'hls') meta += '<span class="tv-kind-chip">' + esc(c.kind.toUpperCase()) + '</span>';
         return '<div class="tv-card" data-id="' + esc(c.id) + '">' +
           '<div class="tv-logo-wrap">' + logo + '</div>' +
