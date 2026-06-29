@@ -36,6 +36,11 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 // Sports category gives far more sports coverage; forceSport flags them all.
 const SOURCES = [
   { url: process.env.IPTV_PLAYLIST_URL || 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8', forceSport: false },
+  // Country sports first so their country tag wins de-dup. Only Sports-category
+  // channels are kept from these lists.
+  { url: 'https://iptv-org.github.io/iptv/countries/uk.m3u', forceSport: true, sportsOnly: true, country: 'GB' },
+  { url: 'https://iptv-org.github.io/iptv/countries/es.m3u', forceSport: true, sportsOnly: true, country: 'ES' },
+  { url: 'https://iptv-org.github.io/iptv/countries/br.m3u', forceSport: true, sportsOnly: true, country: 'BR' },
   { url: 'https://iptv-org.github.io/iptv/categories/sports.m3u', forceSport: true },
 ].concat((process.env.IPTV_EXTRA_SOURCES || '').split(',').map((s) => s.trim()).filter(Boolean).map((url) => ({ url, forceSport: false })));
 
@@ -74,7 +79,8 @@ function classifyKind(url) {
   return 'other';
 }
 
-function parsePlaylist(text, forceSport) {
+function parsePlaylist(text, opts) {
+  const o = opts || {};
   const lines = String(text || '').split(/\r?\n/);
   const out = [];
   const hosts = new Set();
@@ -91,15 +97,18 @@ function parsePlaylist(text, forceSport) {
       cur = {
         name: cleanName(name) || cleanName(attrs['tvg-name']) || 'Channel',
         logo: attrs['tvg-logo'] || '',
-        country: (attrs['tvg-country'] || '').toUpperCase(),
+        country: (attrs['tvg-country'] || o.country || '').toUpperCase(),
         group: attrs['group-title'] || 'Other',
         tvgId: attrs['tvg-id'] || '',
       };
     } else if (!line.startsWith('#')) {
       if (cur) {
+        const isSport = /sport/i.test(cur.group) || SPORT_RE.test(cur.name) || SPORT_RE.test(cur.tvgId);
+        // For country lists we only want their Sports-category channels.
+        if (o.sportsOnly && !isSport) { cur = null; continue; }
         cur.url = line;
         cur.kind = classifyKind(line);
-        cur.sport = !!forceSport || SPORT_RE.test(cur.name) || SPORT_RE.test(cur.group) || SPORT_RE.test(cur.tvgId);
+        cur.sport = !!o.forceSport || isSport;
         delete cur.tvgId;
         try { hosts.add(new URL(line).hostname.toLowerCase()); } catch (e) { /* skip */ }
         out.push(cur);
@@ -124,15 +133,20 @@ async function fetchText(url, timeoutMs = 20000) {
 
 async function loadPlaylist() {
   const merged = [];
-  const seen = new Set();   // dedupe by URL
+  const byUrl = new Map();   // dedupe by URL (+ enrich)
   const hosts = new Set();
   for (const src of SOURCES) {
     try {
       const text = await fetchText(src.url);
-      const { list, hosts: h } = parsePlaylist(text, src.forceSport);
+      const { list, hosts: h } = parsePlaylist(text, src);
       for (const c of list) {
-        if (seen.has(c.url)) continue;
-        seen.add(c.url);
+        const ex = byUrl.get(c.url);
+        if (ex) {
+          if (!ex.country && c.country) ex.country = c.country; // enrich missing country
+          if (!ex.sport && c.sport) ex.sport = true;
+          continue;
+        }
+        byUrl.set(c.url, c);
         merged.push(c);
       }
       h.forEach((x) => hosts.add(x));
