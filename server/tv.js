@@ -13,25 +13,38 @@
  * relaying (only hosts seen in the playlist or referenced by an allowed manifest
  * are permitted).
  *
+ * Sources are merged from multiple open playlists (Free-TV + iptv-org). A
+ * background health-checker probes each stream from THIS server (the same IP the
+ * proxy uses) and hides ones that are down or geo-blocked, so the grid converges
+ * to channels that actually play.
+ *
  * Env:
- *   IPTV_PLAYLIST_URL   override the source playlist URL
+ *   IPTV_PLAYLIST_URL   override the primary (Free-TV) playlist URL
+ *   IPTV_EXTRA_SOURCES  comma-separated extra .m3u/.m3u8 URLs to merge
  *   TV_DISABLE=1        disable the feature entirely
+ *   TV_CHECK_DISABLE=1  disable the background health-checker
  */
 
 const dns = require('dns').promises;
 const net = require('net');
 const { Readable } = require('stream');
 
-const PLAYLIST_URL = process.env.IPTV_PLAYLIST_URL ||
-  'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8';
 const REFRESH_MS = 6 * 60 * 60 * 1000;
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
+// Playlist sources, merged in order (first wins on duplicate URL). iptv-org's
+// Sports category gives far more sports coverage; forceSport flags them all.
+const SOURCES = [
+  { url: process.env.IPTV_PLAYLIST_URL || 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8', forceSport: false },
+  { url: 'https://iptv-org.github.io/iptv/categories/sports.m3u', forceSport: true },
+].concat((process.env.IPTV_EXTRA_SOURCES || '').split(',').map((s) => s.trim()).filter(Boolean).map((url) => ({ url, forceSport: false })));
+
 let channels = [];
-let staticHosts = new Set();          // hosts that appear in the playlist
+let staticHosts = new Set();          // hosts that appear in the playlists
 const dynamicHosts = new Set();        // segment/CDN hosts learned from manifests
 let lastLoaded = 0;
 let loadingPromise = null;
+const health = new Map();              // url -> { ok: bool|undefined, t: ms }
 
 // Sports detection by channel name / group / tvg-id keywords.
 const SPORT_RE = new RegExp([
@@ -61,12 +74,11 @@ function classifyKind(url) {
   return 'other';
 }
 
-function parsePlaylist(text) {
+function parsePlaylist(text, forceSport) {
   const lines = String(text || '').split(/\r?\n/);
   const out = [];
   const hosts = new Set();
   let cur = null;
-  let idx = 0;
   for (const raw of lines) {
     const line = raw.trim();
     if (!line) continue;
@@ -87,8 +99,7 @@ function parsePlaylist(text) {
       if (cur) {
         cur.url = line;
         cur.kind = classifyKind(line);
-        cur.id = 'tv_' + (idx++);
-        cur.sport = SPORT_RE.test(cur.name) || SPORT_RE.test(cur.group) || SPORT_RE.test(cur.tvgId);
+        cur.sport = !!forceSport || SPORT_RE.test(cur.name) || SPORT_RE.test(cur.group) || SPORT_RE.test(cur.tvgId);
         delete cur.tvgId;
         try { hosts.add(new URL(line).hostname.toLowerCase()); } catch (e) { /* skip */ }
         out.push(cur);
@@ -99,109 +110,123 @@ function parsePlaylist(text) {
   return { list: out, hosts };
 }
 
-async function loadPlaylist() {
+async function fetchText(url, timeoutMs = 20000) {
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 20000);
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const r = await fetch(PLAYLIST_URL, { signal: ctrl.signal, headers: { 'user-agent': UA } });
+    const r = await fetch(url, { signal: ctrl.signal, headers: { 'user-agent': UA } });
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    const text = await r.text();
-    const { list, hosts } = parsePlaylist(text);
-    if (list.length) {
-      channels = list;
-      staticHosts = hosts;
-      lastLoaded = Date.now();
-      console.log('[tv] loaded', list.length, 'channels (' + list.filter((c) => c.sport).length + ' sports) from', hosts.size, 'hosts');
-    }
-  } catch (e) {
-    console.warn('[tv] playlist load failed:', e.message);
+    return await r.text();
   } finally {
     clearTimeout(t);
   }
 }
 
-// ── Health checking ─────────────────────────────────────────────────────────
-// We probe every HLS stream from the server. Because all playback is proxied
-// (server -> stream), a server-side probe is an exact predictor of whether a
-// channel will play for users. Dead and geo-blocked-for-us channels get hidden.
-const HEALTH_MS = Number(process.env.TV_HEALTH_MS) || 30 * 60 * 1000;
-const HEALTH_CONC = Number(process.env.TV_HEALTH_CONC) || 30;
-const health = new Map(); // url -> { ok, fails, t }
-let healthRunning = false;
-let healthDone = false;
-
-async function probeStream(url) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 7000);
-  try {
-    let u;
-    try { u = new URL(url); } catch (e) { return false; }
-    const r = await fetch(url, {
-      redirect: 'follow',
-      signal: ctrl.signal,
-      headers: { 'user-agent': UA, accept: '*/*', referer: u.origin + '/' },
-    });
-    if (!r.ok) return false;
-    const ct = r.headers.get('content-type') || '';
-    const txt = await r.text();
-    return /#EXTM3U/.test(txt) || /mpegurl|vnd\.apple/i.test(ct);
-  } catch (e) {
-    return false;
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-async function runHealthCheck() {
-  if (healthRunning || !channels.length) return;
-  healthRunning = true;
-  const started = Date.now();
-  try {
-    const targets = channels.filter((c) => c.kind === 'hls');
-    let i = 0;
-    async function worker() {
-      while (i < targets.length) {
-        const c = targets[i++];
-        const ok = await probeStream(c.url);
-        const cur = health.get(c.url) || { fails: 0 };
-        health.set(c.url, ok ? { ok: true, fails: 0, t: Date.now() } : { ok: false, fails: (cur.fails || 0) + 1, t: Date.now() });
+async function loadPlaylist() {
+  const merged = [];
+  const seen = new Set();   // dedupe by URL
+  const hosts = new Set();
+  for (const src of SOURCES) {
+    try {
+      const text = await fetchText(src.url);
+      const { list, hosts: h } = parsePlaylist(text, src.forceSport);
+      for (const c of list) {
+        if (seen.has(c.url)) continue;
+        seen.add(c.url);
+        merged.push(c);
       }
+      h.forEach((x) => hosts.add(x));
+    } catch (e) {
+      console.warn('[tv] source failed:', src.url, '-', e.message);
     }
-    const workers = [];
-    for (let w = 0; w < HEALTH_CONC; w++) workers.push(worker());
-    await Promise.all(workers);
-    healthDone = true;
-    const okN = targets.filter((c) => { const h = health.get(c.url); return h && h.ok; }).length;
-    console.log('[tv] health check done:', okN, '/', targets.length, 'HLS channels online (' + Math.round((Date.now() - started) / 1000) + 's)');
-  } finally {
-    healthRunning = false;
+  }
+  if (merged.length) {
+    merged.forEach((c, i) => { c.id = 'tv_' + i; });
+    channels = merged;
+    staticHosts = hosts;
+    lastLoaded = Date.now();
+    console.log('[tv] loaded', merged.length, 'channels (' + merged.filter((c) => c.sport).length + ' sports) from', hosts.size, 'hosts');
+    startHealthCheck();
   }
 }
 
-// A channel is shown unless we've confirmed it dead/blocked at least twice in a
-// row (avoids flapping). Non-HLS channels open externally, so always shown.
-function isLive(c) {
-  if (c.kind !== 'hls') return true;
-  const h = health.get(c.url);
-  if (!h) return true;
-  if (h.ok) return true;
-  return h.fails < 2;
-}
-
-async function getChannels(opts) {
-  opts = opts || {};
+async function getChannels() {
   if (!channels.length || Date.now() - lastLoaded > REFRESH_MS) {
     if (!loadingPromise) loadingPromise = loadPlaylist().finally(() => { loadingPromise = null; });
     if (!channels.length) await loadingPromise; // first call must wait
   }
-  if (opts.liveOnly && healthDone) return channels.filter(isLive);
   return channels;
 }
 
+// Channels ready for the client: sports-first, dead/blocked hidden once known.
+async function getChannelList(opts) {
+  const o = opts || {};
+  await getChannels();
+  let list = channels;
+  if (o.sportOnly) list = list.filter((c) => c.sport);
+  if (!o.includeDead) {
+    list = list.filter((c) => {
+      const h = health.get(c.url);
+      return !h || h.ok !== false; // keep unchecked + alive, drop known-dead
+    });
+  }
+  return list.map((c) => {
+    const h = health.get(c.url);
+    return {
+      id: c.id, name: c.name, logo: c.logo, country: c.country,
+      group: c.group, kind: c.kind, sport: c.sport, url: c.url,
+      ok: h ? h.ok : null,
+    };
+  });
+}
+
+// ── Background health checker ───────────────────────────────────────────────
+// Probes streams from this server (same IP the proxy uses), so results predict
+// what will actually play. Sports are checked first.
+let checkTimer = null;
+let checkQueue = [];
+let checkPos = 0;
+
+async function checkOne(c) {
+  if (c.kind !== 'hls') { health.set(c.url, { ok: true, t: Date.now() }); return; }
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 7000);
+  let ok = false;
+  try {
+    const origin = new URL(c.url).origin;
+    const r = await fetch(c.url, { signal: ctrl.signal, redirect: 'follow', headers: { 'user-agent': UA, referer: origin + '/', origin } });
+    if (r.ok) {
+      const txt = await r.text();
+      ok = txt.indexOf('#EXTM3U') >= 0; // a real manifest
+    }
+  } catch (e) {
+    ok = false;
+  } finally {
+    clearTimeout(t);
+  }
+  health.set(c.url, { ok, t: Date.now() });
+}
+
+function startHealthCheck() {
+  if (checkTimer || process.env.TV_CHECK_DISABLE === '1') return;
+  const BATCH = Number(process.env.TV_CHECK_BATCH) || 25;
+  const INTERVAL = Number(process.env.TV_CHECK_INTERVAL_MS) || 12000;
+  const reorder = () => channels.slice().sort((a, b) => (a.sport === b.sport ? 0 : (a.sport ? -1 : 1)));
+  checkQueue = reorder();
+  checkPos = 0;
+  checkTimer = setInterval(async () => {
+    if (!channels.length) return;
+    if (checkPos >= checkQueue.length) { checkQueue = reorder(); checkPos = 0; } // loop to refresh statuses
+    const batch = checkQueue.slice(checkPos, checkPos + BATCH);
+    checkPos += BATCH;
+    try { await Promise.all(batch.map(checkOne)); } catch (e) { /* ignore */ }
+  }, INTERVAL);
+  checkTimer.unref();
+}
+
 function init() {
-  loadPlaylist().then(() => runHealthCheck());
-  setInterval(() => { loadPlaylist().then(() => runHealthCheck()); }, REFRESH_MS).unref();
-  setInterval(runHealthCheck, HEALTH_MS).unref();
+  loadPlaylist();
+  setInterval(loadPlaylist, REFRESH_MS).unref();
 }
 
 // ── SSRF / open-relay protection ────────────────────────────────────────────
@@ -349,4 +374,4 @@ async function proxyHandler(req, res) {
   }
 }
 
-module.exports = { init, getChannels, proxyHandler, _parsePlaylist: parsePlaylist, _probeStream: probeStream };
+module.exports = { init, getChannels, getChannelList, proxyHandler, _parsePlaylist: parsePlaylist };
