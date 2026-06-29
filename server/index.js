@@ -18,6 +18,7 @@ const {
 } = require('@solana/spl-token');
 const persistence = require('./persistence');
 const marketAgent = require('./marketAgent');
+const tv = require('./tv');
 const DominoGame = require('./games/domino');
 const TicTacToeGame = require('./games/tictactoe');
 const MancalaGame = require('./games/mancala');
@@ -325,6 +326,23 @@ app.get('/api/sports/:sport/:league/scoreboard', async (req, res) => {
     res.status(502).json({ error: 'Failed to fetch from ESPN' });
   }
 });
+
+// ── Live TV (free IPTV channels, proxied for CORS) ──────────────────────────
+app.get('/api/tv/channels', async (req, res) => {
+  if (process.env.TV_DISABLE === '1') return res.status(404).json({ error: 'Live TV disabled' });
+  try {
+    const all = await tv.getChannels();
+    let list = all;
+    if (req.query.sport === '1') list = list.filter((c) => c.sport);
+    res.set('Cache-Control', 'public, max-age=300');
+    res.json({ count: list.length, channels: list });
+  } catch (e) {
+    console.error('[tv] channels error:', e.message);
+    res.status(502).json({ error: 'Failed to load channels' });
+  }
+});
+
+app.get('/api/tv/proxy', tv.proxyHandler);
 
 const PANDASCORE_TOKEN = process.env.PANDASCORE_API_KEY || '';
 
@@ -1833,6 +1851,9 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', async () => {
   console.log(`ZG (Zoot Games) running on http://localhost:${PORT}`);
   try { await recoverFromPreviousRun(); } catch (e) { console.error('Recovery failed:', e.message); }
+
+  // Live TV: load the free IPTV playlist in the background (refreshes every 6h).
+  if (process.env.TV_DISABLE !== '1') tv.init();
 
   // Smart agent: auto-open prediction markets from free live feeds and
   // auto-resolve them from the same feeds. P2P even-money, so no house risk.
