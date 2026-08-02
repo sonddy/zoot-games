@@ -130,6 +130,8 @@ async function handleUpdate(update) {
     reply = SUPPORT_TEXT;
   } else if (cmd === '/play') {
     reply = 'Let\u2019s go — tap the button below.';
+  } else if (cmd === '/privacy') {
+    reply = 'Zoot Games collects only what it needs to run games: your Telegram ID and name, your wallet address if you connect one, and your game/bet history. We never see your private keys, messages, or contacts, and we don\u2019t sell your data.\n\nFull policy: ' + PUBLIC_URL + '/privacy.html';
   } else {
     reply = 'Tap the button below to open Zoot Games, or use /help to see how it works.';
   }
