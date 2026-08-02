@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZG — Wallet Connected</title>
+  <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0b0f19; color: #e8ecf1;
+      font-family: 'Inter', -apple-system, sans-serif;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 1.5rem; text-align: center;
+    }
+    .card { max-width: 380px; width: 100%; background: #151f32; border-radius: 16px; padding: 2rem 1.5rem; }
+    .icon { font-size: 3rem; margin-bottom: 1rem; }
+    h1 { font-size: 1.25rem; margin-bottom: 0.6rem; }
+    p { color: #7a8ba5; font-size: 0.95rem; line-height: 1.5; margin-bottom: 1.5rem; }
+    a.btn {
+      display: inline-block; background: linear-gradient(135deg, #00d4aa, #00897b);
+      color: #04120e; font-weight: 700; text-decoration: none;
+      padding: 0.85rem 1.8rem; border-radius: 10px; font-size: 1rem;
+    }
+    .err { color: #ff3d57; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon" id="icon">&#8987;</div>
+    <h1 id="title">Finishing up...</h1>
+    <p id="msg">Passing your Phantom response back to Zoot Games.</p>
+    <a class="btn" id="back-btn" style="display:none" href="#">Back to Telegram</a>
+  </div>
+  <script>
+    (function () {
+      var qs = new URLSearchParams(window.location.search);
+      var sid = qs.get('sid');
+      var iconEl = document.getElementById('icon');
+      var titleEl = document.getElementById('title');
+      var msgEl = document.getElementById('msg');
+      var backBtn = document.getElementById('back-btn');
+
+      function showBackButton() {
+        fetch('/api/telegram/info').then(function (r) { return r.json(); }).then(function (info) {
+          if (info && info.botUsername) {
+            backBtn.href = 'https://t.me/' + info.botUsername;
+            backBtn.style.display = 'inline-block';
+          }
+        }).catch(function () {});
+      }
+
+      function done(ok, title, msg) {
+        iconEl.innerHTML = ok ? '&#9989;' : '&#10060;';
+        titleEl.textContent = title;
+        if (!ok) titleEl.className = 'err';
+        msgEl.textContent = msg;
+        showBackButton();
+      }
+
+      if (!sid) {
+        done(false, 'Missing session', 'This page should only be opened by Phantom. Go back to Telegram and try again.');
+        return;
+      }
+
+      var params = {};
+      qs.forEach(function (v, k) { if (k !== 'sid' && k !== 'flow') params[k] = v; });
+
+      fetch('/api/wallet-bridge/complete', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sid: sid, params: params }),
+      }).then(function (r) {
+        if (r.ok) {
+          if (params.errorCode) {
+            done(true, 'Request cancelled', 'You can close this page and return to Telegram.');
+          } else {
+            done(true, 'All set!', 'Return to Telegram — Zoot Games will pick it up automatically within a few seconds.');
+          }
+        } else {
+          done(false, 'Something went wrong', 'Could not hand the response back. Return to Telegram and try again.');
+        }
+      }).catch(function () {
+        done(false, 'Connection error', 'Could not reach the game server. Return to Telegram and try again.');
+      });
+    })();
+  </script>
+</body>
+</html>

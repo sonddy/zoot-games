@@ -17,6 +17,7 @@
   <meta name="description" content="Play Domino, Tic Tac Toe, Mancala, Checkers, Chess — bet Solana crypto and win!" />
   <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     button, a, input, select, textarea { touch-action: manipulation; }
@@ -3257,6 +3258,41 @@
     }
 
     // ════════════════════════════════════════
+    // TELEGRAM MINI APP
+    // ════════════════════════════════════════
+    // Detects when the game is running inside Telegram (launched from the bot
+    // menu button or an inline "Play" button). Provides the signed initData
+    // used for server-side login and helpers for the webview environment.
+    var TelegramApp = (function() {
+      function get() { return (window.Telegram && window.Telegram.WebApp) || null; }
+      function isActive() { var w = get(); return !!(w && w.initData && w.initData.length > 0); }
+      function isMobile() { var w = get(); return !!w && (w.platform === 'android' || w.platform === 'ios'); }
+      function initDataRaw() { var w = get(); return w ? (w.initData || '') : ''; }
+      function user() { var w = get(); return (w && w.initDataUnsafe && w.initDataUnsafe.user) || null; }
+      function openExternal(url) {
+        var w = get();
+        if (w && typeof w.openLink === 'function') { w.openLink(url); return true; }
+        return false;
+      }
+      function init() {
+        var w = get();
+        if (!w || !isActive()) return;
+        try { w.ready(); w.expand(); } catch (_) {}
+        // Board games use drags/swipes — stop Telegram from minimizing the app.
+        try { if (typeof w.disableVerticalSwipes === 'function') w.disableVerticalSwipes(); } catch (_) {}
+        try {
+          if (typeof w.setHeaderColor === 'function') w.setHeaderColor('#0b0f19');
+          if (typeof w.setBackgroundColor === 'function') w.setBackgroundColor('#0b0f19');
+        } catch (_) {}
+        document.documentElement.classList.add('tg-app');
+      }
+      return {
+        isActive: isActive, isMobile: isMobile, initDataRaw: initDataRaw,
+        user: user, openExternal: openExternal, init: init,
+      };
+    })();
+
+    // ════════════════════════════════════════
     // PHANTOM WALLET
     // ════════════════════════════════════════
     var PhantomWallet = (function() {
@@ -3268,6 +3304,13 @@
         return typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
       }
 
+      // The encrypted deeplink protocol is used both in the Capacitor app and
+      // inside Telegram on phones (no extension there, but the Phantom app can
+      // be reached via universal links + the server-side wallet bridge).
+      function useDeeplinkProtocol() {
+        return isNativeMobile() || (TelegramApp.isActive() && TelegramApp.isMobile());
+      }
+
       function getProvider() {
         if (window.solana && window.solana.isPhantom) return window.solana;
         if (window.phantom && window.phantom.solana && window.phantom.solana.isPhantom) return window.phantom.solana;
@@ -3275,26 +3318,29 @@
       }
 
       async function connect() {
-        if (isNativeMobile()) {
+        if (useDeeplinkProtocol()) {
           publicKey = await PhantomMobile.connect();
           return publicKey;
         }
         provider = getProvider();
-        if (!provider) throw new Error('Phantom wallet not found. Please install it from phantom.app');
+        if (!provider) {
+          if (TelegramApp.isActive()) throw new Error('Wallet connections need Telegram on your phone, or open zootgames.org in a browser');
+          throw new Error('Phantom wallet not found. Please install it from phantom.app');
+        }
         var resp = await provider.connect({ onlyIfTrusted: false });
         publicKey = resp.publicKey.toString();
         return publicKey;
       }
 
       function disconnect() {
-        if (isNativeMobile()) { PhantomMobile.disconnect(); publicKey = null; return; }
+        if (useDeeplinkProtocol()) { PhantomMobile.disconnect(); publicKey = null; return; }
         if (provider) try { provider.disconnect(); } catch(_){}
         publicKey = null;
         provider = null;
       }
 
       function getPublicKey() {
-        if (isNativeMobile()) return PhantomMobile.getPublicKey() || publicKey;
+        if (useDeeplinkProtocol()) return PhantomMobile.getPublicKey() || publicKey;
         return publicKey;
       }
       function getProviderRef() { return provider; }
@@ -3319,7 +3365,7 @@
        * Returns the transaction signature in both paths.
        */
       async function signAndSend(transaction, connection, fromPubkey) {
-        if (isNativeMobile()) {
+        if (useDeeplinkProtocol()) {
           if (!transaction.feePayer) transaction.feePayer = fromPubkey;
           if (!transaction.recentBlockhash) {
             var bh = await connection.getLatestBlockhash('confirmed');
@@ -3375,6 +3421,7 @@
 
       return {
         isNativeMobile: isNativeMobile,
+        useDeeplinkProtocol: useDeeplinkProtocol,
         connect: connect, disconnect: disconnect,
         getPublicKey: getPublicKey, getProvider: getProviderRef,
         shortenAddress: shortenAddress, getRpcUrl: getRpcUrl,
@@ -3403,6 +3450,47 @@
 
       function isNative() {
         return typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+      }
+
+      // Inside Telegram there's no zootgames:// deeplink handler, so Phantom
+      // redirects to /wallet-return.html in the system browser instead. That
+      // page relays the (end-to-end encrypted) response to our server and the
+      // Mini App picks it up by polling. Same crypto, different transport.
+      function usesBridge() {
+        return !isNative() && TelegramApp.isActive();
+      }
+
+      function newBridgeSid() {
+        if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+        var chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+        var s = '';
+        for (var i = 0; i < 32; i++) s += chars[Math.floor(Math.random() * chars.length)];
+        return s;
+      }
+
+      function bridgeRedirect(flow, sid) {
+        return window.location.origin + '/wallet-return.html?flow=' + flow + '&sid=' + sid;
+      }
+
+      function pollBridge(sid, kind) {
+        var startedAt = Date.now();
+        var timer = setInterval(function() {
+          if (!pendingRequests[kind] || Date.now() - startedAt > 180000) {
+            clearInterval(timer);
+            return;
+          }
+          fetch('/api/wallet-bridge/poll?sid=' + encodeURIComponent(sid))
+            .then(function(res) { return res.json(); })
+            .then(function(json) {
+              if (!json || !json.done) return;
+              clearInterval(timer);
+              var params = new URLSearchParams();
+              Object.keys(json.params || {}).forEach(function(k) { params.set(k, json.params[k]); });
+              if (kind === 'connect') return handleConnectCallback(params);
+              return handleSignCallback(params);
+            })
+            .catch(function() {});
+        }, 2500);
       }
 
       async function bs58() {
@@ -3435,19 +3523,19 @@
         return dappKeypair;
       }
 
-      async function buildConnectUrl() {
+      async function buildConnectUrl(redirectLink) {
         var b58 = await bs58();
         var kp = ensureKeypair();
         var params = new URLSearchParams({
           dapp_encryption_public_key: b58.encode(kp.publicKey),
           cluster: 'mainnet-beta',
           app_url: window.location.origin,
-          redirect_link: REDIRECT_BASE + 'onPhantomConnect',
+          redirect_link: redirectLink || (REDIRECT_BASE + 'onPhantomConnect'),
         });
         return 'https://phantom.app/ul/v1/connect?' + params.toString();
       }
 
-      async function buildSignDeeplink(transaction, methodPath) {
+      async function buildSignDeeplink(transaction, methodPath, redirectLink) {
         if (!session || !sharedSecret) throw new Error('Phantom not connected');
         var b58 = await bs58();
         var serialized = transaction.serialize({ requireAllSignatures: false, verifySignatures: false });
@@ -3462,13 +3550,13 @@
         var params = new URLSearchParams({
           dapp_encryption_public_key: b58.encode(kp.publicKey),
           nonce: b58.encode(nonce),
-          redirect_link: REDIRECT_BASE + 'onPhantomSign',
+          redirect_link: redirectLink || (REDIRECT_BASE + 'onPhantomSign'),
           payload: b58.encode(encrypted),
         });
         return 'https://phantom.app/ul/v1/' + methodPath + '?' + params.toString();
       }
-      function buildSignAndSendUrl(transaction) { return buildSignDeeplink(transaction, 'signAndSendTransaction'); }
-      function buildSignTxUrl(transaction)      { return buildSignDeeplink(transaction, 'signTransaction'); }
+      function buildSignAndSendUrl(transaction, redirectLink) { return buildSignDeeplink(transaction, 'signAndSendTransaction', redirectLink); }
+      function buildSignTxUrl(transaction, redirectLink)      { return buildSignDeeplink(transaction, 'signTransaction', redirectLink); }
 
       async function openPhantomUrl(url) {
         // Try multiple methods to launch the Phantom universal link, since
@@ -3476,6 +3564,10 @@
         // dispatches them through Android's intent system. Different builds
         // expose different routes — try each in turn.
         console.log('[PhantomMobile] opening URL:', url.substring(0, 80) + '...');
+
+        // Telegram Mini App: hand the universal link to Telegram, which opens
+        // it outside the webview (the Phantom app intercepts it on phones).
+        if (usesBridge() && TelegramApp.openExternal(url)) return;
 
         // Method 1: anchor click with target=_blank — Capacitor treats this
         // as an explicit user gesture and forwards to Intent.ACTION_VIEW.
@@ -3603,17 +3695,20 @@
 
       async function connect() {
         if (restoreSession() && userPubKey) return userPubKey;
-        var url = await buildConnectUrl();
+        var sid = usesBridge() ? newBridgeSid() : null;
+        var url = await buildConnectUrl(sid ? bridgeRedirect('connect', sid) : null);
         var promise = new Promise(function(resolve, reject) {
-          pendingRequests.connect = { resolve: resolve, reject: reject };
+          var req = { resolve: resolve, reject: reject };
+          pendingRequests.connect = req;
           setTimeout(function() {
-            if (pendingRequests.connect === promise) {
+            if (pendingRequests.connect === req) {
               delete pendingRequests.connect;
               reject(new Error('Phantom connection timed out — please try again'));
             }
           }, 120000);
         });
         await openPhantomUrl(url);
+        if (sid) pollBridge(sid, 'connect');
         return promise;
       }
 
@@ -3627,7 +3722,8 @@
 
       async function signAndSendTransaction(transaction) {
         if (!session) throw new Error('Wallet not connected');
-        var url = await buildSignAndSendUrl(transaction);
+        var sid = usesBridge() ? newBridgeSid() : null;
+        var url = await buildSignAndSendUrl(transaction, sid ? bridgeRedirect('sign', sid) : null);
         var promise = new Promise(function(resolve, reject) {
           pendingRequests.sign = { resolve: resolve, reject: reject };
           setTimeout(function() {
@@ -3638,13 +3734,15 @@
           }, 120000);
         });
         await openPhantomUrl(url);
+        if (sid) pollBridge(sid, 'sign');
         var json = await promise;
         return json && json.signature;
       }
 
       async function signTransactionOnly(transaction) {
         if (!session) throw new Error('Wallet not connected');
-        var url = await buildSignTxUrl(transaction);
+        var sid = usesBridge() ? newBridgeSid() : null;
+        var url = await buildSignTxUrl(transaction, sid ? bridgeRedirect('sign', sid) : null);
         var promise = new Promise(function(resolve, reject) {
           pendingRequests.sign = { resolve: resolve, reject: reject };
           setTimeout(function() {
@@ -3655,6 +3753,7 @@
           }, 120000);
         });
         await openPhantomUrl(url);
+        if (sid) pollBridge(sid, 'sign');
         var json = await promise;
         return json && json.transaction;
       }
@@ -3662,8 +3761,9 @@
       function getPublicKey() { return userPubKey; }
 
       function init() {
-        if (!isNative()) return;
+        if (!isNative() && !TelegramApp.isActive()) return;
         restoreSession();
+        if (!isNative()) return; // Telegram: session restored, no deeplink listener needed
         var App = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
         if (App && App.addListener) {
           App.addListener('appUrlOpen', function(data) {
@@ -6511,6 +6611,7 @@
       }
 
       function init() {
+        try { TelegramApp.init(); } catch (e) { console.warn('TelegramApp init:', e); }
         try { PhantomMobile.init(); } catch (e) { console.warn('PhantomMobile init:', e); }
         setupConnectScreen();
         setupLobbyScreen();
@@ -6522,6 +6623,9 @@
         PredictionMarkets.init();
         TV.init();
         if (PhantomWallet.isNativeMobile()) tryAutoReconnect();
+        // Inside Telegram we sign the player in with their (server-validated)
+        // Telegram identity right away — no wallet needed to reach the lobby.
+        if (TelegramApp.isActive()) connectToServer();
       }
 
       async function tryAutoReconnect() {
@@ -6531,12 +6635,30 @@
         } catch (_) {}
       }
 
-      function connectToServer() {
+      function buildRegisterPayload() {
         var walletAddress = PhantomWallet.getPublicKey();
+        var payload = {
+          walletAddress: walletAddress || null,
+          displayName: walletAddress ? PhantomWallet.shortenAddress(walletAddress) : null,
+        };
+        // Telegram identity rides along even when a wallet is connected, so
+        // the server can validate the login and link the two.
+        if (TelegramApp.isActive()) payload.tgInitData = TelegramApp.initDataRaw();
+        return payload;
+      }
+
+      // After a mid-session wallet connect (Telegram bridge flow), update the
+      // server-side identity from 'tg:<id>' to the real wallet address.
+      function reRegisterWithWallet() {
+        if (socket && socket.connected) socket.emit('register', buildRegisterPayload());
+      }
+
+      function connectToServer() {
+        if (socket && socket.connected) { reRegisterWithWallet(); return; }
         try { socket = io({ reconnectionAttempts: 5, timeout: 10000 }); } catch(e) { showToast('Cannot connect to server', 'error'); return; }
 
         socket.on('connect', function() {
-          socket.emit('register', { walletAddress: walletAddress, displayName: PhantomWallet.shortenAddress(walletAddress) });
+          socket.emit('register', buildRegisterPayload());
         });
 
         socket.on('connect_error', function() { showToast('Server connection failed — retrying...', 'error'); });
@@ -6549,14 +6671,18 @@
           if (zootMintAddress && window.solanaWeb3) {
             try { SplToken.setMint(zootMintAddress, zootDecimals); } catch (e) { console.warn('ZOOT init:', e.message); }
           }
-          document.getElementById('connected-wallet-addr').textContent = data.walletAddress;
-          document.getElementById('wallet-display').textContent = PhantomWallet.shortenAddress(data.walletAddress);
+          // Telegram-only identities ('tg:<id>') have no wallet to shorten —
+          // show the player's Telegram name instead.
+          var isTgIdentity = String(data.walletAddress).indexOf('tg:') === 0;
+          var disp = isTgIdentity ? (data.displayName || 'Telegram') : PhantomWallet.shortenAddress(data.walletAddress);
+          document.getElementById('connected-wallet-addr').textContent = isTgIdentity ? disp : data.walletAddress;
+          document.getElementById('wallet-display').textContent = disp;
           var wdSports = document.getElementById('wallet-display-sports');
-          if (wdSports) wdSports.textContent = PhantomWallet.shortenAddress(data.walletAddress);
+          if (wdSports) wdSports.textContent = disp;
           var wdPred = document.getElementById('wallet-display-predictions');
-          if (wdPred) wdPred.textContent = PhantomWallet.shortenAddress(data.walletAddress);
+          if (wdPred) wdPred.textContent = disp;
           var wdTv = document.getElementById('wallet-display-tv');
-          if (wdTv) wdTv.textContent = PhantomWallet.shortenAddress(data.walletAddress);
+          if (wdTv) wdTv.textContent = disp;
           showScreen('lobby');
           refreshBalance();
         });
@@ -6674,6 +6800,28 @@
               var currencySel = card.querySelector('.currency-select');
               var currency = vsHouse ? 'ZOOT' : (currencySel ? currencySel.value : 'SOL');
 
+              // Telegram players start wallet-less: connect Phantom through
+              // the bridge before their first real bet.
+              if (!isTestMode && !PhantomWallet.getPublicKey() && TelegramApp.isActive()) {
+                if (!TelegramApp.isMobile()) {
+                  showToast('To bet, open zootgames.org in a browser and connect Phantom', 'error');
+                  return;
+                }
+                btn.disabled = true;
+                btn.textContent = 'Connecting Phantom...';
+                try {
+                  await PhantomWallet.connect();
+                  reRegisterWithWallet();
+                  refreshBalance();
+                  showToast('Phantom connected! Tap "' + defaultLabel + '" again to start.', 'info');
+                } catch (connErr) {
+                  showToast((connErr && connErr.message) || 'Phantom connection failed', 'error');
+                }
+                btn.disabled = false;
+                btn.textContent = defaultLabel;
+                return;
+              }
+
               btn.disabled = true;
 
               var payload = { gameType: gameType, betAmount: betAmount, currency: currency };
@@ -6767,7 +6915,19 @@
         solConnection = new web3.Connection(PhantomWallet.getRpcUrl(), 'confirmed');
 
         var walletPk = PhantomWallet.getPublicKey();
-        if (!walletPk) throw new Error('Wallet not connected — reconnect Phantom');
+        if (!walletPk && TelegramApp.isActive() && TelegramApp.isMobile()) {
+          // Telegram player betting without a wallet yet — run the bridge
+          // connect inline so every bet path (sports, predictions, PvP
+          // accepts) gets wallet onboarding for free.
+          if (btn) btn.textContent = 'Connecting Phantom...';
+          walletPk = await PhantomWallet.connect();
+          reRegisterWithWallet();
+        }
+        if (!walletPk) {
+          throw new Error(TelegramApp.isActive()
+            ? 'To bet, open zootgames.org in a browser and connect Phantom'
+            : 'Wallet not connected — reconnect Phantom');
+        }
         var fromPubkey = new web3.PublicKey(walletPk);
         var toAddress = escrowAddress;
 
@@ -6783,7 +6943,7 @@
           );
         }
         transaction.feePayer = fromPubkey;
-        if (btn) btn.textContent = PhantomWallet.isNativeMobile() ? 'Opening Phantom...' : 'Sign in Phantom...';
+        if (btn) btn.textContent = PhantomWallet.useDeeplinkProtocol() ? 'Opening Phantom...' : 'Sign in Phantom...';
 
         var signature = await PhantomWallet.signAndSend(transaction, solConnection, fromPubkey);
 
@@ -6935,6 +7095,24 @@
         if (isTestMode) {
           socket.emit('accept_bet', { betId: betId, txSignature: 'test_accept_' + Date.now() });
           return;
+        }
+
+        if (!PhantomWallet.getPublicKey() && TelegramApp.isActive()) {
+          if (!TelegramApp.isMobile()) {
+            socket.off('error_msg', onServerError);
+            resetBtn('To bet, open zootgames.org in a browser and connect Phantom');
+            return;
+          }
+          btn.textContent = 'Connecting Phantom...';
+          try {
+            await PhantomWallet.connect();
+            reRegisterWithWallet();
+            await refreshBalance(); // the balance check below needs fresh numbers
+          } catch (connErr) {
+            socket.off('error_msg', onServerError);
+            resetBtn((connErr && connErr.message) || 'Phantom connection failed');
+            return;
+          }
         }
 
         var balanceNeeded = currency === 'ZOOT' ? currentZootBalance : currentBalance;
@@ -7826,7 +8004,7 @@
           );
         }
         transaction.feePayer = fromPubkey;
-        if (btn) btn.textContent = PhantomWallet.isNativeMobile() ? 'Opening Phantom...' : 'Sign in Phantom...';
+        if (btn) btn.textContent = PhantomWallet.useDeeplinkProtocol() ? 'Opening Phantom...' : 'Sign in Phantom...';
 
         var signature = await PhantomWallet.signAndSend(transaction, connection, fromPubkey);
 
@@ -8309,7 +8487,7 @@
           );
         }
         transaction.feePayer = fromPubkey;
-        if (btn) btn.textContent = PhantomWallet.isNativeMobile() ? 'Opening Phantom...' : 'Sign in Phantom...';
+        if (btn) btn.textContent = PhantomWallet.useDeeplinkProtocol() ? 'Opening Phantom...' : 'Sign in Phantom...';
 
         var signature = await PhantomWallet.signAndSend(transaction, connection, fromPubkey);
 

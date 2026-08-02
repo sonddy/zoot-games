@@ -44,6 +44,7 @@ const MemoryGame = require('./games/memory');
 const MathDuelGame = require('./games/mathduel');
 const houseBot = require('./houseBot');
 const houseAbuse = require('./houseAbuse');
+const telegram = require('./telegram');
 
 const SOLANA_RPC = process.env.SOLANA_RPC || 'https://solana-rpc.publicnode.com';
 const solanaConnection = new Connection(SOLANA_RPC, 'confirmed');
@@ -134,6 +135,9 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Telegram Mini App: bot webhook, initData validation, Phantom wallet bridge.
+telegram.init(app);
 
 app.get('/api/escrow', (req, res) => {
   res.json({ escrowAddress: ESCROW_ADDRESS });
@@ -835,18 +839,41 @@ function clearTurnTimer(room) {
 io.on('connection', (socket) => {
   console.log(`Connected: ${socket.id}`);
 
-  socket.on('register', async ({ walletAddress, displayName }) => {
+  socket.on('register', async ({ walletAddress, displayName, tgInitData }) => {
+    // Telegram Mini App login: validate the signed initData so a client can't
+    // forge a Telegram identity. Players without a wallet get a 'tg:<id>'
+    // identity — they can browse and (in test mode) play, but the bet
+    // handlers below refuse real-money games until a wallet is connected.
+    let tgUser = null;
+    if (tgInitData) {
+      tgUser = telegram.validateInitData(tgInitData);
+      if (!tgUser && !walletAddress) return socket.emit('error_msg', { msg: 'Telegram login failed — please reopen the app' });
+    }
+    if (!walletAddress && tgUser) {
+      walletAddress = 'tg:' + tgUser.id;
+      if (!displayName) displayName = telegram.displayNameFor(tgUser);
+    }
+
     if (!walletAddress || walletAddress.length < 2) return socket.emit('error_msg', { msg: 'Invalid wallet address' });
-    if (!TEST_MODE) {
+    const isTelegramIdentity = walletAddress.startsWith('tg:');
+    if (isTelegramIdentity && !tgUser) return socket.emit('error_msg', { msg: 'Invalid wallet address' });
+    if (!TEST_MODE && !isTelegramIdentity) {
       try { new PublicKey(walletAddress); } catch (_) { return socket.emit('error_msg', { msg: 'Invalid Solana address' }); }
     }
 
-    players.set(socket.id, { walletAddress, displayName: displayName || walletAddress.slice(0, 6), roomId: null });
+    players.set(socket.id, {
+      walletAddress,
+      displayName: displayName || walletAddress.slice(0, 6),
+      roomId: null,
+      telegramId: tgUser ? tgUser.id : null,
+    });
 
     socket.emit('registered', {
       success: true,
       walletAddress,
       displayName: displayName || walletAddress.slice(0, 6),
+      telegram: !!tgUser,
+      needsWallet: isTelegramIdentity,
       escrowAddress: ESCROW_ADDRESS,
       testMode: TEST_MODE,
       zootMint: ZOOT_MINT_ADDRESS,
@@ -856,9 +883,21 @@ io.on('connection', (socket) => {
     broadcastLobby();
   });
 
+  // Telegram-only identities have no Solana wallet — deposits can't be signed
+  // and payouts would have nowhere to go. Block them from real-money entry
+  // points (test mode is fine since nothing on-chain happens there).
+  function requireBetWallet(player) {
+    if (!TEST_MODE && String(player.walletAddress).startsWith('tg:')) {
+      socket.emit('error_msg', { msg: 'Connect your Phantom wallet first to place bets' });
+      return false;
+    }
+    return true;
+  }
+
   socket.on('find_match', async ({ gameType, betAmount, gridSize, txSignature, currency }) => {
     const player = players.get(socket.id);
     if (!player) return socket.emit('error_msg', { msg: 'Register first' });
+    if (!requireBetWallet(player)) return;
 
     const cur = currency === 'ZOOT' ? 'ZOOT' : 'SOL';
     const bet = parseFloat(betAmount) || 0;
@@ -915,6 +954,7 @@ io.on('connection', (socket) => {
       const player = players.get(socket.id);
       if (!player) return socket.emit('error_msg', { msg: 'Register first' });
       if (player.roomId) return socket.emit('error_msg', { msg: 'You are already in a game' });
+      if (!requireBetWallet(player)) return;
 
       // House closed for maintenance — reject before any payment/logic. PvP is
       // unaffected (this only gates vs-house games).
@@ -1004,6 +1044,7 @@ io.on('connection', (socket) => {
   socket.on('accept_bet', async ({ betId, txSignature }) => {
     const player = players.get(socket.id);
     if (!player) return socket.emit('error_msg', { msg: 'Register first' });
+    if (!requireBetWallet(player)) return;
 
     const entry = matchQueue.get(betId);
     if (!entry) return socket.emit('error_msg', { msg: 'This bet is no longer available' });
@@ -1066,6 +1107,7 @@ io.on('connection', (socket) => {
   socket.on('create_sports_bet', async ({ eventId, matchName, league, sportKey, pick, teamName, betAmount, txSignature, currency }) => {
     const player = players.get(socket.id);
     if (!player) return socket.emit('error_msg', { msg: 'Register first' });
+    if (!requireBetWallet(player)) return;
 
     const cur = currency === 'ZOOT' ? 'ZOOT' : 'SOL';
     const bet = parseFloat(betAmount) || 0;
@@ -1105,6 +1147,7 @@ io.on('connection', (socket) => {
   socket.on('accept_sports_bet', async ({ betId, txSignature }) => {
     const player = players.get(socket.id);
     if (!player) return socket.emit('error_msg', { msg: 'Register first' });
+    if (!requireBetWallet(player)) return;
 
     const entry = sportsBets.get(betId);
     if (!entry) return socket.emit('error_msg', { msg: 'This sports bet is no longer available' });
@@ -1168,6 +1211,7 @@ io.on('connection', (socket) => {
   socket.on('create_prediction_bet', async ({ marketId, side, betAmount, txSignature, currency }) => {
     const player = players.get(socket.id);
     if (!player) return socket.emit('error_msg', { msg: 'Register first' });
+    if (!requireBetWallet(player)) return;
 
     const market = predictionMarkets.get(marketId);
     if (!market) return socket.emit('error_msg', { msg: 'Market not found' });
@@ -1205,6 +1249,7 @@ io.on('connection', (socket) => {
   socket.on('accept_prediction_bet', async ({ betId, txSignature }) => {
     const player = players.get(socket.id);
     if (!player) return socket.emit('error_msg', { msg: 'Register first' });
+    if (!requireBetWallet(player)) return;
 
     const entry = predictionBets.get(betId);
     if (!entry) return socket.emit('error_msg', { msg: 'This offer is no longer available' });
