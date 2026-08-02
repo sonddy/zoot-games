@@ -91,17 +91,52 @@ async function tgCall(method, payload) {
   return json.result;
 }
 
+const HELP_TEXT = [
+  'How Zoot Games works:',
+  '',
+  '1. Tap Play to open the game inside Telegram — you are signed in automatically.',
+  '2. Pick any of the 24 games (Chess, Poker, Domino, Backgammon, Connect 4...) and set your bet in SOL or $ZOOT.',
+  '3. First bet? You\u2019ll be guided to connect your Phantom wallet (phone only — on desktop, use zootgames.org in a browser).',
+  '4. Win and get paid instantly: 1.8x your wager, straight to your wallet.',
+  '',
+  'Also inside: live sports betting, prediction markets, and free live TV.',
+  '',
+  '18+ only. Privacy policy: ' + PUBLIC_URL + '/privacy.html',
+].join('\n');
+
+const SUPPORT_TEXT = [
+  'Need help?',
+  '',
+  '\u2022 Payout or refund issue: interrupted games and unmatched bets are refunded automatically within a few minutes.',
+  '\u2022 Wallet trouble: try Disconnect Wallet in the game menu, then reconnect Phantom.',
+  '\u2022 Anything else: describe your problem in one message here (include your wallet address if it\u2019s about a payout) and the team will review it.',
+  '',
+  'Privacy policy: ' + PUBLIC_URL + '/privacy.html',
+].join('\n');
+
 async function handleUpdate(update) {
   const msg = update && update.message;
   if (!msg || !msg.chat || msg.chat.type !== 'private') return;
 
   const text = (msg.text || '').trim();
-  const isStart = text.startsWith('/start');
+  const cmd = text.split(/[\s@]/)[0].toLowerCase();
+
+  let reply;
+  if (cmd === '/start') {
+    reply = 'Welcome to Zoot Games — 24 live multiplayer games with SOL / $ZOOT betting.\n\nTap the button below to play right here in Telegram.';
+  } else if (cmd === '/help') {
+    reply = HELP_TEXT;
+  } else if (cmd === '/support') {
+    reply = SUPPORT_TEXT;
+  } else if (cmd === '/play') {
+    reply = 'Let\u2019s go — tap the button below.';
+  } else {
+    reply = 'Tap the button below to open Zoot Games, or use /help to see how it works.';
+  }
+
   await tgCall('sendMessage', {
     chat_id: msg.chat.id,
-    text: isStart
-      ? 'Welcome to Zoot Games — 24 live multiplayer games with SOL / $ZOOT betting.\n\nTap the button below to play right here in Telegram.'
-      : 'Tap the button below to open Zoot Games.',
+    text: reply,
     reply_markup: {
       inline_keyboard: [[{ text: 'Play Zoot Games', web_app: { url: PUBLIC_URL } }]],
     },
